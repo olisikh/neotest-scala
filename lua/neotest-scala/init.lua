@@ -263,7 +263,7 @@ local function get_results(tree, test_results, match_func)
                 test_result = test_results[position.id]
             end
             if test_result then
-                results[position.id] = { status = test_result }
+                results[position.id] = test_result
             end
         end
     end

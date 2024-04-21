@@ -86,13 +86,13 @@ return function()
     local function get_test_results(output_lines)
         local test_results = {}
         for _, line in ipairs(output_lines) do
-            line = utils.strip_ainsi_chars(line)
+            line = utils.strip_ansi_chars(line)
             if vim.startswith(line, "+") then
                 local test_id = get_test_id(line)
-                test_results[test_id] = TEST_PASSED
+                test_results[test_id] = { status = TEST_PASSED }
             elseif vim.startswith(line, "X") then
                 local test_id = get_test_id(line)
-                test_results[test_id] = TEST_FAILED
+                test_results[test_id] = { status = TEST_FAILED }
             end
         end
         return test_results

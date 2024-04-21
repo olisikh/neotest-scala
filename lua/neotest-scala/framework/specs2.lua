@@ -16,18 +16,30 @@ return function()
     ---@return table<string, string>
     local function get_test_results(output_lines)
         local test_results = {}
-        for _, line in ipairs(output_lines) do
-            line = vim.trim(utils.strip_sbt_log_prefix(utils.strip_ainsi_chars(line)))
 
-            if vim.startswith(line, "+") then
-                local test_id = get_test_id(line)
-                test_results[test_id] = TEST_PASSED
+        local test_id = nil
+        local test_open = false
+
+        for _, line in ipairs(output_lines) do
+            line = vim.trim(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line)))
+
+            -- capture next line that tells what exactly is wrong in the test
+            if test_open then
+                test_open = false
+                -- put diagnostic in
+                local sanitized = line:match("%[E%]%s+(.*)$") or line
+                test_results[test_id].errors = { { message = sanitized } }
+            elseif vim.startswith(line, "+") then
+                test_id = get_test_id(line)
+                test_results[test_id] = { status = TEST_PASSED }
             else
                 -- find an error line and strip to only the test name
                 -- bloop adds [E] prefix
-                local test_id = line:match("%[E%]%s+x (.*)$") or line:match("x (.*)$")
+                test_id = line:match("%[E%]%s+x (.*)$") or line:match("x (.*)$")
                 if test_id ~= nil then
-                    test_results[test_id] = TEST_FAILED
+                    test_results[test_id] = { status = TEST_FAILED }
+                    -- collect diagnostic from the next line
+                    test_open = true
                 end
             end
         end
@@ -90,10 +102,10 @@ return function()
             else
                 full_test_path = { "-o", test_namespace, "--", "-z", name }
             end
-            command = vim.tbl_flatten({ "bloop", "test", "--no-color", extra_args, project, full_test_path })
+            command = vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
         elseif not test_namespace then
             -- TODO: can we resolve a class instead of running all tests in the project
-            command = vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
+            command = vim.tbl_flatten({ "sbt", "--no-colors", extra_args, project .. "/test" })
         else
             -- TODO: Run sbt with colors, but figure out which ANSI sequence needs to be matched.
             local test_path = ""

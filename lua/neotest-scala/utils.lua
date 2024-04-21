@@ -40,12 +40,12 @@ function M.build_command_with_test_path(project, runner, test_path, extra_args)
         else
             full_test_path = { "--", test_path }
         end
-        return vim.tbl_flatten({ "bloop", "test", "--no-color", extra_args, project, full_test_path })
+        return vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
     end
     if not test_path then
         return vim.tbl_flatten({ "sbt", "--no-colors", extra_args, project .. "/test" })
     end
-    -- TODO: Run sbt with colors, but figuoure wich ainsi sequence need to be matched.
+    -- TODO: Run sbt with colors, but figure out which ANSI sequence need to be matched.
     return vim.tbl_flatten({
         "sbt",
         "--no-colors",
@@ -54,10 +54,10 @@ function M.build_command_with_test_path(project, runner, test_path, extra_args)
     })
 end
 
---- Strip ainsi characters from the string, leaving the rest of the string intact.
+--- Strip ANSI characters from the string, leaving the rest of the string intact.
 ---@param s string
 ---@return string
-function M.strip_ainsi_chars(s)
+function M.strip_ansi_chars(s)
     local v = s:gsub("\x1b%[%d+;%d+;%d+;%d+;%d+m", "")
         :gsub("\x1b%[%d+;%d+;%d+;%d+m", "")
         :gsub("\x1b%[%d+;%d+;%d+m", "")

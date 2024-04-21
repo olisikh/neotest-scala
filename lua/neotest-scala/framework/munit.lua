@@ -76,7 +76,7 @@ return function()
         local test_results = {}
         local test_namespace = nil
         for _, line in ipairs(output_lines) do
-            line = vim.trim(utils.strip_ainsi_chars(line))
+            line = vim.trim(utils.strip_ansi_chars(line))
             local current_namespace = get_test_namespace(line)
             if current_namespace and (not test_namespace or test_namespace ~= current_namespace) then
                 test_namespace = current_namespace
@@ -85,12 +85,12 @@ return function()
                 local test_name = get_test_name(line, "+")
                 if test_name then
                     local test_id = test_namespace .. "." .. vim.trim(test_name)
-                    test_results[test_id] = TEST_PASSED
+                    test_results[test_id] = { status = TEST_PASSED }
                 end
             elseif test_namespace and vim.startswith(line, "==> X") then
                 local test_name = get_test_name(line, "==> X")
                 if test_name then
-                    test_results[vim.trim(test_name)] = TEST_FAILED
+                    test_results[vim.trim(test_name)] = { status = TEST_FAILED }
                 end
             end
         end
