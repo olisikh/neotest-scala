@@ -67,17 +67,26 @@ function ScalaNeotestAdapter.discover_positions(path)
       name: (identifier) @namespace.name)
       @namespace.definition
 
+      ;; utest, munit, scalatest (FunSuite)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#match? @func_name "test")
         arguments: (arguments (string) @test.name))
       )) @test.definition
+
+
+      ;; specs2 (mutable.Specification)
+      (infix_expression 
+        left: (string) @test.name
+        operator: (_) @spec_init (#any-of? @spec_init "in" ">>")
+        right: (_)
+      ) @test.definition
     ]]
-    return lib.treesitter.parse_positions(
-        path,
-        query,
-        { nested_tests = true, require_namespaces = true, position_id = build_position_id }
-    )
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+        position_id = build_position_id,
+    })
 end
 
 local function get_runner()
