@@ -119,27 +119,48 @@ local function get_bloop_project_name()
     return result
 end
 
+local function get_sbt_project_name()
+    local command = "sbt projects"
+    local handle = assert(io.popen(command), string.format("unable to execute: [%s]", command))
+    local result = handle:read("*a")
+    handle:close()
+
+    if result ~= nil then
+        local name = result:match("%[info%]%s+%*%s(.*)")
+        return name
+    end
+
+    return nil
+
+    -- local root = ScalaNeotestAdapter.root(path)
+    -- local build_file = root .. "/build.sbt"
+    -- local success, lines = pcall(lib.files.read_lines, build_file)
+    -- if not success then
+    --     return nil
+    -- end
+    -- for _, line in ipairs(lines) do
+    --     local project = line:match('^name := "(.+)"')
+    --     if project then
+    --         return project
+    --     end
+    -- end
+end
+
 ---Get project name from build file.
 ---@return string|nil
 local function get_project_name(path, runner)
-    local root = ScalaNeotestAdapter.root(path)
-    local build_file = root .. "/build.sbt"
-    local success, lines = pcall(lib.files.read_lines, build_file)
-    if not success then
-        return nil
-    end
-    for _, line in ipairs(lines) do
-        local project = line:match('^name := "(.+)"')
-        if project then
-            return project
-        end
-    end
     if runner == "bloop" then
         local bloop_project = get_bloop_project_name()
         if bloop_project then
             return bloop_project
         end
+    elseif runner == "sbt" then
+        local sbt_project = get_sbt_project_name(path)
+        if sbt_project then
+            return sbt_project
+        end
     end
+
     return nil
 end
 
