@@ -119,31 +119,32 @@ local function get_bloop_project_name()
     return result
 end
 
-local function get_sbt_project_name()
+local function get_sbt_project_name(path)
     local command = "sbt projects"
     local handle = assert(io.popen(command), string.format("unable to execute: [%s]", command))
     local result = handle:read("*a")
     handle:close()
 
     if result ~= nil then
-        local name = result:match("%[info%]%s+%*%s(.*)")
+        local name = vim.trim(utils.strip_sbt_log_prefix(result:match("%*%s(.*)")))
         return name
     end
 
-    return nil
+    -- try getting name from build.sbt as a last resort
+    local root = ScalaNeotestAdapter.root(path)
+    local build_file = root .. "/build.sbt"
+    local success, lines = pcall(lib.files.read_lines, build_file)
+    if not success then
+        return nil
+    end
+    for _, line in ipairs(lines) do
+        local project = line:match('^name%s*:=%s*"(.+)"')
+        if project then
+            return project
+        end
+    end
 
-    -- local root = ScalaNeotestAdapter.root(path)
-    -- local build_file = root .. "/build.sbt"
-    -- local success, lines = pcall(lib.files.read_lines, build_file)
-    -- if not success then
-    --     return nil
-    -- end
-    -- for _, line in ipairs(lines) do
-    --     local project = line:match('^name := "(.+)"')
-    --     if project then
-    --         return project
-    --     end
-    -- end
+    return nil
 end
 
 ---Get project name from build file.

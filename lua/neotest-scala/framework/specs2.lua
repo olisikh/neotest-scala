@@ -11,6 +11,27 @@ return function()
         return table.concat(words, " ")
     end
 
+    ---Sanitizes the line with error message removing all that is not useful to show in the diagnostic
+    ---@param line any
+    ---@return unknown
+    local function sanitize_error(line)
+        return line:match("^(.*)%s%(.*:%d+%)$")
+    end
+
+    ---Get line number where error test error was recorded
+    ---@param line string
+    ---@return number
+    local function get_error_lnum(line)
+        local line_num = line:match("^.*:(%d+)%)$")
+        if line_num ~= nil then
+            local ok, value = pcall(tonumber, line_num)
+            if ok then
+                line_num = value - 1
+            end
+        end
+        return line_num
+    end
+
     -- Get test results from the test output.
     ---@param output_lines string[]
     ---@return table<string, string>
@@ -27,8 +48,16 @@ return function()
             if test_open then
                 test_open = false
                 -- put diagnostic in
-                local sanitized = line:match("%[E%]%s+(.*)$") or line
-                test_results[test_id].errors = { { message = sanitized } }
+
+                local sanitized = sanitize_error(line)
+                local error_lnum = get_error_lnum(line)
+
+                test_results[test_id].errors = {
+                    {
+                        message = sanitized,
+                        line = error_lnum,
+                    },
+                }
             elseif vim.startswith(line, "+") then
                 test_id = get_test_id(line)
                 test_results[test_id] = { status = TEST_PASSED }
@@ -72,7 +101,13 @@ return function()
             end
             if test_suites then
                 local package = utils.get_package_name(tree:data().path)
-                return package .. "*"
+                if #test_suites == 1 then
+                    -- run individual spec
+                    return package .. test_suites[1]
+                else
+                    -- otherwise run tests for whole package
+                    return package .. "*"
+                end
             end
         elseif type == "dir" then
             return "*"
@@ -120,6 +155,8 @@ return function()
                 project .. "/testOnly " .. test_namespace .. test_path,
             })
         end
+
+        print("Running test command: " .. vim.inspect(command))
 
         return command
     end
