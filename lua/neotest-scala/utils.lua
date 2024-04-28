@@ -79,14 +79,4 @@ function M.strip_bloop_error_prefix(s)
     return v
 end
 
----Find parent test class name
----@param tree  neotest.Tree
-function M.find_parent_test_class(tree)
-    local parent = tree:parent()
-    if parent then
-        return M.find_parent_test_class(parent)
-    end
-    return tree
-end
-
 return M

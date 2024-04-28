@@ -109,6 +109,8 @@ local function get_framework()
     return "utest"
 end
 
+--TODO: is there a way to get project names asynchronously?
+
 ---Get first project name from bloop projects.
 ---@return string|nil
 local function get_bloop_project_name()
@@ -119,29 +121,18 @@ local function get_bloop_project_name()
     return result
 end
 
-local function get_sbt_project_name(path)
+local function get_sbt_project_name()
     local command = "sbt projects"
     local handle = assert(io.popen(command), string.format("unable to execute: [%s]", command))
-    local result = handle:read("*a")
+    local last_line = nil
+    for line in handle:lines() do
+        last_line = line
+    end
     handle:close()
 
-    if result ~= nil then
-        local name = vim.trim(utils.strip_sbt_log_prefix(result:match("%*%s(.*)")))
-        return name
-    end
-
-    -- try getting name from build.sbt as a last resort
-    local root = ScalaNeotestAdapter.root(path)
-    local build_file = root .. "/build.sbt"
-    local success, lines = pcall(lib.files.read_lines, build_file)
-    if not success then
-        return nil
-    end
-    for _, line in ipairs(lines) do
-        local project = line:match('^name%s*:=%s*"(.+)"')
-        if project then
-            return project
-        end
+    if last_line ~= nil then
+        local active_project = vim.trim(utils.strip_sbt_log_prefix(last_line))
+        return active_project:match("^%*%s(.*)$")
     end
 
     return nil
@@ -153,7 +144,7 @@ local function get_project_name(path, runner)
     if runner == "bloop" then
         return get_bloop_project_name()
     elseif runner == "sbt" then
-        return get_sbt_project_name(path)
+        return get_sbt_project_name()
     end
 
     return nil

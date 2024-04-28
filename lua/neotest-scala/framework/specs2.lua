@@ -146,7 +146,7 @@ function M.build_command(runner, project, tree, name, extra_args)
         -- TODO: Run sbt with colors, but figure out which ANSI sequence needs to be matched.
         local test_path = ""
         if tree:data().type == "test" then
-            test_path = ' -- -z "' .. name .. '"'
+            test_path = ' -- ex "' .. name .. '"'
         end
 
         command = vim.tbl_flatten({
