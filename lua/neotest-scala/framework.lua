@@ -13,13 +13,13 @@ TEST_FAILED = "failed" -- the test failed
 ---@return neotest-scala.Framework|nil
 function M.get_framework_class(framework)
     if framework == "utest" then
-        return require("neotest-scala.framework.utest")()
+        return require("neotest-scala.framework.utest")
     elseif framework == "munit" then
-        return require("neotest-scala.framework.munit")()
+        return require("neotest-scala.framework.munit")
     elseif framework == "scalatest" then
-        return require("neotest-scala.framework.scalatest")()
+        return require("neotest-scala.framework.scalatest")
     elseif framework == "specs2" then
-        return require("neotest-scala.framework.specs2")()
+        return require("neotest-scala.framework.specs2")
     end
 end
 
