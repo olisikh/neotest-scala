@@ -37,40 +37,41 @@ return function()
     ---@return table<string, string>
     local function get_test_results(output_lines)
         local test_results = {}
-
         local test_id = nil
-        local test_open = false
 
         for _, line in ipairs(output_lines) do
-            line = vim.trim(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line)))
+            line = vim.trim(utils.strip_bloop_error_prefix(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line))))
 
-            -- capture next line that tells what exactly is wrong in the test
-            if test_open then
-                test_open = false
+            -- look for the succeeded tests they start with + prefix
+            if vim.startswith(line, "+") then
+                test_id = get_test_id(line)
+                test_results[test_id] = { status = TEST_PASSED }
+
+            --look for failed tests they start with x prefix
+            elseif vim.startswith(line, "x") then
+                test_id = line:match("x (.*)$")
+                if test_id ~= nil then
+                    test_results[test_id] = { status = TEST_FAILED }
+                end
+
+            --look for test failures
+            else
                 -- put diagnostic in
-
                 local sanitized = sanitize_error(line)
                 local error_lnum = get_error_lnum(line)
 
-                test_results[test_id].errors = {
-                    {
-                        message = sanitized,
-                        line = error_lnum,
-                    },
-                }
-            elseif vim.startswith(line, "+") then
-                test_id = get_test_id(line)
-                test_results[test_id] = { status = TEST_PASSED }
-            else
-                -- find an error line and strip to only the test name
-                -- bloop adds [E] prefix
-                test_id = line:match("%[E%]%s+x (.*)$") or line:match("x (.*)$")
-                if test_id ~= nil then
-                    test_results[test_id] = { status = TEST_FAILED }
-                    -- collect diagnostic from the next line
-                    test_open = true
+                if sanitized and error_lnum then
+                    test_results[test_id].errors = {
+                        {
+                            message = sanitized,
+                            line = error_lnum,
+                        },
+                    }
                 end
             end
+
+            --look for failed test, it should start with x, take the test name
+            --NOTE: if tests are run with bloop, the failed test is prefixed with [E]
         end
 
         return test_results

@@ -74,6 +74,11 @@ function M.strip_sbt_log_prefix(s)
     return v
 end
 
+function M.strip_bloop_error_prefix(s)
+    local v = s:gsub("^%[E%] ", "")
+    return v
+end
+
 ---Find parent test class name
 ---@param tree  neotest.Tree
 function M.find_parent_test_class(tree)
