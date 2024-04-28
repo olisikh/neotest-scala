@@ -151,15 +151,9 @@ end
 ---@return string|nil
 local function get_project_name(path, runner)
     if runner == "bloop" then
-        local bloop_project = get_bloop_project_name()
-        if bloop_project then
-            return bloop_project
-        end
+        return get_bloop_project_name()
     elseif runner == "sbt" then
-        local sbt_project = get_sbt_project_name(path)
-        if sbt_project then
-            return sbt_project
-        end
+        return get_sbt_project_name(path)
     end
 
     return nil

@@ -54,9 +54,8 @@ return function()
                     test_results[test_id] = { status = TEST_FAILED }
                 end
 
-            --look for test failures
+            --look for test failures, and make diagnostic messages
             else
-                -- put diagnostic in
                 local sanitized = sanitize_error(line)
                 local error_lnum = get_error_lnum(line)
 
@@ -69,52 +68,52 @@ return function()
                     }
                 end
             end
-
-            --look for failed test, it should start with x, take the test name
-            --NOTE: if tests are run with bloop, the failed test is prefixed with [E]
         end
 
         return test_results
     end
 
-    local function build_test_namespace(tree, name)
-        local parent_tree = tree:parent()
-        local type = tree:data().type
+    local function find_parent_file_node(tree)
+        local parent = tree:parent()
+        if parent ~= nil and parent:data().type ~= "file" then
+            return find_parent_file_node(parent)
+        else
+            return parent
+        end
+    end
 
-        if parent_tree and parent_tree:data().type == "namespace" then
-            local package = utils.get_package_name(parent_tree:data().path)
-            local parent_name = parent_tree:data().name
-            return package .. parent_name
-        elseif parent_tree and parent_tree:data().type == "test" then
-            return nil
-        elseif type == "namespace" then
-            local package = utils.get_package_name(tree:data().path)
-            if not package then
-                return nil
+    local function resolve_test_name(file_node)
+        assert(file_node:data().type == "file", "Tree must be of type 'file', but got: " .. file_node:data().type)
+
+        local test_suites = {}
+        for _, child in file_node:iter_nodes() do
+            if child:data().type == "namespace" then
+                table.insert(test_suites, child:data().name)
             end
-            return package .. name
-        elseif type == "file" then
-            local test_suites = {}
-            for _, child in tree:iter_nodes() do
-                if child:data().type == "namespace" then
-                    table.insert(test_suites, child:data().name)
-                end
-            end
-            if test_suites then
-                local package = utils.get_package_name(tree:data().path)
-                if #test_suites == 1 then
-                    -- run individual spec
-                    return package .. test_suites[1]
-                else
-                    -- otherwise run tests for whole package
-                    return package .. "*"
-                end
-            end
-        elseif type == "dir" then
-            return "*"
         end
 
-        return nil
+        if test_suites then
+            local package = utils.get_package_name(file_node:data().path)
+            if #test_suites == 1 then
+                -- run individual spec
+                return package .. test_suites[1]
+            else
+                -- otherwise run tests for whole package
+                return package .. "*"
+            end
+        end
+    end
+
+    local function build_test_namespace(tree)
+        local type = tree:data().type
+
+        if type == "file" then
+            return resolve_test_name(tree)
+        elseif type == "dir" then
+            return "*"
+        else
+            return resolve_test_name(find_parent_file_node(tree))
+        end
     end
 
     --- Builds a command for running tests for the framework.
@@ -125,7 +124,7 @@ return function()
     ---@param extra_args table|string
     ---@return string[]
     local function build_command(runner, project, tree, name, extra_args)
-        local test_namespace = build_test_namespace(tree, name)
+        local test_namespace = build_test_namespace(tree)
 
         local command = nil
 
@@ -140,7 +139,6 @@ return function()
             end
             command = vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
         elseif not test_namespace then
-            -- TODO: can we resolve a class instead of running all tests in the project
             command = vim.tbl_flatten({ "sbt", "--no-colors", extra_args, project .. "/test" })
         else
             -- TODO: Run sbt with colors, but figure out which ANSI sequence needs to be matched.
