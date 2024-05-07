@@ -4,14 +4,14 @@ local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 
 ---@type neotest.Adapter
-local ScalaNeotestAdapter = { name = "neotest-scala" }
+local adapter = { name = "neotest-scala" }
 
-ScalaNeotestAdapter.root = lib.files.match_root_pattern("build.sbt")
+adapter.root = lib.files.match_root_pattern("build.sbt")
 
 ---@async
 ---@param file_path string
 ---@return boolean
-function ScalaNeotestAdapter.is_test_file(file_path)
+function adapter.is_test_file(file_path)
     if not vim.endswith(file_path, ".scala") then
         return false
     end
@@ -26,7 +26,7 @@ function ScalaNeotestAdapter.is_test_file(file_path)
     return false
 end
 
-function ScalaNeotestAdapter.filter_dir(_, _, _)
+function adapter.filter_dir(_, _, _)
     return true
 end
 
@@ -57,7 +57,7 @@ end
 
 ---@async
 ---@return neotest.Tree | nil
-function ScalaNeotestAdapter.discover_positions(path)
+function adapter.discover_positions(path)
     local query = [[
 	  (object_definition
 	   name: (identifier) @namespace.name)
@@ -110,12 +110,11 @@ local function get_framework()
 end
 
 --TODO: is there a way to get project names asynchronously?
-
 ---Get first project name from bloop projects.
 ---@return string|nil
 local function get_bloop_project_name()
     local command = "bloop projects"
-    local handle = assert(io.popen(command), string.format("unable to execute: [%s]", command))
+    local handle = assert(io.popen(command), string.format("[neotest-scala]: unable to execute: [%s]", command))
     local result = handle:read("*l")
     handle:close()
     return result
@@ -123,7 +122,7 @@ end
 
 local function get_sbt_project_name()
     local command = "sbt projects"
-    local handle = assert(io.popen(command), string.format("unable to execute: [%s]", command))
+    local handle = assert(io.popen(command), string.format("[neotest-scala]: unable to execute: [%s]", command))
     local last_line = nil
     for line in handle:lines() do
         last_line = line
@@ -171,18 +170,18 @@ local function get_strategy_config(strategy, tree, project)
             },
         }
     end
-    local metals_arguments = nil
+    local metals_args = nil
     if position.type == "namespace" then
-        metals_arguments = {
+        metals_args = {
             testClass = utils.get_package_name(position.path) .. position.name,
         }
     end
     if position.type == "test" then
-        local root = ScalaNeotestAdapter.root(position.path)
+        local root = adapter.root(position.path)
         local parent = tree:parent():data()
-        vim.uri_from_fname(root)
+
         -- Constructs ScalaTestSuitesDebugRequest request.
-        metals_arguments = {
+        metals_args = {
             target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
             requestData = {
                 suites = {
@@ -196,15 +195,14 @@ local function get_strategy_config(strategy, tree, project)
             },
         }
     end
-    if metals_arguments ~= nil then
+    if metals_args ~= nil then
         return {
             type = "scala",
             request = "launch",
             -- NOTE: The `from_lens` is set here because nvim-metals passes the
-            -- complete `metals` param to metals server without modifying
-            -- (reading) it.
+            -- complete `metals` param to metals server without modifying (reading) it.
             name = "from_lens",
-            metals = metals_arguments,
+            metals = metals_args,
         }
     end
     return nil
@@ -213,12 +211,12 @@ end
 ---@async
 ---@param args neotest.RunArgs
 ---@return neotest.RunSpec
-function ScalaNeotestAdapter.build_spec(args)
+function adapter.build_spec(args)
     local position = args.tree:data()
     local runner = get_runner()
-    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "set sbt or bloop runner")
+    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
     local project = get_project_name(position.path, runner)
-    assert(project, "scala project not found in the build file")
+    assert(project, "[neotest-scala]: scala project not found in the build file")
     local framework = fw.get_framework_class(get_framework())
     if not framework then
         return {}
@@ -260,7 +258,7 @@ end
 ---@param result neotest.StrategyResult
 ---@param tree neotest.Tree
 ---@return table<string, neotest.Result>
-function ScalaNeotestAdapter.results(_, result, tree)
+function adapter.results(_, result, tree)
     local success, lines = pcall(lib.files.read_lines, result.output)
     local framework = fw.get_framework_class(get_framework())
     if not success or not framework then
@@ -274,7 +272,7 @@ local is_callable = function(obj)
     return type(obj) == "function" or (type(obj) == "table" and obj.__call)
 end
 
-setmetatable(ScalaNeotestAdapter, {
+setmetatable(adapter, {
     __call = function(_, opts)
         if is_callable(opts.args) then
             get_args = opts.args
@@ -297,8 +295,8 @@ setmetatable(ScalaNeotestAdapter, {
                 return opts.framework
             end
         end
-        return ScalaNeotestAdapter
+        return adapter
     end,
 })
 
-return ScalaNeotestAdapter
+return adapter

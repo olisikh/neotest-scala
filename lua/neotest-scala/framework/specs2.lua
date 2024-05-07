@@ -85,7 +85,10 @@ local function find_parent_file_node(tree)
 end
 
 local function resolve_test_name(file_node)
-    assert(file_node:data().type == "file", "Tree must be of type 'file', but got: " .. file_node:data().type)
+    assert(
+        file_node:data().type == "file",
+        "[neotest-scala]: Tree must be of type 'file', but got: " .. file_node:data().type
+    )
 
     local test_suites = {}
     for _, child in file_node:iter_nodes() do
@@ -157,7 +160,7 @@ function M.build_command(runner, project, tree, name, extra_args)
         })
     end
 
-    print("Running test command: " .. vim.inspect(command))
+    vim.print("Running test command: " .. vim.inspect(command))
 
     return command
 end

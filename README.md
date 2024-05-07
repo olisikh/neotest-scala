@@ -1,6 +1,10 @@
 # neotest-scala
 
-[Neotest](https://github.com/rcarriga/neotest) adapter for scala. Supports [utest](https://github.com/com-lihaoyi/utest), [munit](https://scalameta.org/munit/docs/getting-started.html) and [ScalaTest](https://www.scalatest.org/) test frameworks, by either running it with [bloop](https://scalacenter.github.io/bloop/) or sbt. Note that for ScalaTest the only supported style is FunSuite for now.
+[Neotest](https://github.com/rcarriga/neotest) adapter for scala.
+
+Supports [utest](https://github.com/com-lihaoyi/utest), [munit](https://scalameta.org/munit/docs/getting-started.html), [ScalaTest](https://www.scalatest.org/) and [Specs2](https://etorreborre.github.io/specs2) test frameworks, by either running it with [bloop](https://scalacenter.github.io/bloop/) or [sbt](https://www.scala-sbt.org).
+
+Note that for ScalaTest the only supported styles are FunSuite and FreeSpec for now, and for Specs2 only mutable.Specification style is supported.
 
 It also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). You can debug individual test cases as well, but note that utest framework doesn't support this because it doesn't implement `sbt.testing.TestSelector`. To run tests with debugger pass `strategy = "dap"` when running neotest:
 
