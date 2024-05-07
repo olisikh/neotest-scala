@@ -2,12 +2,35 @@ local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local commands = require("neotest-scala.commands")
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
+-- NOTE: get_runner(), get_args(), get_framework() down below are defined as defaults, can be overriden by the plugin user
+local function get_runner()
+    local vim_test_runner = vim.g["test#scala#runner"]
+    if vim_test_runner == "blooptest" then
+        return "bloop"
+    end
+    if vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
+        return vim_test_runner
+    end
+    return "bloop"
+end
+
+local function get_args()
+    return {}
+end
+
+-- TODO: Automatically detect framework based on build.sbt
+local function get_framework()
+    return "utest"
+end
+
+---Check if subject file is a test file
 ---@async
 ---@param file_path string
 ---@return boolean
@@ -26,6 +49,12 @@ function adapter.is_test_file(file_path)
     return false
 end
 
+---Filter directories when searching for test files
+---@async
+---@param name string Name of directory
+---@param rel_path string Path to directory, relative to root
+---@param root string Root directory of project
+---@return boolean
 function adapter.filter_dir(_, _, _)
     return true
 end
@@ -59,13 +88,13 @@ end
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
     local query = [[
-	  (object_definition
-	   name: (identifier) @namespace.name)
-	   @namespace.definition
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
 	  
       (class_definition
-      name: (identifier) @namespace.name)
-      @namespace.definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
 
       ;; utest, munit, scalatest (FunSuite)
       ((call_expression
@@ -75,7 +104,7 @@ function adapter.discover_positions(path)
       )) @test.definition
 
 
-      ;; specs2 (mutable.Specification)
+      ;; scalatest (FreeSpec), specs2 (mutable.Specification)
       (infix_expression 
         left: (string) @test.name
         operator: (_) @spec_init (#any-of? @spec_init "in" ">>")
@@ -89,61 +118,13 @@ function adapter.discover_positions(path)
     })
 end
 
-local function get_runner()
-    local vim_test_runner = vim.g["test#scala#runner"]
-    if vim_test_runner == "blooptest" then
-        return "bloop"
-    end
-    if vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
-        return vim_test_runner
-    end
-    return "bloop"
-end
-
-local function get_args()
-    return {}
-end
-
-local function get_framework()
-    -- TODO: Automatically detect framework based on build.sbt
-    return "utest"
-end
-
---TODO: is there a way to get project names asynchronously?
----Get first project name from bloop projects.
----@return string|nil
-local function get_bloop_project_name()
-    local command = "bloop projects"
-    local handle = assert(io.popen(command), string.format("[neotest-scala]: unable to execute: [%s]", command))
-    local result = handle:read("*l")
-    handle:close()
-    return result
-end
-
-local function get_sbt_project_name()
-    local command = "sbt projects"
-    local handle = assert(io.popen(command), string.format("[neotest-scala]: unable to execute: [%s]", command))
-    local last_line = nil
-    for line in handle:lines() do
-        last_line = line
-    end
-    handle:close()
-
-    if last_line ~= nil then
-        local active_project = vim.trim(utils.strip_sbt_log_prefix(last_line))
-        return active_project:match("^%*%s(.*)$")
-    end
-
-    return nil
-end
-
 ---Get project name from build file.
 ---@return string|nil
 local function get_project_name(path, runner)
     if runner == "bloop" then
-        return get_bloop_project_name()
+        return commands.get_bloop_project_name_sync()
     elseif runner == "sbt" then
-        return get_sbt_project_name()
+        return commands.get_sbt_project_name_sync()
     end
 
     return nil
@@ -159,6 +140,7 @@ local function get_strategy_config(strategy, tree, project)
     if strategy ~= "dap" or position.type == "dir" then
         return nil
     end
+
     if position.type == "file" then
         return {
             type = "scala",
@@ -170,12 +152,14 @@ local function get_strategy_config(strategy, tree, project)
             },
         }
     end
+
     local metals_args = nil
     if position.type == "namespace" then
         metals_args = {
             testClass = utils.get_package_name(position.path) .. position.name,
         }
     end
+
     if position.type == "test" then
         local root = adapter.root(position.path)
         local parent = tree:parent():data()
@@ -195,6 +179,7 @@ local function get_strategy_config(strategy, tree, project)
             },
         }
     end
+
     if metals_args ~= nil then
         return {
             type = "scala",
@@ -205,6 +190,7 @@ local function get_strategy_config(strategy, tree, project)
             metals = metals_args,
         }
     end
+
     return nil
 end
 
@@ -213,17 +199,22 @@ end
 ---@return neotest.RunSpec
 function adapter.build_spec(args)
     local position = args.tree:data()
+
     local runner = get_runner()
     assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
+
     local project = get_project_name(position.path, runner)
     assert(project, "[neotest-scala]: scala project not found in the build file")
+
     local framework = fw.get_framework_class(get_framework())
     if not framework then
         return {}
     end
+
     local extra_args = vim.list_extend(get_args(), args.extra_args or {})
     local command = framework.build_command(runner, project, args.tree, utils.get_position_name(position), extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project)
+
     return { command = command, strategy = strategy }
 end
 
@@ -255,6 +246,7 @@ local function get_results(tree, test_results, match_func)
 end
 
 ---@async
+---@param spec neotest.RunSpec
 ---@param result neotest.StrategyResult
 ---@param tree neotest.Tree
 ---@return table<string, neotest.Result>
@@ -264,11 +256,12 @@ function adapter.results(_, result, tree)
     if not success or not framework then
         return {}
     end
+
     local test_results = framework.get_test_results(lines)
     return get_results(tree, test_results, framework.match_func)
 end
 
-local is_callable = function(obj)
+local function is_callable(obj)
     return type(obj) == "function" or (type(obj) == "table" and obj.__call)
 end
 
