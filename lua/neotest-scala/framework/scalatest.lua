@@ -63,19 +63,14 @@ function M.build_command(runner, project, tree, name, extra_args)
         end
         return vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
     elseif not test_namespace then
-        return vim.tbl_flatten({ "sbt", "--no-colors", extra_args, project .. "/test" })
+        return vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
     end
-    -- TODO: Run sbt with colors, but figure out which ANSI sequence needs to be matched.
+
     local test_path = ""
     if tree:data().type == "test" then
         test_path = ' -- -z "' .. name .. '"'
     end
-    return vim.tbl_flatten({
-        "sbt",
-        "--no-colors",
-        extra_args,
-        project .. "/testOnly " .. test_namespace .. test_path,
-    })
+    return vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
 end
 
 ---Get test ID from the test line output.
