@@ -87,6 +87,7 @@ end
 ---@async
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
+    --query
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -105,9 +106,10 @@ function adapter.discover_positions(path)
 
 
       ;; scalatest (FreeSpec), specs2 (mutable.Specification)
+      ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
       (infix_expression 
         left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init "in" ">>")
+        operator: (_) @spec_init (#any-of? @spec_init "in" "should" "can" ">>")
         right: (_)
       ) @test.definition
     ]]
