@@ -66,3 +66,6 @@ require("neotest").setup({
 To be implemented:
 
 - Displaying errors in diagnostics
+- Detect what test library is used
+- Don't block neovim when trying to figure out the project name for building test commands
+- Pick runner based on what is configured in metals? (Metals runs bloop / bsp)

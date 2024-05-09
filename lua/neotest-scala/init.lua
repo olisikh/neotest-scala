@@ -2,14 +2,14 @@ local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
-local commands = require("neotest-scala.commands")
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
--- NOTE: get_runner(), get_args(), get_framework() down below are defined as defaults, can be overriden by the plugin user
+-- NOTE: get_runner(), get_args(), get_framework() down below are defined as defaults,
+-- can be overriden by the plugin user
 local function get_runner()
     local vim_test_runner = vim.g["test#scala#runner"]
     if vim_test_runner == "blooptest" then
@@ -120,18 +120,6 @@ function adapter.discover_positions(path)
     })
 end
 
----Get project name from build file.
----@return string|nil
-local function get_project_name(path, runner)
-    if runner == "bloop" then
-        return commands.get_bloop_project_name_sync()
-    elseif runner == "sbt" then
-        return commands.get_sbt_project_name_sync()
-    end
-
-    return nil
-end
-
 ---Builds strategy configuration for running tests.
 ---@param strategy string
 ---@param tree neotest.Tree
@@ -205,8 +193,10 @@ function adapter.build_spec(args)
     local runner = get_runner()
     assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
 
-    local project = get_project_name(position.path, runner)
-    assert(project, "[neotest-scala]: scala project not found in the build file")
+    local project = utils.get_project_name_sync()
+    if not project then
+        return {}
+    end
 
     local framework = fw.get_framework_class(get_framework())
     if not framework then

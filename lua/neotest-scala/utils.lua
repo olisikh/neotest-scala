@@ -71,4 +71,53 @@ function M.strip_bloop_error_prefix(s)
     return v
 end
 
+---Returns metals LSP client if metals is active on current buffer
+---@param bufnr integer?
+---@return vim.lsp.Client?
+function M.find_metals(bufnr)
+    local clients = vim.lsp.get_clients({ name = "metals", bufnr = bufnr })
+    if #clients > 0 then
+        return clients[1]
+    end
+    return nil
+end
+
+function M.get_project_name_sync()
+    local metals = M.find_metals()
+    local project = nil
+
+    if metals then
+        local response =
+            metals.request_sync("workspace/executeCommand", { command = "metals.list-build-targets" }, 10000, 0)
+
+        if not response or #response.result == 0 then
+            vim.print("[neotest-scala]: Metals returned no project name, try again.")
+        elseif response.err then
+            vim.print("[neotest-scala]: Request to metals failed: " .. response.err.message)
+        else
+            project = response.result[1]
+        end
+
+        return project
+    end
+end
+
+-- function M.get_project_name(callback)
+--     local metals = M.find_metals()
+--
+--     if metals then
+--         metals.request("workspace/executeCommand", { command = "metals.list-build-targets" }, function(err, result, _)
+--             if err then
+--                 vim.print("[neotest-scala]: Request to metals failed: " .. err.message)
+--             elseif #result == 0 then
+--                 vim.print("[neotest-scala]: Metals returned no project name, try again.")
+--             else
+--                 callback(result[1])
+--             end
+--         end, 0)
+--     else
+--         vim.print("No metals, no party.")
+--     end
+-- end
+
 return M
