@@ -187,7 +187,7 @@ function adapter.build_spec(args)
     local position = args.tree:data()
     local path = adapter.root(position.path)
 
-    local project = utils.get_project_name_sync()
+    local project = utils.get_project_name()
     if not project then
         return {}
     end

@@ -71,8 +71,8 @@ function M.strip_bloop_error_prefix(s)
     return v
 end
 
----Returns metals LSP client if metals is active on current buffer
----@param bufnr integer?
+---Returns Metals LSP client if Metals is active on current buffer
+---@param bufnr integer? bunfr to look for metals client
 ---@return vim.lsp.Client?
 function M.find_metals(bufnr)
     local clients = vim.lsp.get_clients({ name = "metals", bufnr = bufnr })
@@ -82,18 +82,26 @@ function M.find_metals(bufnr)
     return nil
 end
 
+-- TODO: Delete me?
 function M.inspect_buf(txt)
     vim.cmd([[new]])
     vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(vim.inspect(txt), "\n"))
 end
 
-function M.get_project_name_sync()
+---Get the first build target name by listing build targets that Metals has found
+---@param timeout integer? timeout for the request
+---@return string | nil project name (build target) or nil if Metals unavailable or got no response from Metals
+function M.get_project_name(timeout)
     local metals = M.find_metals()
     local project = nil
 
     if metals then
-        local response =
-            metals.request_sync("workspace/executeCommand", { command = "metals.list-build-targets" }, 10000, 0)
+        local response = metals.request_sync(
+            "workspace/executeCommand",
+            { command = "metals.list-build-targets" },
+            timeout or 10000,
+            0
+        )
 
         if not response or #response.result == 0 then
             vim.print("[neotest-scala]: Metals returned no project name, please try again.")
@@ -102,12 +110,17 @@ function M.get_project_name_sync()
         else
             project = response.result[1]
         end
-
-        return project
     end
+
+    return project
 end
 
-function M.build_target_info(path, project)
+---Get project report, contains information about the project, it's classpath in particular
+---@param path string project path (root folder)
+---@param project string project name
+---@param timeout integer? timeout for the request
+---@return string | nil report about the project
+function M.build_target_info(path, project, timeout)
     local metals = M.find_metals()
 
     if metals then
@@ -117,7 +130,7 @@ function M.build_target_info(path, project)
             command = "metals.file-decode",
             arguments = { metals_uri },
         }
-        local response = metals.request_sync("workspace/executeCommand", params, 10000, 0)
+        local response = metals.request_sync("workspace/executeCommand", params, timeout or 10000, 0)
         if not response or response.err then
             vim.print("[neotest-scala]: Failed to get build target info, please try again")
         else
@@ -128,8 +141,13 @@ function M.build_target_info(path, project)
     return nil
 end
 
-function M.detect_build_tool(path, project)
-    local report = M.build_target_info(path, project)
+---Detect which build tool is being used, uses Metals, checking which build tool it has been configured with
+---@param path string project path (root folder)
+---@param project string project name
+---@param timeout integer? timeout for the request
+---@return string
+function M.detect_build_tool(path, project, timeout)
+    local report = M.build_target_info(path, project, timeout)
 
     if report then
         local lines = vim.tbl_map(vim.trim, vim.split(report, "\n"))
@@ -143,8 +161,13 @@ function M.detect_build_tool(path, project)
     return "sbt"
 end
 
-function M.get_framework(path, project)
-    local report = M.build_target_info(path, project .. "-test")
+---Search for a test library dependency in a test build target
+---@param path string project path (root folder)
+---@param project string project name
+---@param timeout integer? timeout for the request
+---@return string name of the test library being used in the project
+function M.get_framework(path, project, timeout)
+    local report = M.build_target_info(path, project .. "-test", timeout)
 
     local framework = nil
 
