@@ -82,6 +82,11 @@ function M.find_metals(bufnr)
     return nil
 end
 
+function M.inspect_buf(txt)
+    vim.cmd([[new]])
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(vim.inspect(txt), "\n"))
+end
+
 function M.get_project_name_sync()
     local metals = M.find_metals()
     local project = nil
@@ -91,7 +96,7 @@ function M.get_project_name_sync()
             metals.request_sync("workspace/executeCommand", { command = "metals.list-build-targets" }, 10000, 0)
 
         if not response or #response.result == 0 then
-            vim.print("[neotest-scala]: Metals returned no project name, try again.")
+            vim.print("[neotest-scala]: Metals returned no project name, please try again.")
         elseif response.err then
             vim.print("[neotest-scala]: Request to metals failed: " .. response.err.message)
         else
@@ -102,22 +107,52 @@ function M.get_project_name_sync()
     end
 end
 
--- function M.get_project_name(callback)
---     local metals = M.find_metals()
---
---     if metals then
---         metals.request("workspace/executeCommand", { command = "metals.list-build-targets" }, function(err, result, _)
---             if err then
---                 vim.print("[neotest-scala]: Request to metals failed: " .. err.message)
---             elseif #result == 0 then
---                 vim.print("[neotest-scala]: Metals returned no project name, try again.")
---             else
---                 callback(result[1])
---             end
---         end, 0)
---     else
---         vim.print("No metals, no party.")
---     end
--- end
+function M.build_target_info(path, project)
+    local metals = M.find_metals()
+
+    if metals then
+        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", path, project)
+
+        local params = {
+            command = "metals.file-decode",
+            arguments = { metals_uri },
+        }
+        local response = metals.request_sync("workspace/executeCommand", params, 10000, 0)
+        if not response or response.err then
+            vim.print("[neotest-scala]: Failed to get build target info, please try again")
+        else
+            return response.result.value
+        end
+    end
+
+    return nil
+end
+
+function M.detect_build_tool(path, project)
+    local report = M.build_target_info(path, project)
+
+    -- NOTE: if metals mentions .bloop/{project} folder in the report, means bloop is being used
+    if report and string.find(report, "/.bloop/" .. project) then
+        -- string.find(report, string.format("file://%s/.bloop/%s", path, project)) then
+        return "bloop"
+    else
+        return "sbt"
+    end
+end
+
+function M.get_framework(path, project)
+    local report = M.build_target_info(path, project .. "-test")
+
+    local framework = nil
+
+    if report then
+        framework = report:match("(specs2)-core_.*-.*%.jar")
+            or report:match("(munit)_.*-.*%.jar")
+            or report:match("(scalatest)_.*-.*%.jar")
+            or report:match("(utest)_.*-.*%.jar")
+    end
+
+    return framework or "scalatest"
+end
 
 return M

@@ -8,26 +8,22 @@ local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
--- NOTE: get_runner(), get_args(), get_framework() down below are defined as defaults,
--- can be overriden by the plugin user
-local function get_runner()
+local function get_runner(path, project)
     local vim_test_runner = vim.g["test#scala#runner"]
+
+    local runner = "bloop"
     if vim_test_runner == "blooptest" then
-        return "bloop"
+        runner = "bloop"
+    elseif vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
+        runner = vim_test_runner
+    else
+        runner = utils.detect_build_tool(path, project)
     end
-    if vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
-        return vim_test_runner
-    end
-    return "bloop"
+    return runner
 end
 
 local function get_args()
     return {}
-end
-
--- TODO: Automatically detect framework based on build.sbt
-local function get_framework()
-    return "utest"
 end
 
 ---Check if subject file is a test file
@@ -189,25 +185,36 @@ end
 ---@return neotest.RunSpec
 function adapter.build_spec(args)
     local position = args.tree:data()
-
-    local runner = get_runner()
-    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
+    local path = adapter.root(position.path)
 
     local project = utils.get_project_name_sync()
     if not project then
         return {}
     end
 
-    local framework = fw.get_framework_class(get_framework())
-    if not framework then
+    local runner = get_runner(path, project)
+    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
+
+    local framework = utils.get_framework(path, project)
+    local framework_class = fw.get_framework_class(framework)
+    if not framework_class then
         return {}
     end
 
     local extra_args = vim.list_extend(get_args(), args.extra_args or {})
-    local command = framework.build_command(runner, project, args.tree, utils.get_position_name(position), extra_args)
+    local command =
+        framework_class.build_command(runner, project, args.tree, utils.get_position_name(position), extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project)
 
-    return { command = command, strategy = strategy }
+    return {
+        command = command,
+        strategy = strategy,
+        env = {
+            path = path,
+            project = project,
+            framework = framework,
+        },
+    }
 end
 
 ---Extract results from the test output.
@@ -242,9 +249,14 @@ end
 ---@param result neotest.StrategyResult
 ---@param tree neotest.Tree
 ---@return table<string, neotest.Result>
-function adapter.results(_, result, tree)
+function adapter.results(spec, result, tree)
     local success, lines = pcall(lib.files.read_lines, result.output)
-    local framework = fw.get_framework_class(get_framework())
+
+    if not spec.env or not spec.env.framework then
+        return {}
+    end
+
+    local framework = fw.get_framework_class(spec.env.framework)
     if not success or not framework then
         return {}
     end
@@ -271,13 +283,6 @@ setmetatable(adapter, {
         elseif opts.runner then
             get_runner = function()
                 return opts.runner
-            end
-        end
-        if is_callable(opts.framework) then
-            get_framework = opts.framework
-        elseif opts.framework then
-            get_framework = function()
-                return opts.framework
             end
         end
         return adapter
