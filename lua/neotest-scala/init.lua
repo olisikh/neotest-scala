@@ -22,7 +22,7 @@ local function get_runner(path, project)
     return runner
 end
 
-local function get_args()
+local function get_args(_, _, _, _)
     return {}
 end
 
@@ -186,9 +186,11 @@ end
 function adapter.build_spec(args)
     local position = args.tree:data()
     local path = adapter.root(position.path)
+    assert(path, "[neotest-scala]: can't resolve root project folder")
 
     local project = utils.get_project_name()
     if not project then
+        vim.print("[neotest-scala]: can't resolve project name, maybe metals is not ready, try again later")
         return {}
     end
 
@@ -196,12 +198,22 @@ function adapter.build_spec(args)
     assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: runner must be either 'sbt' or 'bloop'")
 
     local framework = utils.get_framework(path, project)
+
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
+        vim.print("[neotest-scala]: failed to detect testing library used in the project")
         return {}
     end
 
-    local extra_args = vim.list_extend(get_args(), args.extra_args or {})
+    local extra_args = vim.list_extend(
+        get_args({
+            path = path,
+            project = project,
+            runner = runner,
+            framework = framework,
+        }),
+        args.extra_args or {}
+    )
     local command =
         framework_class.build_command(runner, project, args.tree, utils.get_position_name(position), extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project)
