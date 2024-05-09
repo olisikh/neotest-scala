@@ -131,13 +131,16 @@ end
 function M.detect_build_tool(path, project)
     local report = M.build_target_info(path, project)
 
-    -- NOTE: if metals mentions .bloop/{project} folder in the report, means bloop is being used
-    if report and string.find(report, "/.bloop/" .. project) then
-        -- string.find(report, string.format("file://%s/.bloop/%s", path, project)) then
-        return "bloop"
-    else
-        return "sbt"
+    if report then
+        local lines = vim.tbl_map(vim.trim, vim.split(report, "\n"))
+        for _, line in ipairs(lines) do
+            if vim.startswith(line, "file://" .. path .. "/.bloop/" .. project) then
+                return "bloop"
+            end
+        end
     end
+
+    return "sbt"
 end
 
 function M.get_framework(path, project)
