@@ -82,12 +82,6 @@ function M.find_metals(bufnr)
     return nil
 end
 
--- TODO: Delete me?
-function M.inspect_buf(txt)
-    vim.cmd([[new]])
-    vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(vim.inspect(txt), "\n"))
-end
-
 ---Get the first build target name by listing build targets that Metals has found
 ---@param timeout integer? timeout for the request
 ---@return string | nil project name (build target) or nil if Metals unavailable or got no response from Metals
