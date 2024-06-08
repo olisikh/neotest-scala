@@ -39,3 +39,8 @@ luac.out
 *.x86_64
 *.hex
 
+# Scala
+target
+
+# Other
+.DS_Store
