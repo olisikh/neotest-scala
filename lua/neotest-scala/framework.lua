@@ -20,6 +20,8 @@ function M.get_framework_class(framework)
         return require("neotest-scala.framework.scalatest")
     elseif framework == "specs2" then
         return require("neotest-scala.framework.specs2")
+    elseif framework == "zio-test" then
+        return require("neotest-scala.framework.zio-test")
     end
 end
 

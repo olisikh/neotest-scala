@@ -170,6 +170,7 @@ function M.get_framework(path, project, timeout)
             or report:match("(munit)_.*-.*%.jar")
             or report:match("(scalatest)_.*-.*%.jar")
             or report:match("(utest)_.*-.*%.jar")
+            or report:match("(zio%-test)_.*-.*%.jar")
     end
 
     return framework or "scalatest"

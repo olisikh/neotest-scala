@@ -51,7 +51,7 @@ function M.get_test_results(output_lines)
 
             --look for failed tests they start with x prefix
         elseif vim.startswith(line, "x") then
-            test_id = line:match("x (.*)$")
+            test_id = get_test_id(line)
             if test_id ~= nil then
                 test_results[test_id] = { status = TEST_FAILED }
             end

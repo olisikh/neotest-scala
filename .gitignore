@@ -42,3 +42,5 @@ luac.out
 # Scala
 target
 
+# Other
+.DS_Store
