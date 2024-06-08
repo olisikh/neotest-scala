@@ -1,6 +1,17 @@
 # neotest-scala
 
-[Neotest](https://github.com/rcarriga/neotest) adapter for scala.
+## !!! DISCLAIMER
+
+This is a fork of original [neotest-scala](https://github.com/stevanmilic/neotest-scala). \
+Since the project
+is unmaintained and I need to run my tests in Neovim, I have forked the repository and added support
+for specs2 and zio-test libraries.
+
+Please use it at your own risk and don't blame the author.
+
+## About
+
+[Neotest](https://github.com/rcarriga/neotest) adapter for Scala.
 
 Supports the following Scala testing libraries:
 
@@ -8,6 +19,7 @@ Supports the following Scala testing libraries:
 - [munit](https://scalameta.org/munit/docs/getting-started.html)
 - [scalatest](https://www.scalatest.org/)
 - [specs2](https://etorreborre.github.io/specs2)
+- [zio-test](https://zio.dev/reference/test/https://zio.dev/reference/test)
 
 Runs tests with [bloop](https://scalacenter.github.io/bloop/) or [sbt](https://www.scala-sbt.org). \
 Relies on [nvim-metals](https://github.com/scalameta/nvim-metals) to get project metadata information
@@ -114,5 +126,5 @@ To be implemented:
 
 - [x] Detect test library
 - [x] Detect build tool that is being used
-- [ ] Display errors in diagnostics (only specs2 is supported for now)
+- [ ] Display errors in diagnostics (only specs2 and zio-test are supported for now)
 - [ ] Don't block neovim when trying to figure out the project name for building test commands

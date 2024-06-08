@@ -41,6 +41,10 @@ luac.out
 
 # Scala
 target
+.metals
+.bsp
+.bloop
+metals.sbt
 
 # Other
 .DS_Store
