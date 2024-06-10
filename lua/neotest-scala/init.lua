@@ -96,7 +96,7 @@ function adapter.discover_positions(path)
       ;; utest, munit, zio-test, scalatest (FunSuite)
       ((call_expression
         function: (call_expression
-        function: (identifier) @func_name (#any-of? @func_name "test" "suite")
+        function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
         arguments: (arguments (string) @test.name))
       )) @test.definition
 
