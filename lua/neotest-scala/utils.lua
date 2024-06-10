@@ -114,7 +114,7 @@ end
 ---@param project string project name
 ---@param timeout integer? timeout for the request
 ---@return string | nil report about the project
-function M.build_target_info(path, project, timeout)
+function M.get_project_info(path, project, timeout)
     local metals = M.find_metals()
 
     if metals then
@@ -140,8 +140,8 @@ end
 ---@param project string project name
 ---@param timeout integer? timeout for the request
 ---@return string
-function M.detect_build_tool(path, project, timeout)
-    local report = M.build_target_info(path, project, timeout)
+function M.get_build_tool_name(path, project, timeout)
+    local report = M.get_project_info(path, project, timeout)
 
     if report then
         local lines = vim.tbl_map(vim.trim, vim.split(report, "\n"))
@@ -161,7 +161,7 @@ end
 ---@param timeout integer? timeout for the request
 ---@return string name of the test library being used in the project
 function M.get_framework(path, project, timeout)
-    local report = M.build_target_info(path, project .. "-test", timeout)
+    local report = M.get_project_info(path, project .. "-test", timeout)
 
     local framework = nil
 

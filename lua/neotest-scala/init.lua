@@ -17,7 +17,7 @@ local function get_runner(path, project)
     elseif vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
         runner = vim_test_runner
     else
-        runner = utils.detect_build_tool(path, project)
+        runner = utils.get_build_tool_name(path, project)
     end
     return runner
 end
@@ -93,13 +93,12 @@ function adapter.discover_positions(path)
         name: (identifier) @namespace.name
       ) @namespace.definition
 
-      ;; utest, munit, scalatest (FunSuite)
+      ;; utest, munit, zio-test, scalatest (FunSuite)
       ((call_expression
         function: (call_expression
-        function: (identifier) @func_name (#match? @func_name "test")
+        function: (identifier) @func_name (#any-of? @func_name "test" "suite")
         arguments: (arguments (string) @test.name))
       )) @test.definition
-
 
       ;; scalatest (FreeSpec), specs2 (mutable.Specification)
       ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
@@ -123,7 +122,12 @@ end
 ---@return table|nil
 local function get_strategy_config(strategy, tree, project)
     local position = tree:data()
-    if strategy ~= "dap" or position.type == "dir" then
+    if strategy == "integrated" then
+        -- NOTE: run with a background process running actual sbt/bloop test, so no debug configuration required
+        return nil
+    end
+
+    if position.type == "dir" then
         return nil
     end
 
@@ -150,7 +154,9 @@ local function get_strategy_config(strategy, tree, project)
         local root = adapter.root(position.path)
         local parent = tree:parent():data()
 
-        -- Constructs ScalaTestSuitesDebugRequest request.
+        -- NOTE: Constructs ScalaTestSuitesDebugRequest request, to debug a specific test within a test class.
+        -- Test framework must implement sbt.testing.TestSelector for metals to recognize the individual tests
+        -- https://github.com/scalameta/metals/blob/main/metals/src/main/scala/scala/meta/internal/metals/ServerCommands.scala#L808C18-L808C45
         metals_args = {
             target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
             requestData = {
@@ -214,8 +220,9 @@ function adapter.build_spec(args)
         }),
         args.extra_args or {}
     )
-    local command =
-        framework_class.build_command(runner, project, args.tree, utils.get_position_name(position), extra_args)
+
+    local test_name = utils.get_position_name(position)
+    local command = framework_class.build_command(runner, project, args.tree, test_name, extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project)
 
     return {

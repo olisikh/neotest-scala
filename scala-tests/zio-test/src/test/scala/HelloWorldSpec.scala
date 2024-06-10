@@ -5,11 +5,13 @@ import zio.test.Assertion._
 object HelloWorldSpec extends ZIOSpecDefault {
 
   def spec = suite("HelloWorldSpec")(
-    test("hello") {
-      for {
-        one <- ZIO.succeed(1)
-        two <- ZIO.succeed(2)
-      } yield assertTrue(one + two == 3)
+    suite("hello suite") {
+      test("hello") {
+        for {
+          one <- ZIO.succeed(1)
+          two <- ZIO.succeed(2)
+        } yield assertTrue(one + two == 3)
+      }
     },
     test("failing test") {
       for {

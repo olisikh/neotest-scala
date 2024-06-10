@@ -13,20 +13,6 @@ local function strip_prefix_symbol(output)
     return table.concat(words, " ")
 end
 
----Get line number where error test error was recorded
----@param line string
----@return number
-local function get_error_lnum(line)
-    local line_num = line:match("^.*:(%d+)%)$")
-    if line_num ~= nil then
-        local ok, value = pcall(tonumber, line_num)
-        if ok then
-            line_num = value - 1
-        end
-    end
-    return line_num
-end
-
 local function append_test_result(results, test_result, test_error)
     if test_result then
         if test_error then
