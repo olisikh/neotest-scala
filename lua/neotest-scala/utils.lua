@@ -137,14 +137,19 @@ function M.resolve_project(root_path, target_path, timeout)
             if #response.result > 1 then
                 -- remove the test file name, replacing it with a star,
                 -- just like the source path looks like in project_info
-                local target_src_path = target_path:gsub("([^/]+)$", "*")
+                local target_src_path = target_path:gsub("%*$", "")
 
                 for _, name in ipairs(response.result) do
                     local project_info = M.get_project_info(root_path, name, timeout)
                     if project_info and project_info["Sources"] then
-                        if vim.tbl_contains(project_info["Sources"], target_src_path) then
-                            project = project_info
-                            break
+                        for _, src_path in ipairs(project_info["Sources"]) do
+                            -- remove the * at the end of the source path to compare with target file path
+                            src_path = src_path:gsub("%*$", "")
+
+                            if vim.startswith(target_src_path, src_path) then
+                                project = project_info
+                                break
+                            end
                         end
                     end
                 end
