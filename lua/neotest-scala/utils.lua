@@ -82,26 +82,15 @@ function M.find_metals(bufnr)
     return nil
 end
 
-local function split_text(str, sep)
-    if sep == nil then
-        sep = "%s"
-    end
-    local t = {}
-    for s in string.gmatch(str, "([^" .. sep .. "]+)") do
-        table.insert(t, s)
-    end
-    return t
-end
-
 ---Trim the string
 ---@param s string
-local function strim(s)
+local function string_trim(s)
     return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
 ---Normalize spaces in a string
 ---@param s string
-local function sdespace(s)
+local function string_despace(s)
     return (s:gsub("%s+", " "))
 end
 
@@ -119,7 +108,7 @@ local function parse_project_info(text)
             result[curr_section] = {}
         elseif indent_lvl > 0 and content ~= "" and curr_section then
             -- item under the current section, store into result array
-            table.insert(result[curr_section], sdespace(strim(content)))
+            table.insert(result[curr_section], string_despace(string_trim(content)))
         end
     end
 
@@ -193,29 +182,6 @@ function M.get_project_info(path, project, timeout)
     end
 
     return project_info
-end
-
----Detect which build tool is being used, uses Metals, checking which build tool it has been configured with
----@param root_path string project path (root folder)
----@param project string project name
----@param timeout integer? timeout for the request
----@return string
-function M.get_build_tool_name(root_path, project, timeout)
-    local report = M.get_project_info(root_path, project, timeout)
-    local build_tool_name = "sbt"
-
-    if report and report["Classes Directory"] then
-        local classpath = report["Classes Directory"]
-
-        for _, jar in ipairs(classpath) do
-            if vim.startswith(jar, "file://" .. root_path .. "/.bloop/" .. project .. "/bloop-bsp-clients-classes") then
-                build_tool_name = "bloop"
-                break
-            end
-        end
-    end
-
-    return build_tool_name
 end
 
 ---Take build target name and turn it into a module name
