@@ -82,27 +82,86 @@ function M.find_metals(bufnr)
     return nil
 end
 
+local function split_text(str, sep)
+    if sep == nil then
+        sep = "%s"
+    end
+    local t = {}
+    for s in string.gmatch(str, "([^" .. sep .. "]+)") do
+        table.insert(t, s)
+    end
+    return t
+end
+
+---Trim the string
+---@param s string
+local function strim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+---Normalize spaces in a string
+---@param s string
+local function sdespace(s)
+    return (s:gsub("%s+", " "))
+end
+
+local function parse_project_info(text)
+    local result = {}
+    local curr_section = nil
+
+    for line in text:gmatch("[^\r\n]+") do
+        local indent, content = line:match("^(%s*)(.*)")
+        local indent_lvl = #indent
+
+        if indent_lvl == 0 and content ~= "" then
+            -- new section
+            curr_section = content
+            result[curr_section] = {}
+        elseif indent_lvl > 0 and content ~= "" and curr_section then
+            -- item under the current section, store into result array
+            table.insert(result[curr_section], sdespace(strim(content)))
+        end
+    end
+
+    return result
+end
+
 ---Get the first build target name by listing build targets that Metals has found
+---@param root_path string project path where build.sbt is
+---@param target_path string path to the file or folder that is being tested
 ---@param timeout integer? timeout for the request
----@return string | nil project name (build target) or nil if Metals unavailable or got no response from Metals
-function M.get_project_name(timeout)
+---@return table | nil project info
+function M.resolve_project(root_path, target_path, timeout)
     local metals = M.find_metals()
     local project = nil
+    timeout = timeout or 10000
 
     if metals then
-        local response = metals.request_sync(
-            "workspace/executeCommand",
-            { command = "metals.list-build-targets" },
-            timeout or 10000,
-            0
-        )
+        local body = { command = "metals.list-build-targets" }
+        local response = metals.request_sync("workspace/executeCommand", body, timeout, 0)
 
         if not response or #response.result == 0 then
             vim.print("[neotest-scala]: Metals returned no project name, please try again.")
         elseif response.err then
             vim.print("[neotest-scala]: Request to metals failed: " .. response.err.message)
         else
-            project = response.result[1]
+            if #response.result > 1 then
+                -- remove the test file name, replacing it with a star,
+                -- just like the source path looks like in project_info
+                local target_src_path = target_path:gsub("([^/]+)$", "*")
+
+                for _, name in ipairs(response.result) do
+                    local project_info = M.get_project_info(root_path, name, timeout)
+                    if project_info and project_info["Sources"] then
+                        if vim.tbl_contains(project_info["Sources"], target_src_path) then
+                            project = project_info
+                            break
+                        end
+                    end
+                end
+            else
+                project = response.result[1]
+            end
         end
     end
 
@@ -113,9 +172,10 @@ end
 ---@param path string project path (root folder)
 ---@param project string project name
 ---@param timeout integer? timeout for the request
----@return string | nil report about the project
+---@return table report about the project
 function M.get_project_info(path, project, timeout)
     local metals = M.find_metals()
+    local project_info = {}
 
     if metals then
         local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", path, project)
@@ -128,49 +188,63 @@ function M.get_project_info(path, project, timeout)
         if not response or response.err then
             vim.print("[neotest-scala]: Failed to get build target info, please try again")
         else
-            return response.result.value
+            project_info = parse_project_info(response.result.value)
         end
     end
 
-    return nil
+    return project_info
 end
 
 ---Detect which build tool is being used, uses Metals, checking which build tool it has been configured with
----@param path string project path (root folder)
+---@param root_path string project path (root folder)
 ---@param project string project name
 ---@param timeout integer? timeout for the request
 ---@return string
-function M.get_build_tool_name(path, project, timeout)
-    local report = M.get_project_info(path, project, timeout)
+function M.get_build_tool_name(root_path, project, timeout)
+    local report = M.get_project_info(root_path, project, timeout)
+    local build_tool_name = "sbt"
 
-    if report then
-        local lines = vim.tbl_map(vim.trim, vim.split(report, "\n"))
-        for _, line in ipairs(lines) do
-            if vim.startswith(line, "file://" .. path .. "/.bloop/" .. project) then
-                return "bloop"
+    if report and report["Classes Directory"] then
+        local classpath = report["Classes Directory"]
+
+        for _, jar in ipairs(classpath) do
+            if vim.startswith(jar, "file://" .. root_path .. "/.bloop/" .. project .. "/bloop-bsp-clients-classes") then
+                build_tool_name = "bloop"
+                break
             end
         end
     end
 
-    return "sbt"
+    return build_tool_name
+end
+
+---Take build target name and turn it into a module name
+function M.get_project_name(project_info)
+    if project_info and project_info["Target"] then
+        return (project_info["Target"][1]:gsub("-.*$", ""))
+    end
 end
 
 ---Search for a test library dependency in a test build target
----@param path string project path (root folder)
----@param project string project name
----@param timeout integer? timeout for the request
+---@param project_info table project info
 ---@return string name of the test library being used in the project
-function M.get_framework(path, project, timeout)
-    local report = M.get_project_info(path, project .. "-test", timeout)
-
+function M.get_framework(project_info)
     local framework = nil
 
-    if report then
-        framework = report:match("(specs2)-core_.*-.*%.jar")
-            or report:match("(munit)_.*-.*%.jar")
-            or report:match("(scalatest)_.*-.*%.jar")
-            or report:match("(utest)_.*-.*%.jar")
-            or report:match("(zio%-test)_.*-.*%.jar")
+    if project_info and project_info["Scala Classpath"] then
+        local classpath = project_info["Scala Classpath"]
+
+        for _, jar in ipairs(classpath) do
+            framework = jar:match("(specs2)-core_.*-.*%.jar")
+                or jar:match("(munit)_.*-.*%.jar")
+                or jar:match("(scalatest)_.*-.*%.jar")
+                or jar:match("(utest)_.*-.*%.jar")
+                or jar:match("(zio%-test)_.*-.*%.jar")
+
+            if framework then
+                break
+            end
+        end
     end
 
     return framework or "scalatest"
