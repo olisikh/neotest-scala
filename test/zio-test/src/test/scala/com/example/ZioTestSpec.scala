@@ -7,7 +7,7 @@ import zio.test.Assertion._
 object ZioTestSpec extends ZIOSpecDefault {
 
   def spec = suite("HelloWorldSpec")(
-    suite("hello suite") {
+    suite("hello - suite") {
       test("hello") {
         for {
           one <- ZIO.succeed(1)

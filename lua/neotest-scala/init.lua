@@ -2,6 +2,7 @@ local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local ts = vim.treesitter
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -284,42 +285,124 @@ local function get_results(tree, test_results, match_func)
     return results
 end
 
+--query
+local junit_query = ts.query.parse(
+    "xml",
+    [[
+(element 
+  (STag 
+    (Name) @_1 (#eq? @_1 "testcase")
+    (Attribute 
+      (Name) @_2 (#eq? @_2 "name")
+      (AttValue) @testcase.name
+    )
+  )
+  (content
+    (element
+      (STag 
+        (Name) @_4 (#eq? @_4 "failure")
+        (Attribute 
+          (Name) @_5 (#eq? @_5 "message")
+          (AttValue) @testcase.message
+        )
+        (Attribute
+          (Name) @_7 (#eq? @_7 "type")
+          (AttValue) @testcase.error_type
+        )
+      )
+      (content) @testcase.error_message
+    )? @testcase.content
+  ) @testcase
+)
+]]
+)
+
 ---@async
 ---@param spec neotest.RunSpec
 ---@param result neotest.StrategyResult
 ---@param tree neotest.Tree
 ---@return table<string, neotest.Result>
 function adapter.results(spec, result, tree)
-    local success, lines = pcall(lib.files.read_lines, result.output)
-
-    if not spec.env or not spec.env.framework then
+    if not spec.env or not spec.env.framework or not spec.env.build_target_info then
         return {}
     end
+
+    local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
+    local report_prefix = project_dir .. "target/test-reports/"
 
     local nodes_group = {}
     for _, node in tree:iter_nodes() do
         local data = node:data()
         local path = data.path
         if not nodes_group[path] then
-            nodes_group[path] = {}
+            local package_name = utils.get_package_name(path)
+            local file_name = path:match("([^/]+)%.scala$")
+            assert(file_name, "[neotest-scala] Failed to resolve file_name of the test: " .. path)
+
+            nodes_group[path] = {
+                test_report_file = report_prefix .. "TEST-" .. package_name .. file_name .. ".xml",
+                nodes = {},
+            }
         end
 
-        table.insert(nodes_group[path], data)
+        table.insert(nodes_group[path]["nodes"], data)
     end
 
-    vim.print(vim.inspect(spec.env))
+    local test_results = {}
 
-    -- TODO: read junit report and take what we are looking for :)
-    -- vim.print(vim.inspect(spec))
-    -- vim.print(vim.inspect(tree))
+    for _, node_group in pairs(nodes_group) do
+        local success, xml = pcall(lib.files.read, node_group.test_report_file)
+        if not success then
+            return {}
+        end
+
+        local report_tree = ts.get_string_parser(xml, "xml")
+        local parsed = report_tree:parse()[1]
+
+        local query_results = junit_query:iter_matches(parsed:root(), report_tree:source())
+
+        for _, matches, _ in query_results do
+            local test_name_node = matches[3]
+            local error_type_node = matches[6]
+            local error_message_node = matches[8]
+
+            local test_result = {}
+            if test_name_node then
+                test_result.name = ts.get_node_text(test_name_node, report_tree:source())
+            end
+            if error_type_node then
+                test_result.error_type = ts.get_node_text(error_type_node, report_tree:source())
+            end
+            if error_message_node then
+                test_result.error_message = ts.get_node_text(error_message_node, report_tree:source())
+            end
+
+            table.insert(test_results, test_result)
+        end
+
+        for _, node in ipairs(node_group.nodes) do
+            for _, test_result in ipairs(test_results) do
+                -- TODO: should do as accurate match as possible
+                -- JUnit adds the ` - ` to contact the test with namespace
+                -- Neotest adds the `.` to concat the test with namespace
+                if string.match(test_result.name, utils.get_position_name(node)) then
+                    vim.print("MAATCH!!!")
+                    vim.print(vim.inspect(test_result))
+                    vim.print(vim.inspect(node))
+                end
+            end
+        end
+    end
 
     local framework = fw.get_framework_class(spec.env.framework)
+
+    local success, lines = pcall(lib.files.read_lines, result.output)
     if not success or not framework then
         return {}
     end
 
-    local test_results = framework.get_test_results(lines)
-    return get_results(tree, test_results, framework.match_func)
+    local results = framework.get_test_results(lines)
+    return get_results(tree, results, framework.match_func)
 end
 
 local function is_callable(obj)

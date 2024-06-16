@@ -7,8 +7,7 @@ local M = {}
 ---@return string
 function M.get_position_name(position)
     if position.type == "test" then
-        local value = string.gsub(position.name, '"', "")
-        return value
+        return (position.name:gsub('"', ""))
     end
     return position.name
 end
