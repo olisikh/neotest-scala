@@ -187,7 +187,8 @@ end
 ---Take build target name and turn it into a module name
 function M.get_project_name(project_info)
     if project_info and project_info["Target"] then
-        return (project_info["Target"][1]:gsub("-.*$", ""))
+        -- TODO: this is probably unreliable? the build target is usually root-test but the project name is root
+        return (project_info["Target"][1]:gsub("-test$", ""))
     end
 end
 
