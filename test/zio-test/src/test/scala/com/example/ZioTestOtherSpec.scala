@@ -1,3 +1,5 @@
+package com.example
+
 import zio.{test => _, _}
 import zio.test._
 import zio.test.Assertion._

@@ -94,7 +94,7 @@ local function string_despace(s)
     return (s:gsub("%s+", " "))
 end
 
-local function parse_project_info(text)
+local function parse_build_target_info(text)
     local result = {}
     local curr_section = nil
 
@@ -115,14 +115,41 @@ local function parse_project_info(text)
     return result
 end
 
----Get the first build target name by listing build targets that Metals has found
+---Get project report, contains information about the project, it's classpath in particular
+---@param path string project path (root folder)
+---@param project string project name
+---@param timeout integer? timeout for the request
+---@return table | nil report about the project
+local function get_build_target_info(path, project, timeout)
+    local metals = M.find_metals()
+    local build_target_info = nil
+
+    if metals then
+        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", path, project)
+
+        local params = {
+            command = "metals.file-decode",
+            arguments = { metals_uri },
+        }
+        local response = metals.request_sync("workspace/executeCommand", params, timeout or 10000, 0)
+        if not response or response.err then
+            vim.print("[neotest-scala]: Failed to get build target info, please try again")
+        else
+            build_target_info = parse_build_target_info(response.result.value)
+        end
+    end
+
+    return build_target_info
+end
+
+---Get the build target info by listing build targets that Metals has found and finding he one that matches
 ---@param root_path string project path where build.sbt is
 ---@param target_path string path to the file or folder that is being tested
 ---@param timeout integer? timeout for the request
----@return table | nil project info
-function M.resolve_project(root_path, target_path, timeout)
+---@return table | nil build target info
+function M.get_build_target_info(root_path, target_path, timeout)
     local metals = M.find_metals()
-    local project = nil
+    local result = nil
     timeout = timeout or 10000
 
     if metals then
@@ -136,75 +163,48 @@ function M.resolve_project(root_path, target_path, timeout)
         else
             if #response.result > 1 then
                 -- remove the test file name, replacing it with a star,
-                -- just like the source path looks like in project_info
+                -- just like the source path looks like in build_target_info
                 local target_src_path = target_path:gsub("%*$", "")
 
                 for _, name in ipairs(response.result) do
-                    local project_info = M.get_project_info(root_path, name, timeout)
-                    if project_info and project_info["Sources"] then
-                        for _, src_path in ipairs(project_info["Sources"]) do
+                    local build_target_info = get_build_target_info(root_path, name, timeout)
+                    if build_target_info and build_target_info["Sources"] then
+                        for _, src_path in ipairs(build_target_info["Sources"]) do
                             -- remove the * at the end of the source path to compare with target file path
                             src_path = src_path:gsub("%*$", "")
 
                             if vim.startswith(target_src_path, src_path) then
-                                project = project_info
+                                result = build_target_info
                                 break
                             end
                         end
                     end
                 end
             else
-                project = response.result[1]
+                result = response.result[1]
             end
         end
     end
 
-    return project
-end
-
----Get project report, contains information about the project, it's classpath in particular
----@param path string project path (root folder)
----@param project string project name
----@param timeout integer? timeout for the request
----@return table report about the project
-function M.get_project_info(path, project, timeout)
-    local metals = M.find_metals()
-    local project_info = {}
-
-    if metals then
-        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", path, project)
-
-        local params = {
-            command = "metals.file-decode",
-            arguments = { metals_uri },
-        }
-        local response = metals.request_sync("workspace/executeCommand", params, timeout or 10000, 0)
-        if not response or response.err then
-            vim.print("[neotest-scala]: Failed to get build target info, please try again")
-        else
-            project_info = parse_project_info(response.result.value)
-        end
-    end
-
-    return project_info
+    return result
 end
 
 ---Take build target name and turn it into a module name
-function M.get_project_name(project_info)
-    if project_info and project_info["Target"] then
+function M.get_project_name(build_target_info)
+    if build_target_info and build_target_info["Target"] then
         -- TODO: this is probably unreliable? the build target is usually root-test but the project name is root
-        return (project_info["Target"][1]:gsub("-test$", ""))
+        return (build_target_info["Target"][1]:gsub("-test$", ""))
     end
 end
 
 ---Search for a test library dependency in a test build target
----@param project_info table project info
+---@param build_target_info table build target info
 ---@return string name of the test library being used in the project
-function M.get_framework(project_info)
+function M.get_framework(build_target_info)
     local framework = nil
 
-    if project_info and project_info["Scala Classpath"] then
-        local classpath = project_info["Scala Classpath"]
+    if build_target_info and build_target_info["Scala Classpath"] then
+        local classpath = build_target_info["Scala Classpath"]
 
         for _, jar in ipairs(classpath) do
             framework = jar:match("(specs2)-core_.*-.*%.jar")

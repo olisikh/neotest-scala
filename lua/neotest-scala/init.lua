@@ -8,7 +8,7 @@ local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
-local function get_runner(project_info, path, project)
+local function get_runner(build_target_info, path, project_name)
     local vim_test_runner = vim.g["test#scala#runner"]
 
     local runner = "sbt"
@@ -18,11 +18,13 @@ local function get_runner(project_info, path, project)
     elseif vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
         runner = vim_test_runner
     else
-        if project_info and project_info["Classes Directory"] then
-            local classpath = project_info["Classes Directory"]
+        if build_target_info and build_target_info["Classes Directory"] then
+            local classpath = build_target_info["Classes Directory"]
 
             for _, jar in ipairs(classpath) do
-                if vim.startswith(jar, "file://" .. path .. "/.bloop/" .. project .. "/bloop-bsp-clients-classes") then
+                if
+                    vim.startswith(jar, "file://" .. path .. "/.bloop/" .. project_name .. "/bloop-bsp-clients-classes")
+                then
                     runner = "bloop"
                     break
                 end
@@ -202,25 +204,25 @@ end
 ---@return neotest.RunSpec
 function adapter.build_spec(args)
     local position = args.tree:data()
-    local path = adapter.root(position.path)
-    assert(path, "[neotest-scala]: Can't resolve root project folder")
+    local root_path = adapter.root(position.path)
+    assert(root_path, "[neotest-scala]: Can't resolve root project folder")
 
-    local project_info = utils.resolve_project(path, position.path)
-    if not project_info then
+    local build_target_info = utils.get_build_target_info(root_path, position.path)
+    if not build_target_info then
         vim.print("[neotest-scala]: Can't resolve project, has Metals initialised? Please try again.")
         return {}
     end
 
-    local project_name = utils.get_project_name(project_info)
+    local project_name = utils.get_project_name(build_target_info)
     if not project_name then
         vim.print("[neotest-scala]: Can't resolve project name")
         return {}
     end
 
-    local runner = get_runner(project_info, path, project_name)
+    local runner = get_runner(build_target_info, root_path, project_name)
     assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: Runner must be either 'sbt' or 'bloop'")
 
-    local framework = utils.get_framework(project_info)
+    local framework = utils.get_framework(build_target_info)
 
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
@@ -230,8 +232,9 @@ function adapter.build_spec(args)
 
     local extra_args = vim.list_extend(
         get_args({
-            path = path,
-            project = project_name,
+            path = root_path,
+            build_target_info = build_target_info,
+            project_name = project_name,
             runner = runner,
             framework = framework,
         }),
@@ -246,8 +249,9 @@ function adapter.build_spec(args)
         command = command,
         strategy = strategy,
         env = {
-            path = path,
-            project = project_name,
+            root_path = root_path,
+            build_target_info = build_target_info,
+            project_name = project_name,
             framework = framework,
         },
     }
@@ -291,6 +295,23 @@ function adapter.results(spec, result, tree)
     if not spec.env or not spec.env.framework then
         return {}
     end
+
+    local nodes_group = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        local path = data.path
+        if not nodes_group[path] then
+            nodes_group[path] = {}
+        end
+
+        table.insert(nodes_group[path], data)
+    end
+
+    vim.print(vim.inspect(spec.env))
+
+    -- TODO: read junit report and take what we are looking for :)
+    -- vim.print(vim.inspect(spec))
+    -- vim.print(vim.inspect(tree))
 
     local framework = fw.get_framework_class(spec.env.framework)
     if not success or not framework then
