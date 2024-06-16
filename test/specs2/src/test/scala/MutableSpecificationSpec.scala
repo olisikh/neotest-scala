@@ -2,9 +2,9 @@
 
 import org.specs2.mutable.Specification
 
-class HelloWorldSpec extends Specification {
+class MutableSpecificationSpec extends Specification {
 
-  "HelloWorldSpec" should {
+  "MutableSpecificationSpec" should {
     "Hello, Specs2!" in {
       1 must equalTo(1)
     }

@@ -2,7 +2,7 @@ import zio.{test => _, _}
 import zio.test._
 import zio.test.Assertion._
 
-object HelloWorldSuiteAllSpec extends ZIOSpecDefault {
+object ZioTestSuiteAllSpec extends ZIOSpecDefault {
 
   def spec = suiteAll("HelloWorldSuiteAll") {
     suite("hello suite") {
