@@ -4,7 +4,7 @@ import org.scalatest.matchers.should.Matchers
 
 class FreeSpecSpec extends AnyFreeSpec with Matchers {
 
-  "HelloWorldSpec" in {
+  "HelloWorldSpec" - {
     "Hello, ScalaTest!" in {
       1 shouldEqual 1
     }

@@ -118,7 +118,7 @@ function adapter.discover_positions(path)
       ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
       (infix_expression 
         left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init "in" "should" "can" ">>")
+        operator: (_) @spec_init (#any-of? @spec_init "-" "in" "should" "can" ">>")
         right: (_)
       ) @test.definition
     ]]
@@ -334,13 +334,21 @@ function adapter.results(spec, result, tree)
     for _, node in tree:iter_nodes() do
         local data = node:data()
         local path = data.path
+        vim.print(vim.inspect(data))
+
         if not nodes_group[path] then
+            nodes_group[path] = { nodes = {} }
+        end
+
+        if data.type == "namespace" then
             local package_name = utils.get_package_name(path)
-            local file_name = path:match("([^/]+)%.scala$")
-            assert(file_name, "[neotest-scala] Failed to resolve file_name of the test: " .. path)
+            local test_name = data.id
+            assert(test_name, "[neotest-scala] Failed to resolve file_name of the test: " .. path)
 
             nodes_group[path] = {
-                test_report_file = report_prefix .. "TEST-" .. package_name .. file_name .. ".xml",
+                test_report_file = report_prefix .. "TEST-" .. package_name .. test_name .. ".xml",
+                test_suite_name = package_name .. test_name,
+                package_name = package_name,
                 nodes = {},
             }
         end
@@ -348,61 +356,97 @@ function adapter.results(spec, result, tree)
         table.insert(nodes_group[path]["nodes"], data)
     end
 
+    local junit_tests = {}
     local test_results = {}
 
     for _, node_group in pairs(nodes_group) do
-        local success, xml = pcall(lib.files.read, node_group.test_report_file)
+        local success, junit_xml = pcall(lib.files.read, node_group.test_report_file)
         if not success then
             return {}
         end
 
-        local report_tree = ts.get_string_parser(xml, "xml")
+        local report_tree = ts.get_string_parser(junit_xml, "xml")
         local parsed = report_tree:parse()[1]
 
         local query_results = junit_query:iter_matches(parsed:root(), report_tree:source())
 
         for _, matches, _ in query_results do
             local test_name_node = matches[3]
-            local error_type_node = matches[6]
-            local error_message_node = matches[8]
+            local error_message_node = matches[6]
+            local error_type_node = matches[8]
+            local error_stacktrace_node = matches[9]
 
-            local test_result = {}
+            local test = {}
             if test_name_node then
-                test_result.name = ts.get_node_text(test_name_node, report_tree:source())
-            end
-            if error_type_node then
-                test_result.error_type = ts.get_node_text(error_type_node, report_tree:source())
+                test.name = ts.get_node_text(test_name_node, report_tree:source())
             end
             if error_message_node then
-                test_result.error_message = ts.get_node_text(error_message_node, report_tree:source())
+                test.error_message = ts.get_node_text(error_message_node, report_tree:source())
+            end
+            if error_type_node then
+                test.error_type = ts.get_node_text(error_type_node, report_tree:source())
+            end
+            if error_stacktrace_node then
+                test.error_stacktrace =
+                    utils.strip_ansi_chars(ts.get_node_text(error_stacktrace_node, report_tree:source()))
             end
 
-            table.insert(test_results, test_result)
+            table.insert(junit_tests, test)
         end
 
         for _, node in ipairs(node_group.nodes) do
-            for _, test_result in ipairs(test_results) do
+            for _, junit_test in ipairs(junit_tests) do
                 -- TODO: should do as accurate match as possible
                 -- JUnit adds the ` - ` to contact the test with namespace
                 -- Neotest adds the `.` to concat the test with namespace
-                if string.match(test_result.name, utils.get_position_name(node)) then
-                    vim.print("MAATCH!!!")
-                    vim.print(vim.inspect(test_result))
-                    vim.print(vim.inspect(node))
+                local junit_test_id = (
+                    node_group.test_suite_name
+                    .. "."
+                    .. utils.string_remove_dquotes(junit_test.name)
+                ):gsub("-", "."):gsub(" ", "")
+                local test_id = node.id:gsub("-", "."):gsub(" ", "")
+
+                -- vim.print(junit_test_id)
+                -- vim.print(test_id)
+
+                if junit_test_id == test_id then
+                    local test_result = {
+                        test_id = node.id,
+                    }
+
+                    local message = junit_test.error_message or junit_test.error_stacktrace
+                    if message then
+                        test_result.errors = {
+                            {
+                                message = utils.string_unescape_xml(
+                                    utils.string_remove_ansi(utils.string_trim(utils.string_remove_dquotes(message)))
+                                ),
+                            },
+                        }
+                        test_result.status = TEST_FAILED
+                    else
+                        test_result.status = TEST_PASSED
+                    end
+
+                    test_results[node.id] = test_result
                 end
             end
         end
     end
 
-    local framework = fw.get_framework_class(spec.env.framework)
+    -- local framework = fw.get_framework_class(spec.env.framework)
 
-    local success, lines = pcall(lib.files.read_lines, result.output)
-    if not success or not framework then
-        return {}
-    end
+    -- local success, lines = pcall(lib.files.read_lines, result.output)
+    -- if not success or not framework then
+    --     return {}
+    -- end
+    --
+    -- local results = framework.get_test_results(lines)
+    --
+    -- return get_results(tree, results, framework.match_func)
 
-    local results = framework.get_test_results(lines)
-    return get_results(tree, results, framework.match_func)
+    vim.print(vim.inspect(test_results))
+    return test_results
 end
 
 local function is_callable(obj)

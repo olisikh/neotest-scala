@@ -83,14 +83,42 @@ end
 
 ---Trim the string
 ---@param s string
-local function string_trim(s)
+function M.string_trim(s)
     return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
 ---Normalize spaces in a string
 ---@param s string
-local function string_despace(s)
+function M.string_despace(s)
     return (s:gsub("%s+", " "))
+end
+
+---Remove quotes from string
+---@param s string
+function M.string_remove_dquotes(s)
+    return (s:gsub('^%s*"', ""):gsub('"$', ""))
+end
+
+---Remove ANSI characters from string
+function M.string_remove_ansi(s)
+    return (s:gsub("%[%d*;?%d*m", ""))
+end
+
+function M.string_unescape_xml(s)
+    local xml_escapes = {
+        ["&quot;"] = '"',
+        ["&apos;"] = "'",
+        ["&amp;"] = "&",
+        ["&lt;"] = "<",
+        ["&gt;"] = ">",
+    }
+
+    -- Function to replace the XML escape sequences with their corresponding characters
+    local function replace_escape_sequence(sequence)
+        return xml_escapes[sequence] or sequence
+    end
+
+    return (s:gsub("(&quot;|&apos;|&amp;|&lt;|&gt;)", replace_escape_sequence))
 end
 
 local function parse_build_target_info(text)
@@ -107,7 +135,7 @@ local function parse_build_target_info(text)
             result[curr_section] = {}
         elseif indent_lvl > 0 and content ~= "" and curr_section then
             -- item under the current section, store into result array
-            table.insert(result[curr_section], string_despace(string_trim(content)))
+            table.insert(result[curr_section], M.string_despace(M.string_trim(content)))
         end
     end
 
