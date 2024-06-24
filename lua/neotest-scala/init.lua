@@ -336,36 +336,57 @@ function adapter.results(spec, result, tree)
     local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
     local report_prefix = project_dir .. "target/test-reports/"
 
-    local nodes_group = {}
+    local namespaces = {}
+
+    local tree_data = tree:data()
+    vim.print(tree_data.path)
+
+    -- TODO: if file - find all namespaces, iterate over all of them and collect test results
+    -- if namespace just collect test results
+    -- if test - lookup the namespace, fill in the metadata and collect the single test result
+    --
+    if tree_data.type == "file" then
+        vim.print("FILE!!!")
+    elseif tree_data.type == "namespace" then
+        vim.print("NAMESPACE!!!")
+    elseif tree_data.type == "test" then
+        vim.print("TEST!!!")
+    end
+
+    -- 1. Group tests under namespaces
     for _, node in tree:iter_nodes() do
-        local data = node:data()
-        local path = data.path
+        local position = node:data()
+        local path = position.path
 
-        if not nodes_group[path] then
-            nodes_group[path] = { nodes = {} }
-        end
-
-        if data.type == "namespace" then
+        if position.type == "namespace" then
             local package_name = utils.get_package_name(path)
-            local test_name = data.id
-            assert(test_name, "[neotest-scala] Failed to resolve file_name of the test: " .. path)
+            local file_name = utils.get_file_name(path)
 
-            nodes_group[path] = {
-                test_report_file = report_prefix .. "TEST-" .. package_name .. test_name .. ".xml",
-                test_suite_name = package_name .. test_name,
+            -- TODO: using path is not accurate, should use the namespace instead,
+            -- since there might be multiple namespaces in a single file!
+            namespaces[path] = {
+                path = path,
                 package_name = package_name,
-                nodes = {},
+                namespace_name = position.id,
+                file_name = file_name,
+                report_file_name = report_prefix .. "TEST-" .. package_name .. position.id .. ".xml",
+                tests = {},
             }
         end
 
-        table.insert(nodes_group[path]["nodes"], data)
+        if not namespaces[path] then
+            namespaces[path] = { tests = {} }
+        end
+
+        table.insert(namespaces[path]["tests"], node)
     end
 
     local junit_tests = {}
     local test_results = {}
 
-    for _, node_group in pairs(nodes_group) do
-        local success, junit_xml = pcall(lib.files.read, node_group.test_report_file)
+    -- 2. Per each namespace find a test report and aggregate the junit test results
+    for _, namespace in pairs(namespaces) do
+        local success, junit_xml = pcall(lib.files.read, namespace.report_file_name)
         if not success then
             return {}
         end
@@ -400,54 +421,77 @@ function adapter.results(spec, result, tree)
             if error_stacktrace_node then
                 test.error_stacktrace = utils.string_unescape_xml(
                     utils.string_remove_ansi(
-                        utils.string_despace(ts.get_node_text(error_stacktrace_node, report_tree:source()))
+                        utils.string_remove_dquotes(ts.get_node_text(error_stacktrace_node, report_tree:source()))
                     )
                 )
             end
 
-            utils.print_table(test)
+            test.file_name = namespace.file_name
 
             table.insert(junit_tests, test)
         end
 
-        local function collect_result(junit_test, node)
-            local test_result = {
-                test_id = node.id,
-            }
+        local function collect_result(junit_test, position)
+            local test_result = nil
 
-            local message = junit_test.error_message or junit_test.error_stacktrace
-            if message then
-                test_result.errors = {
-                    {
-                        message = message,
-                    },
-                }
-                test_result.status = TEST_FAILED
+            if framework.build_test_result then
+                test_result = framework.build_test_result(junit_test, position)
             else
-                test_result.status = TEST_PASSED
+                test_result = {
+                    test_id = position.id,
+                }
+                local message = junit_test.error_message or junit_test.error_stacktrace
+                if message then
+                    local error = {
+                        message = message,
+                    }
+
+                    test_result.errors = { error }
+                    test_result.status = TEST_FAILED
+                else
+                    test_result.status = TEST_PASSED
+                end
             end
 
-            test_results[node.id] = test_result
+            test_result.test_id = position.id
+
+            return test_result
         end
 
-        for _, node in ipairs(node_group.nodes) do
+        for _, test in ipairs(namespace.tests) do
+            local test_result = nil
+            local position = test:data()
+
             for _, junit_test in ipairs(junit_tests) do
-                if framework.match_func and framework.match_func(junit_test, node) then
-                    collect_result(junit_test, node)
+                if framework.match_test and framework.match_test(junit_test, position) then
+                    test_result = collect_result(junit_test, position)
                 else
-                    local junit_test_id = (node_group.test_suite_name .. "." .. junit_test.name)
+                    local junit_test_id = (namespace.package_name .. namespace.namespace_name .. "." .. junit_test.name)
                         :gsub("-", ".")
                         :gsub(" ", "")
 
-                    local test_id = node.id:gsub("-", "."):gsub(" ", "")
+                    local test_id = position.id:gsub("-", "."):gsub(" ", "")
 
                     if junit_test_id == test_id then
-                        collect_result(junit_test, node)
+                        test_result = collect_result(junit_test, position)
                     end
                 end
 
                 -- vim.print(junit_test_id)
                 -- vim.print(test_id)
+
+                if test_result then
+                    -- test found in junit_report, stop searching
+                    break
+                end
+            end
+
+            if test_result then
+                test_results[position.id] = test_result
+            else
+                test_results[position.id] = {
+                    status = TEST_PASSED,
+                }
             end
         end
     end

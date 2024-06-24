@@ -6,7 +6,8 @@ TEST_FAILED = "failed" -- the test failed
 ---@class neotest-scala.Framework
 ---@field build_command fun(runner: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
 ---@field get_test_results fun(output_lines: string[]): table<string, string>
----@field match_func nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
+---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
+---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
 
 ---Returns a framework class.
 ---@param framework string

@@ -14,8 +14,8 @@ end
 
 ---Get a package name from the top of the file.
 ---@return string|nil
-function M.get_package_name(file)
-    local success, lines = pcall(lib.files.read_lines, file)
+function M.get_package_name(path)
+    local success, lines = pcall(lib.files.read_lines, path)
     if not success then
         return nil
     end
@@ -24,6 +24,11 @@ function M.get_package_name(file)
         return vim.split(line, " ")[2] .. "."
     end
     return ""
+end
+
+function M.get_file_name(path)
+    local parts = vim.split(path, "/")
+    return parts[#parts]
 end
 
 ---@param project string
@@ -104,7 +109,7 @@ function M.string_remove_ansi(s)
     return (s:gsub("%[%d*;?%d*m", ""))
 end
 
-function M.print_table(tbl)
+function M.inspect(tbl)
     vim.print(vim.inspect(tbl))
 end
 
@@ -117,8 +122,8 @@ function M.string_unescape_xml(s)
         ["&gt;"] = ">",
     }
 
-    for escape_sequence, char in pairs(xml_escapes) do
-        s = string.gsub(s, escape_sequence, char)
+    for esc, char in pairs(xml_escapes) do
+        s = string.gsub(s, esc, char)
     end
 
     return s

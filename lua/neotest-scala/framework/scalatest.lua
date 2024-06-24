@@ -120,8 +120,8 @@ end
 ---@param junit_test table<string, string>
 ---@param position neotest.Position
 ---@return string|nil
-function M.match_func(junit_test, position)
-    vim.print(junit_test.name .. " matches " .. position.id)
+function M.match_test(junit_test, position)
+    -- vim.print(junit_test.name .. " matches " .. position.id)
     return vim.endswith(position.id, junit_test.name)
 end
 

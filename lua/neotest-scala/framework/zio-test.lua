@@ -179,5 +179,49 @@ end
 --     return res
 -- end
 
+function M.build_test_result(junit_test, position)
+    local result = nil
+    local error = {}
+
+    if junit_test.error_message then
+        local msg = vim.split(junit_test.error_message, "\n")
+        table.remove(msg, 1) -- it's just the name of the test, starts with - or x
+
+        local last_line = table.remove(msg, #msg - 1) -- can be used to get a line number
+        local line_num = string.match(junit_test.error_message, junit_test.file_name .. ":(%d*)")
+        if line_num then
+            error.line = tonumber(line_num) - 1 -- minus 1 because Lua indexes are 1-based
+        else
+            -- since there's no line num, then let's add it back
+            table.insert(msg, last_line)
+        end
+
+        local formatted_msg = table.concat(msg, "\n")
+        error.message = formatted_msg
+    elseif junit_test.error_stacktrace then
+        local line_num = string.match(junit_test.error_stacktrace, junit_test.file_name .. ":(%d*)")
+        if line_num then
+            error.line = tonumber(line_num) - 1
+        end
+
+        error.message = junit_test.error_stacktrace
+    end
+
+    if not vim.tbl_isempty(error) then
+        result = {
+            test_id = position.id,
+            status = TEST_FAILED,
+            errors = { error },
+        }
+    else
+        result = {
+            test_id = position.id,
+            status = TEST_PASSED,
+        }
+    end
+
+    return result
+end
+
 ---@return neotest-scala.Framework
 return M
