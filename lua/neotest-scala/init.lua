@@ -336,51 +336,49 @@ function adapter.results(spec, result, tree)
     local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
     local report_prefix = project_dir .. "target/test-reports/"
 
-    local namespaces = {}
+    local function build_namespace(ns_node)
+        local position = ns_node:data()
+
+        local path = position.path
+        local package_name = utils.get_package_name(path)
+        local file_name = utils.get_file_name(path)
+
+        local namespace = {
+            path = path,
+            package_name = package_name,
+            namespace_name = position.id,
+            file_name = file_name,
+            report_file_name = report_prefix .. "TEST-" .. package_name .. position.id .. ".xml",
+            tests = {},
+        }
+
+        for _, node in tree:iter_nodes() do
+            table.insert(namespace["tests"], node:data())
+        end
+
+        return namespace
+    end
 
     local tree_data = tree:data()
-    vim.print(tree_data.path)
+    local namespaces = {}
 
-    -- TODO: if file - find all namespaces, iterate over all of them and collect test results
-    -- if namespace just collect test results
-    -- if test - lookup the namespace, fill in the metadata and collect the single test result
-    --
     if tree_data.type == "file" then
-        vim.print("FILE!!!")
+        local children = tree:children() -- file children are namespaces, right? is it guaranteed? well...
+        for _, ns_node in ipairs(children) do
+            table.insert(namespaces, build_namespace(ns_node))
+        end
     elseif tree_data.type == "namespace" then
-        vim.print("NAMESPACE!!!")
+        table.insert(namespaces, build_namespace(tree))
     elseif tree_data.type == "test" then
-        vim.print("TEST!!!")
+        local ns_node = utils.find_namespace(tree)
+        if ns_node then
+            table.insert(namespaces, build_namespace(ns_node))
+        end
     end
+
+    utils.inspect(namespaces)
 
     -- 1. Group tests under namespaces
-    for _, node in tree:iter_nodes() do
-        local position = node:data()
-        local path = position.path
-
-        if position.type == "namespace" then
-            local package_name = utils.get_package_name(path)
-            local file_name = utils.get_file_name(path)
-
-            -- TODO: using path is not accurate, should use the namespace instead,
-            -- since there might be multiple namespaces in a single file!
-            namespaces[path] = {
-                path = path,
-                package_name = package_name,
-                namespace_name = position.id,
-                file_name = file_name,
-                report_file_name = report_prefix .. "TEST-" .. package_name .. position.id .. ".xml",
-                tests = {},
-            }
-        end
-
-        if not namespaces[path] then
-            namespaces[path] = { tests = {} }
-        end
-
-        table.insert(namespaces[path]["tests"], node)
-    end
-
     local junit_tests = {}
     local test_results = {}
 
@@ -458,9 +456,8 @@ function adapter.results(spec, result, tree)
             return test_result
         end
 
-        for _, test in ipairs(namespace.tests) do
+        for _, position in ipairs(namespace.tests) do
             local test_result = nil
-            local position = test:data()
 
             for _, junit_test in ipairs(junit_tests) do
                 if framework.match_test and framework.match_test(junit_test, position) then

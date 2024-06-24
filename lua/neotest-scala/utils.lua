@@ -12,6 +12,22 @@ function M.get_position_name(position)
     return position.name
 end
 
+---Find namespace type parent node if available
+---@param tree neotest.Tree
+---@return neotest.Tree|nil namespace parent node or nil if not found
+function M.find_namespace(tree)
+    if tree:data().type == "namespace" then
+        return tree
+    else
+        local parent = tree:parent()
+        if parent then
+            return M.find_namespace(parent)
+        else
+            return nil
+        end
+    end
+end
+
 ---Get a package name from the top of the file.
 ---@return string|nil
 function M.get_package_name(path)
