@@ -117,16 +117,12 @@ function M.get_test_results(output_lines)
 end
 
 -- Get test results from the test output.
----@param test_results table<string, string>
----@param position_id string
+---@param junit_test table<string, string>
+---@param position neotest.Position
 ---@return string|nil
-function M.match_func(test_results, position_id)
-    for test_id, result in pairs(test_results) do
-        if position_id:match(test_id) then
-            return result
-        end
-    end
-    return nil
+function M.match_func(junit_test, position)
+    vim.print(junit_test.name .. " matches " .. position.id)
+    return vim.endswith(position.id, junit_test.name)
 end
 
 ---@return neotest-scala.Framework

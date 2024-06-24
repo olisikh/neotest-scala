@@ -104,6 +104,10 @@ function M.string_remove_ansi(s)
     return (s:gsub("%[%d*;?%d*m", ""))
 end
 
+function M.print_table(tbl)
+    vim.print(vim.inspect(tbl))
+end
+
 function M.string_unescape_xml(s)
     local xml_escapes = {
         ["&quot;"] = '"',
@@ -113,12 +117,11 @@ function M.string_unescape_xml(s)
         ["&gt;"] = ">",
     }
 
-    -- Function to replace the XML escape sequences with their corresponding characters
-    local function replace_escape_sequence(sequence)
-        return xml_escapes[sequence] or sequence
+    for escape_sequence, char in pairs(xml_escapes) do
+        s = string.gsub(s, escape_sequence, char)
     end
 
-    return (s:gsub("(&quot;|&apos;|&amp;|&lt;|&gt;)", replace_escape_sequence))
+    return s
 end
 
 local function parse_build_target_info(text)

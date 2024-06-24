@@ -2,7 +2,7 @@
 import org.scalatest.funsuite.AnyFunSuite
 
 class FunSuiteSpec extends AnyFunSuite {
-  test("Hello, ScalaTest!") {
+  test("Hello, & ScalaTest!") {
     assert(1 == 1)
   }
   test("failing test") {

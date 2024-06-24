@@ -161,23 +161,23 @@ function M.build_command(runner, project, tree, name, extra_args)
     return command
 end
 
----Get test results from the test output.
----@param test_results table<string, string>
----@param position_id string
----@return string|nil
-function M.match_func(test_results, position_id)
-    local res = nil
-
-    for test_id, result in pairs(test_results) do
-        -- TODO: test_id is prefixed with suite name,
-        -- we should parse results smarter
-        if vim.endswith(position_id, test_id) then
-            res = result
-            break
-        end
-    end
-    return res
-end
+-- ---Get test results from the test output.
+-- ---@param test_results table<string, string>
+-- ---@param position_id string
+-- ---@return string|nil
+-- function M.match_func(test_results, position_id)
+--     local res = nil
+--
+--     for test_id, result in pairs(test_results) do
+--         -- TODO: test_id is prefixed with suite name,
+--         -- we should parse results smarter
+--         if vim.endswith(position_id, test_id) then
+--             res = result
+--             break
+--         end
+--     end
+--     return res
+-- end
 
 ---@return neotest-scala.Framework
 return M

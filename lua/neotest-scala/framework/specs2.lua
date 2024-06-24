@@ -160,19 +160,22 @@ function M.build_command(runner, project, tree, name, extra_args)
 end
 
 -- Get test results from the test output.
----@param test_results table<string, string>
----@param position_id string
+---@param junit_test table<string, string>
+---@param position neotest.Position
 ---@return string|nil
-function M.match_func(test_results, position_id)
-    local res = nil
-    for test_id, result in pairs(test_results) do
-        if position_id:match(test_id) then
-            res = result
-            break
-        end
-    end
+function M.match_func(junit_test, position)
+    vim.print(junit_test.name .. " matches " .. position.id)
 
-    return res
+    -- local res = nil
+    --
+    -- for test_id, result in pairs(test_results) do
+    --     if position_id:match(test_id) then
+    --         res = result
+    --         break
+    --     end
+    -- end
+
+    return false
 end
 
 ---@return neotest-scala.Framework

@@ -258,32 +258,32 @@ function adapter.build_spec(args)
     }
 end
 
----Extract results from the test output.
----@param tree neotest.Tree
----@param test_results table<string, string>
----@param match_func nil|fun(test_results: table<string, string>, position_id :string):string|nil
----@return table<string, neotest.Result>
-local function get_results(tree, test_results, match_func)
-    local no_results = vim.tbl_isempty(test_results)
-    local results = {}
-    for _, node in tree:iter_nodes() do
-        local position = node:data()
-        if no_results then
-            results[position.id] = { status = TEST_FAILED }
-        else
-            local test_result
-            if match_func then
-                test_result = match_func(test_results, position.id)
-            else
-                test_result = test_results[position.id]
-            end
-            if test_result then
-                results[position.id] = test_result
-            end
-        end
-    end
-    return results
-end
+-- ---Extract results from the test output.
+-- ---@param tree neotest.Tree
+-- ---@param test_results table<string, string>
+-- ---@param match_func nil|fun(test_results: table<string, string>, position_id :string):string|nil
+-- ---@return table<string, neotest.Result>
+-- local function get_results(tree, test_results, match_func)
+--     local no_results = vim.tbl_isempty(test_results)
+--     local results = {}
+--     for _, node in tree:iter_nodes() do
+--         local position = node:data()
+--         if no_results then
+--             results[position.id] = { status = TEST_FAILED }
+--         else
+--             local test_result
+--             if match_func then
+--                 test_result = match_func(test_results, position.id)
+--             else
+--                 test_result = test_results[position.id]
+--             end
+--             if test_result then
+--                 results[position.id] = test_result
+--             end
+--         end
+--     end
+--     return results
+-- end
 
 --query
 local junit_query = ts.query.parse(
@@ -327,6 +327,12 @@ function adapter.results(spec, result, tree)
         return {}
     end
 
+    local framework = fw.get_framework_class(spec.env.framework)
+    if not framework then
+        vim.print("[neotest-scala] test framework " .. spec.env.framework .. " is not supported")
+        return {}
+    end
+
     local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
     local report_prefix = project_dir .. "target/test-reports/"
 
@@ -334,7 +340,6 @@ function adapter.results(spec, result, tree)
     for _, node in tree:iter_nodes() do
         local data = node:data()
         local path = data.path
-        vim.print(vim.inspect(data))
 
         if not nodes_group[path] then
             nodes_group[path] = { nodes = {} }
@@ -378,63 +383,74 @@ function adapter.results(spec, result, tree)
 
             local test = {}
             if test_name_node then
-                test.name = ts.get_node_text(test_name_node, report_tree:source())
+                test.name = utils.string_unescape_xml(
+                    utils.string_remove_dquotes(ts.get_node_text(test_name_node, report_tree:source()))
+                )
             end
             if error_message_node then
-                test.error_message = ts.get_node_text(error_message_node, report_tree:source())
+                test.error_message = utils.string_unescape_xml(
+                    utils.string_remove_ansi(
+                        utils.string_remove_dquotes(ts.get_node_text(error_message_node, report_tree:source()))
+                    )
+                )
             end
             if error_type_node then
-                test.error_type = ts.get_node_text(error_type_node, report_tree:source())
+                test.error_type = utils.string_remove_dquotes(ts.get_node_text(error_type_node, report_tree:source()))
             end
             if error_stacktrace_node then
-                test.error_stacktrace =
-                    utils.strip_ansi_chars(ts.get_node_text(error_stacktrace_node, report_tree:source()))
+                test.error_stacktrace = utils.string_unescape_xml(
+                    utils.string_remove_ansi(
+                        utils.string_despace(ts.get_node_text(error_stacktrace_node, report_tree:source()))
+                    )
+                )
             end
+
+            utils.print_table(test)
 
             table.insert(junit_tests, test)
         end
 
+        local function collect_result(junit_test, node)
+            local test_result = {
+                test_id = node.id,
+            }
+
+            local message = junit_test.error_message or junit_test.error_stacktrace
+            if message then
+                test_result.errors = {
+                    {
+                        message = message,
+                    },
+                }
+                test_result.status = TEST_FAILED
+            else
+                test_result.status = TEST_PASSED
+            end
+
+            test_results[node.id] = test_result
+        end
+
         for _, node in ipairs(node_group.nodes) do
             for _, junit_test in ipairs(junit_tests) do
-                -- TODO: should do as accurate match as possible
-                -- JUnit adds the ` - ` to contact the test with namespace
-                -- Neotest adds the `.` to concat the test with namespace
-                local junit_test_id = (
-                    node_group.test_suite_name
-                    .. "."
-                    .. utils.string_remove_dquotes(junit_test.name)
-                ):gsub("-", "."):gsub(" ", "")
-                local test_id = node.id:gsub("-", "."):gsub(" ", "")
+                if framework.match_func and framework.match_func(junit_test, node) then
+                    collect_result(junit_test, node)
+                else
+                    local junit_test_id = (node_group.test_suite_name .. "." .. junit_test.name)
+                        :gsub("-", ".")
+                        :gsub(" ", "")
+
+                    local test_id = node.id:gsub("-", "."):gsub(" ", "")
+
+                    if junit_test_id == test_id then
+                        collect_result(junit_test, node)
+                    end
+                end
 
                 -- vim.print(junit_test_id)
                 -- vim.print(test_id)
-
-                if junit_test_id == test_id then
-                    local test_result = {
-                        test_id = node.id,
-                    }
-
-                    local message = junit_test.error_message or junit_test.error_stacktrace
-                    if message then
-                        test_result.errors = {
-                            {
-                                message = utils.string_unescape_xml(
-                                    utils.string_remove_ansi(utils.string_trim(utils.string_remove_dquotes(message)))
-                                ),
-                            },
-                        }
-                        test_result.status = TEST_FAILED
-                    else
-                        test_result.status = TEST_PASSED
-                    end
-
-                    test_results[node.id] = test_result
-                end
             end
         end
     end
-
-    -- local framework = fw.get_framework_class(spec.env.framework)
 
     -- local success, lines = pcall(lib.files.read_lines, result.output)
     -- if not success or not framework then
@@ -445,7 +461,8 @@ function adapter.results(spec, result, tree)
     --
     -- return get_results(tree, results, framework.match_func)
 
-    vim.print(vim.inspect(test_results))
+    -- vim.print(vim.inspect(test_results))
+
     return test_results
 end
 
