@@ -58,45 +58,14 @@ local function build_test_path(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param runner string
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(runner, project, tree, name, extra_args)
+function M.build_command(project, tree, name, extra_args)
     local test_path = build_test_path(tree, name)
-    return utils.build_command_with_test_path(project, runner, test_path, extra_args)
-end
-
----Get test ID from the test line output.
----@param output string
----@return string
-local function get_test_id(output)
-    local words = vim.split(output, " ", { trimempty = true })
-    -- Strip the test success indicator prefix and time taken in ms suffix.
-    table.remove(words, 1)
-    table.remove(words)
-
-    return table.concat(words, " ")
-end
-
--- Get test results from the test output.
----@param output_lines string[]
----@return table<string, string>
-function M.get_test_results(output_lines)
-    local test_results = {}
-    for _, line in ipairs(output_lines) do
-        line = utils.strip_ansi_chars(line)
-        if vim.startswith(line, "+") then
-            local test_id = get_test_id(line)
-            test_results[test_id] = { status = TEST_PASSED }
-        elseif vim.startswith(line, "X") then
-            local test_id = get_test_id(line)
-            test_results[test_id] = { status = TEST_FAILED }
-        end
-    end
-    return test_results
+    return utils.build_command_with_test_path(project, test_path, extra_args)
 end
 
 ---@return neotest-scala.Framework

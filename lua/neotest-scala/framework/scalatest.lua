@@ -43,26 +43,15 @@ local function build_test_namespace(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param runner string
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(runner, project, tree, name, extra_args)
+function M.build_command(project, tree, name, extra_args)
     local test_namespace = build_test_namespace(tree, name)
 
-    if runner == "bloop" then
-        local full_test_path
-        if not test_namespace then
-            full_test_path = {}
-        elseif tree:data().type ~= "test" then
-            full_test_path = { "-o", test_namespace }
-        else
-            full_test_path = { "-o", test_namespace, "--", "-z", name }
-        end
-        return vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
-    elseif not test_namespace then
+    if not test_namespace then
         return vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
     end
 
@@ -73,60 +62,14 @@ function M.build_command(runner, project, tree, name, extra_args)
     return vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
 end
 
----Get test ID from the test line output.
----@param output string
----@return string
-local function get_test_name(output, suffix)
-    return output:match("^- (.*)" .. suffix) or nil
-end
-
----Get test namespace from the test line output.
----@param output string
----@return string|nil
-local function get_test_namespace(output)
-    return output:match("^([%w%.]+):") or nil
-end
-
 -- Get test results from the test output.
----@param output_lines string[]
----@return table<string, string>
-function M.get_test_results(output_lines)
-    local test_results = {}
-    local test_namespace = nil
-    for _, line in ipairs(output_lines) do
-        line = vim.trim(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line)))
-        local current_namespace = get_test_namespace(line)
-        if current_namespace and (not test_namespace or test_namespace ~= current_namespace) then
-            test_namespace = current_namespace
-        end
-        if test_namespace and vim.startswith(line, "-") and vim.endswith(line, " *** FAILED ***") then
-            local test_name = get_test_name(line, " *** FAILED ***")
-            if test_name then
-                local test_id = test_namespace .. "." .. vim.trim(test_name)
-                test_results[test_id] = { status = TEST_FAILED }
-            end
-        elseif test_namespace and vim.startswith(line, "-") then
-            local test_name = get_test_name(line, "")
-            if test_name then
-                local test_id = test_namespace .. "." .. vim.trim(test_name)
-                test_results[test_id] = { status = TEST_PASSED }
-            end
-        end
-    end
-    return test_results
-end
-
--- Get test results from the test output.
----@param test_results table<string, string>
----@param position_id string
+---@param junit_test table<string, string>
+---@param position neotest.Position
 ---@return string|nil
-function M.match_func(test_results, position_id)
-    for test_id, result in pairs(test_results) do
-        if position_id:match(test_id) then
-            return result
-        end
-    end
-    return nil
+function M.match_test(junit_test, position)
+    local junit_test_id = junit_test.namespace .. "." .. junit_test.name:gsub(" ", ".")
+    local test_id = position.id:gsub(" ", ".")
+    return junit_test_id == test_id
 end
 
 ---@return neotest-scala.Framework
