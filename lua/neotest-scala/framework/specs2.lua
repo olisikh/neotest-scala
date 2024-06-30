@@ -154,7 +154,7 @@ function M.build_command(runner, project, tree, name, extra_args)
         command = vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
     end
 
-    vim.print("Running test command: " .. vim.inspect(command))
+    vim.print("[neotest-scala] Running test command: " .. vim.inspect(command))
 
     return command
 end

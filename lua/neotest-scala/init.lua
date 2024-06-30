@@ -2,6 +2,7 @@ local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local junit = require("neotest-scala.junit")
 local ts = vim.treesitter
 
 ---@type neotest.Adapter
@@ -317,165 +318,129 @@ local junit_query = ts.query.parse(
 ]]
 )
 
+local function collect_result(framework, junit_test, position)
+    local test_result = nil
+
+    if framework.build_test_result then
+        test_result = framework.build_test_result(junit_test, position)
+    else
+        test_result = {
+            test_id = position.id,
+        }
+        local message = junit_test.error_message or junit_test.error_stacktrace
+        if message then
+            local error = {
+                message = message,
+            }
+
+            test_result.errors = { error }
+            test_result.status = TEST_FAILED
+        else
+            test_result.status = TEST_PASSED
+        end
+    end
+
+    test_result.test_id = position.id
+
+    return test_result
+end
+
+local function build_namespace(ns_node, report_prefix, node)
+    local data = ns_node:data()
+    local path = data.path
+    local id = data.id
+    local package_name = utils.get_package_name(path)
+    local file_name = utils.get_file_name(path)
+
+    local namespace = {
+        path = path,
+        package_name = package_name,
+        namespace_name = id,
+        file_name = file_name,
+        report_file_name = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        tests = {},
+    }
+
+    for _, n in node:iter_nodes() do
+        table.insert(namespace["tests"], n:data())
+    end
+
+    return namespace
+end
+
 ---@async
 ---@param spec neotest.RunSpec
 ---@param result neotest.StrategyResult
----@param tree neotest.Tree
+---@param node neotest.Tree
 ---@return table<string, neotest.Result>
-function adapter.results(spec, result, tree)
+function adapter.results(spec, result, node)
+    if result.code ~= 0 then
+        vim.print("[neotest-scala] There are failed tests detected, reporting stage kicks in...")
+    end
+
     if not spec.env or not spec.env.framework or not spec.env.build_target_info then
         return {}
     end
 
     local framework = fw.get_framework_class(spec.env.framework)
     if not framework then
-        vim.print("[neotest-scala] test framework " .. spec.env.framework .. " is not supported")
+        vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
         return {}
     end
 
     local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
     local report_prefix = project_dir .. "target/test-reports/"
 
-    local function build_namespace(ns_node)
-        local position = ns_node:data()
-
-        local path = position.path
-        local package_name = utils.get_package_name(path)
-        local file_name = utils.get_file_name(path)
-
-        local namespace = {
-            path = path,
-            package_name = package_name,
-            namespace_name = position.id,
-            file_name = file_name,
-            report_file_name = report_prefix .. "TEST-" .. package_name .. position.id .. ".xml",
-            tests = {},
-        }
-
-        for _, node in tree:iter_nodes() do
-            table.insert(namespace["tests"], node:data())
-        end
-
-        return namespace
-    end
-
-    local tree_data = tree:data()
+    local data = node:data()
     local namespaces = {}
 
-    if tree_data.type == "file" then
-        local children = tree:children() -- file children are namespaces, right? is it guaranteed? well...
-        for _, ns_node in ipairs(children) do
-            table.insert(namespaces, build_namespace(ns_node))
+    if data.type == "file" then
+        for _, ns_node in ipairs(node:children()) do
+            table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
         end
-    elseif tree_data.type == "namespace" then
-        table.insert(namespaces, build_namespace(tree))
-    elseif tree_data.type == "test" then
-        local ns_node = utils.find_namespace(tree)
+    elseif data.type == "namespace" then
+        table.insert(namespaces, build_namespace(node, report_prefix, node))
+    elseif data.type == "test" then
+        local ns_node = utils.find_namespace(node)
+
         if ns_node then
-            table.insert(namespaces, build_namespace(ns_node))
+            table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
         end
+    else
+        vim.print("[neotest-scala] Neotest run type '" .. data.type .. "' is not supported")
+        return {}
     end
 
-    utils.inspect(namespaces)
-
-    -- 1. Group tests under namespaces
-    local junit_tests = {}
     local test_results = {}
 
-    -- 2. Per each namespace find a test report and aggregate the junit test results
     for _, namespace in pairs(namespaces) do
-        local success, junit_xml = pcall(lib.files.read, namespace.report_file_name)
-        if not success then
-            return {}
-        end
+        local junit_results = junit.collect_results(namespace)
 
-        local report_tree = ts.get_string_parser(junit_xml, "xml")
-        local parsed = report_tree:parse()[1]
-
-        local query_results = junit_query:iter_matches(parsed:root(), report_tree:source())
-
-        for _, matches, _ in query_results do
-            local test_name_node = matches[3]
-            local error_message_node = matches[6]
-            local error_type_node = matches[8]
-            local error_stacktrace_node = matches[9]
-
-            local test = {}
-            if test_name_node then
-                test.name = utils.string_unescape_xml(
-                    utils.string_remove_dquotes(ts.get_node_text(test_name_node, report_tree:source()))
-                )
-            end
-            if error_message_node then
-                test.error_message = utils.string_unescape_xml(
-                    utils.string_remove_ansi(
-                        utils.string_remove_dquotes(ts.get_node_text(error_message_node, report_tree:source()))
-                    )
-                )
-            end
-            if error_type_node then
-                test.error_type = utils.string_remove_dquotes(ts.get_node_text(error_type_node, report_tree:source()))
-            end
-            if error_stacktrace_node then
-                test.error_stacktrace = utils.string_unescape_xml(
-                    utils.string_remove_ansi(
-                        utils.string_remove_dquotes(ts.get_node_text(error_stacktrace_node, report_tree:source()))
-                    )
-                )
-            end
-
-            test.file_name = namespace.file_name
-
-            table.insert(junit_tests, test)
-        end
-
-        local function collect_result(junit_test, position)
+        for _, test in ipairs(namespace.tests) do
             local test_result = nil
 
-            if framework.build_test_result then
-                test_result = framework.build_test_result(junit_test, position)
-            else
-                test_result = {
-                    test_id = position.id,
-                }
-                local message = junit_test.error_message or junit_test.error_stacktrace
-                if message then
-                    local error = {
-                        message = message,
-                    }
+            for _, junit_result in ipairs(junit_results) do
+                if junit_result.namespace_name == namespace.namespace_name then
+                    if framework.match_test and framework.match_test(junit_result, test) then
+                        test_result = collect_result(framework, junit_result, test)
+                    else
+                        local junit_test_id = (
+                            namespace.package_name
+                            .. namespace.namespace_name
+                            .. "."
+                            .. junit_result.name
+                        ):gsub("-", "."):gsub(" ", "")
 
-                    test_result.errors = { error }
-                    test_result.status = TEST_FAILED
-                else
-                    test_result.status = TEST_PASSED
-                end
-            end
+                        local test_id = test.id:gsub("-", "."):gsub(" ", "")
 
-            test_result.test_id = position.id
-
-            return test_result
-        end
-
-        for _, position in ipairs(namespace.tests) do
-            local test_result = nil
-
-            for _, junit_test in ipairs(junit_tests) do
-                if framework.match_test and framework.match_test(junit_test, position) then
-                    test_result = collect_result(junit_test, position)
-                else
-                    local junit_test_id = (namespace.package_name .. namespace.namespace_name .. "." .. junit_test.name)
-                        :gsub("-", ".")
-                        :gsub(" ", "")
-
-                    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-
-                    if junit_test_id == test_id then
-                        test_result = collect_result(junit_test, position)
+                        -- NOTE: Must make sure that we can normalize the names to make 100% sure
+                        -- we are adding the result of the test in question, that's why match_test function exists,
+                        -- some test frameworks yield specific test names into junit.xml reports
+                        if junit_test_id == test_id then
+                            test_result = collect_result(framework, junit_result, test)
+                        end
                     end
                 end
-
-                -- vim.print(junit_test_id)
-                -- vim.print(test_id)
 
                 if test_result then
                     -- test found in junit_report, stop searching
@@ -484,15 +449,17 @@ function adapter.results(spec, result, tree)
             end
 
             if test_result then
-                test_results[position.id] = test_result
+                test_results[test.id] = test_result
             else
-                test_results[position.id] = {
+                test_results[test.id] = {
                     status = TEST_PASSED,
                 }
             end
         end
     end
 
+    -- TODO: What if there's no junit.xml? Should we fallback to trying parse the output? I think - yes
+    --
     -- local success, lines = pcall(lib.files.read_lines, result.output)
     -- if not success or not framework then
     --     return {}
@@ -501,8 +468,6 @@ function adapter.results(spec, result, tree)
     -- local results = framework.get_test_results(lines)
     --
     -- return get_results(tree, results, framework.match_func)
-
-    -- vim.print(vim.inspect(test_results))
 
     return test_results
 end
