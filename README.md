@@ -94,7 +94,7 @@ require("neotest").setup({
         local my_args = {}
 
         if opts.runner == "sbt" then
-          -- example: don't add ANSI colors in SBT
+          -- for example: don't add ANSI colors in SBT
           table.insert(my_args,  "--no-colors")
         elseif opts.runner == "bloop" then
           -- example: don't add ANSI colors if using bloop, bloop expects '--no-color' argument
@@ -106,7 +106,7 @@ require("neotest").setup({
         end
 
         if opts.framework == "specs2" then
-          -- framework value can be 'munit', 'utest', 'scalatest', 'specs2'
+          -- framework value can be 'munit', 'utest', 'scalatest', 'specs2', 'zio-test'
         end
 
         if opts.project == "my-secret-project" then

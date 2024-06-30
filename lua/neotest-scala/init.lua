@@ -49,9 +49,7 @@ function adapter.is_test_file(file_path)
         return false
     end
 
-    -- TODO: Can we use utils.get_file_name here?
-    local elems = vim.split(file_path, Path.path.sep)
-    local file_name = string.lower(elems[#elems])
+    local file_name = string.lower(utils.get_file_name(file_path))
     local patterns = { "test", "spec", "suite" }
     for _, pattern in ipairs(patterns) do
         if string.find(file_name, pattern) then

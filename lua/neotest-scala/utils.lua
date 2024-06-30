@@ -1,4 +1,5 @@
 local lib = require("neotest.lib")
+local Path = require("plenary.path")
 
 local M = {}
 
@@ -43,7 +44,7 @@ function M.get_package_name(path)
 end
 
 function M.get_file_name(path)
-    local parts = vim.split(path, "/")
+    local parts = vim.split(path, Path.path.sep)
     return parts[#parts]
 end
 
@@ -68,27 +69,6 @@ function M.build_command_with_test_path(project, runner, test_path, extra_args)
     end
 
     return vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly -- " .. '"' .. test_path .. '"' })
-end
-
---- Strip ANSI characters from the string, leaving the rest of the string intact.
----@param s string
----@return string
-function M.strip_ansi_chars(s)
-    local v = s:gsub("[\27\155][][()#;?%d]*[A-PRZcf-ntqry=><~]", "")
-    return v
-end
-
---- Strip sbt info logging prefix from string.
----@param s string
----@return string
-function M.strip_sbt_log_prefix(s)
-    local v = s:gsub("^%[info%] ", ""):gsub("^%[error%] ", ""):gsub("^%[debug%]", ""):gsub("^%[warn%] ", "")
-    return v
-end
-
-function M.strip_bloop_error_prefix(s)
-    local v = s:gsub("^%[E%] ", "")
-    return v
 end
 
 ---Returns Metals LSP client if Metals is active on current buffer
@@ -145,6 +125,7 @@ function M.string_unescape_xml(s)
     return s
 end
 
+---NOTE: If the format in which metals returns decoded file output changes - this function might start failing
 local function parse_build_target_info(text)
     local result = {}
     local curr_section = nil
@@ -167,12 +148,12 @@ local function parse_build_target_info(text)
 end
 
 ---Get project report, contains information about the project, it's classpath in particular
+---@param metals vim.lsp.Client metals client
 ---@param path string project path (root folder)
 ---@param project string project name
 ---@param timeout integer? timeout for the request
 ---@return table | nil report about the project
-local function get_build_target_info(path, project, timeout)
-    local metals = M.find_metals()
+local function fetch_build_target_info(metals, path, project, timeout)
     local build_target_info = nil
 
     if metals then
@@ -218,7 +199,7 @@ function M.get_build_target_info(root_path, target_path, timeout)
                 local target_src_path = target_path:gsub("%*$", "")
 
                 for _, name in ipairs(response.result) do
-                    local build_target_info = get_build_target_info(root_path, name, timeout)
+                    local build_target_info = fetch_build_target_info(metals, root_path, name, timeout)
                     if build_target_info and build_target_info["Sources"] then
                         for _, src_path in ipairs(build_target_info["Sources"]) do
                             -- remove the * at the end of the source path to compare with target file path
