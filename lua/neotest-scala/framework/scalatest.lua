@@ -43,26 +43,15 @@ local function build_test_namespace(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param runner string
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(runner, project, tree, name, extra_args)
+function M.build_command(project, tree, name, extra_args)
     local test_namespace = build_test_namespace(tree, name)
 
-    if runner == "bloop" then
-        local full_test_path
-        if not test_namespace then
-            full_test_path = {}
-        elseif tree:data().type ~= "test" then
-            full_test_path = { "-o", test_namespace }
-        else
-            full_test_path = { "-o", test_namespace, "--", "-z", name }
-        end
-        return vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
-    elseif not test_namespace then
+    if not test_namespace then
         return vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
     end
 

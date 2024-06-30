@@ -49,21 +49,10 @@ function M.get_file_name(path)
 end
 
 ---@param project string
----@param runner string
 ---@param test_path string|nil
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command_with_test_path(project, runner, test_path, extra_args)
-    if runner == "bloop" then
-        local full_test_path
-        if not test_path then
-            full_test_path = {}
-        else
-            full_test_path = { "--", test_path }
-        end
-        return vim.tbl_flatten({ "bloop", "test", extra_args, project, full_test_path })
-    end
-
+function M.build_command_with_test_path(project, test_path, extra_args)
     if not test_path then
         return vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
     end
@@ -235,8 +224,8 @@ end
 function M.get_framework(build_target_info)
     local framework = nil
 
-    if build_target_info and build_target_info["Scala Classpath"] then
-        local classpath = build_target_info["Scala Classpath"]
+    if build_target_info then
+        local classpath = build_target_info["Scala Classpath"] or build_target_info["Classpath"]
 
         for _, jar in ipairs(classpath) do
             framework = jar:match("(specs2)-core_.*-.*%.jar")

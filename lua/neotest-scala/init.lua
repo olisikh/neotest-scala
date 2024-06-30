@@ -9,33 +9,6 @@ local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
-local function get_runner(build_target_info, path, project_name)
-    local vim_test_runner = vim.g["test#scala#runner"]
-
-    local runner = "sbt"
-
-    if vim_test_runner == "blooptest" then
-        runner = "bloop"
-    elseif vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
-        runner = vim_test_runner
-    else
-        if build_target_info and build_target_info["Classes Directory"] then
-            local classpath = build_target_info["Classes Directory"]
-
-            for _, jar in ipairs(classpath) do
-                if
-                    vim.startswith(jar, "file://" .. path .. "/.bloop/" .. project_name .. "/bloop-bsp-clients-classes")
-                then
-                    runner = "bloop"
-                    break
-                end
-            end
-        end
-    end
-
-    return runner
-end
-
 local function get_args(_, _, _, _)
     return {}
 end
@@ -221,11 +194,7 @@ function adapter.build_spec(args)
         return {}
     end
 
-    local runner = get_runner(build_target_info, root_path, project_name)
-    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: Runner must be either 'sbt' or 'bloop'")
-
     local framework = utils.get_framework(build_target_info)
-
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
         vim.print("[neotest-scala]: Failed to detect testing library used in the project")
@@ -237,15 +206,16 @@ function adapter.build_spec(args)
             path = root_path,
             build_target_info = build_target_info,
             project_name = project_name,
-            runner = runner,
             framework = framework,
         }),
         args.extra_args or {}
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(runner, project_name, args.tree, test_name, extra_args)
+    local command = framework_class.build_command(project_name, args.tree, test_name, extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project_name)
+
+    vim.print("[neotest-scala] Running test command: " .. vim.inspect(command))
 
     return {
         command = command,
@@ -255,7 +225,6 @@ function adapter.build_spec(args)
             build_target_info = build_target_info,
             project_name = project_name,
             framework = framework,
-            runner = runner,
         },
     }
 end
@@ -393,13 +362,6 @@ setmetatable(adapter, {
         elseif opts.args then
             get_args = function()
                 return opts.args
-            end
-        end
-        if is_callable(opts.runner) then
-            get_runner = opts.runner
-        elseif opts.runner then
-            get_runner = function()
-                return opts.runner
             end
         end
         return adapter

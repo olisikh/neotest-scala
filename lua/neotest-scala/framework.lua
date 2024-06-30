@@ -4,7 +4,7 @@ TEST_PASSED = "passed" -- the test passed
 TEST_FAILED = "failed" -- the test failed
 
 ---@class neotest-scala.Framework
----@field build_command fun(runner: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
+---@field build_command fun(project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
 ---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
 

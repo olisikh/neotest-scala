@@ -58,15 +58,14 @@ local function build_test_path(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param runner string
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(runner, project, tree, name, extra_args)
+function M.build_command(project, tree, name, extra_args)
     local test_path = build_test_path(tree, name)
-    return utils.build_command_with_test_path(project, runner, test_path, extra_args)
+    return utils.build_command_with_test_path(project, test_path, extra_args)
 end
 
 ---@return neotest-scala.Framework
