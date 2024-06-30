@@ -4,7 +4,7 @@ import org.specs2.mutable.Specification
 
 class MutableSpecificationSpec extends Specification {
 
-  "MutableSpecificationSpec" should {
+  "HelloWereld" >> {
     "Hello, Specs2!" in {
       1 must equalTo(1)
     }

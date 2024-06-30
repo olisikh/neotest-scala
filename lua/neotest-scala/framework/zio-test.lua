@@ -3,80 +3,6 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
----Get test ID from the test line output.
----@param output string
----@return string
-local function strip_prefix_symbol(output)
-    local words = vim.split(output, " ", { trimempty = true })
-    -- Strip the test success/failure indicator
-    table.remove(words, 1)
-    return table.concat(words, " ")
-end
-
-local function append_test_result(results, test_result, test_error)
-    if test_result then
-        if test_error then
-            test_result.errors = { test_error }
-        end
-
-        results[test_result.test_id] = {
-            status = test_result.status,
-            errors = test_result.errors,
-        }
-    end
-end
-
--- Get test results from the test output.
----@param output_lines string[]
----@return table<string, string>
-function M.get_test_results(output_lines)
-    local test_results = {}
-    local test_result = nil
-    local test_error = nil
-
-    for _, line in ipairs(output_lines) do
-        line = vim.trim(utils.strip_bloop_error_prefix(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line))))
-
-        -- look for the succeeded tests they start with + prefix
-        if vim.startswith(line, "+") then
-            append_test_result(test_results, test_result, test_error)
-
-            test_result = {
-                test_id = strip_prefix_symbol(line),
-                status = TEST_PASSED,
-            }
-
-            --look for failed tests they start with x prefix
-        elseif vim.startswith(line, "-") then
-            append_test_result(test_results, test_result, test_error)
-
-            test_result = {
-                test_id = strip_prefix_symbol(line),
-                status = TEST_FAILED,
-            }
-
-            --look for test failures, and make diagnostic messages
-        elseif test_result and vim.startswith(line, "✗") then
-            local sanitized = strip_prefix_symbol(line)
-
-            if sanitized then
-                test_error = { message = sanitized }
-            end
-        elseif test_error and line:match("^at /.*%.scala:(%d+)$") then
-            local line_num = line:match("^at /.*%.scala:(%d+)$")
-            local ok, result = pcall(tonumber, line_num)
-            if ok then
-                test_error.line = result - 1
-            end
-        elseif line:match("%d+ tests passed. %d+ tests failed. %d+ tests ignored.") then
-            append_test_result(test_results, test_result, test_error)
-            break
-        end
-    end
-
-    return test_results
-end
-
 local function find_parent_file_node(tree)
     local parent = tree:parent()
     if parent ~= nil and parent:data().type ~= "file" then
@@ -161,34 +87,20 @@ function M.build_command(runner, project, tree, name, extra_args)
     return command
 end
 
--- ---Get test results from the test output.
--- ---@param test_results table<string, string>
--- ---@param position_id string
--- ---@return string|nil
--- function M.match_func(test_results, position_id)
---     local res = nil
---
---     for test_id, result in pairs(test_results) do
---         -- TODO: test_id is prefixed with suite name,
---         -- we should parse results smarter
---         if vim.endswith(position_id, test_id) then
---             res = result
---             break
---         end
---     end
---     return res
--- end
-
 function M.build_test_result(junit_test, position)
     local result = nil
     local error = {}
+
+    local file_name = utils.get_file_name(position.path)
 
     if junit_test.error_message then
         local msg = vim.split(junit_test.error_message, "\n")
         table.remove(msg, 1) -- it's just the name of the test, starts with - or x
 
         local last_line = table.remove(msg, #msg - 1) -- can be used to get a line number
-        local line_num = string.match(junit_test.error_message, junit_test.file_name .. ":(%d*)")
+        local line_num = string.match(vim.trim(last_line), "^at /.*/" .. file_name .. ":(%d+)$")
+            or string.match(junit_test.error_message, "%(" .. file_name .. ":(%d+)%)")
+
         if line_num then
             error.line = tonumber(line_num) - 1 -- minus 1 because Lua indexes are 1-based
         else
@@ -196,10 +108,9 @@ function M.build_test_result(junit_test, position)
             table.insert(msg, last_line)
         end
 
-        local formatted_msg = table.concat(msg, "\n")
-        error.message = formatted_msg
+        error.message = table.concat(msg, "\n")
     elseif junit_test.error_stacktrace then
-        local line_num = string.match(junit_test.error_stacktrace, junit_test.file_name .. ":(%d*)")
+        local line_num = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
         if line_num then
             error.line = tonumber(line_num) - 1
         end
@@ -209,13 +120,11 @@ function M.build_test_result(junit_test, position)
 
     if not vim.tbl_isempty(error) then
         result = {
-            test_id = position.id,
             status = TEST_FAILED,
             errors = { error },
         }
     else
         result = {
-            test_id = position.id,
             status = TEST_PASSED,
         }
     end

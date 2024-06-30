@@ -3,78 +3,6 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
----Get test ID from the test line output.
----@param output string
----@return string
-local function get_test_id(output)
-    local words = vim.split(output, " ", { trimempty = true })
-    -- Strip the test success/failure indicator
-    table.remove(words, 1)
-    return table.concat(words, " ")
-end
-
----Sanitizes the line with error message removing all that is not useful to show in the diagnostic
----@param line any
----@return unknown
-local function sanitize_error(line)
-    return line:match("^(.*)%s%(.*:%d+%)$")
-end
-
----Get line number where error test error was recorded
----@param line string
----@return number
-local function get_error_lnum(line)
-    local line_num = line:match("^.*:(%d+)%)$")
-    if line_num ~= nil then
-        local ok, value = pcall(tonumber, line_num)
-        if ok then
-            line_num = value - 1
-        end
-    end
-    return line_num
-end
-
--- Get test results from the test output.
----@param output_lines string[]
----@return table<string, string>
-function M.get_test_results(output_lines)
-    local test_results = {}
-    local test_id = nil
-
-    for _, line in ipairs(output_lines) do
-        line = vim.trim(utils.strip_bloop_error_prefix(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line))))
-
-        -- look for the succeeded tests they start with + prefix
-        if vim.startswith(line, "+") then
-            test_id = get_test_id(line)
-            test_results[test_id] = { status = TEST_PASSED }
-
-            --look for failed tests they start with x prefix
-        elseif vim.startswith(line, "x") then
-            test_id = get_test_id(line)
-            if test_id ~= nil then
-                test_results[test_id] = { status = TEST_FAILED }
-            end
-
-            --look for test failures, and make diagnostic messages
-        else
-            local sanitized = sanitize_error(line)
-            local error_lnum = get_error_lnum(line)
-
-            if sanitized and error_lnum then
-                test_results[test_id].errors = {
-                    {
-                        message = sanitized,
-                        line = error_lnum,
-                    },
-                }
-            end
-        end
-    end
-
-    return test_results
-end
-
 local function find_parent_file_node(tree)
     local parent = tree:parent()
     if parent ~= nil and parent:data().type ~= "file" then
@@ -164,18 +92,12 @@ end
 ---@param position neotest.Position
 ---@return string|nil
 function M.match_test(junit_test, position)
-    vim.print(junit_test.name .. " matches " .. position.id)
+    local junit_test_id = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
 
-    -- local res = nil
-    --
-    -- for test_id, result in pairs(test_results) do
-    --     if position_id:match(test_id) then
-    --         res = result
-    --         break
-    --     end
-    -- end
+    local test_id = position.id:gsub(" ", ".")
+    -- vim.print(junit_test_id .. " matches " .. test_id)
 
-    return false
+    return vim.startswith(test_id, junit_test.namespace) and vim.endswith(test_id, junit_test_id)
 end
 
 ---@return neotest-scala.Framework

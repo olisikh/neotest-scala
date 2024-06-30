@@ -44,12 +44,12 @@ object OtherTest extends ZIOSpecDefault {
       for {
         one <- ZIO.succeed(1)
         two <- ZIO.succeed(2)
-      } yield assertTrue(one + two == 2)
+      } yield assertTrue(one + two == 100)
     },
     test("more complex test") {
       for {
         value <- ZIO.none
-      } yield assert(value)(isSome(equalTo(3)))
+      } yield assert(value)(isSome(equalTo(5)))
     }
   )
 }

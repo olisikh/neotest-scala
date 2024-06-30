@@ -73,56 +73,14 @@ function M.build_command(runner, project, tree, name, extra_args)
     return vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
 end
 
----Get test ID from the test line output.
----@param output string
----@return string
-local function get_test_name(output, suffix)
-    return output:match("^- (.*)" .. suffix) or nil
-end
-
----Get test namespace from the test line output.
----@param output string
----@return string|nil
-local function get_test_namespace(output)
-    return output:match("^([%w%.]+):") or nil
-end
-
--- Get test results from the test output.
----@param output_lines string[]
----@return table<string, string>
-function M.get_test_results(output_lines)
-    local test_results = {}
-    local test_namespace = nil
-    for _, line in ipairs(output_lines) do
-        line = vim.trim(utils.strip_sbt_log_prefix(utils.strip_ansi_chars(line)))
-        local current_namespace = get_test_namespace(line)
-        if current_namespace and (not test_namespace or test_namespace ~= current_namespace) then
-            test_namespace = current_namespace
-        end
-        if test_namespace and vim.startswith(line, "-") and vim.endswith(line, " *** FAILED ***") then
-            local test_name = get_test_name(line, " *** FAILED ***")
-            if test_name then
-                local test_id = test_namespace .. "." .. vim.trim(test_name)
-                test_results[test_id] = { status = TEST_FAILED }
-            end
-        elseif test_namespace and vim.startswith(line, "-") then
-            local test_name = get_test_name(line, "")
-            if test_name then
-                local test_id = test_namespace .. "." .. vim.trim(test_name)
-                test_results[test_id] = { status = TEST_PASSED }
-            end
-        end
-    end
-    return test_results
-end
-
 -- Get test results from the test output.
 ---@param junit_test table<string, string>
 ---@param position neotest.Position
 ---@return string|nil
 function M.match_test(junit_test, position)
-    -- vim.print(junit_test.name .. " matches " .. position.id)
-    return vim.endswith(position.id, junit_test.name)
+    local junit_test_id = junit_test.namespace .. "." .. junit_test.name:gsub(" ", ".")
+    local test_id = position.id:gsub(" ", ".")
+    return junit_test_id == test_id
 end
 
 ---@return neotest-scala.Framework

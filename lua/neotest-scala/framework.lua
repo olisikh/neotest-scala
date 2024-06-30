@@ -5,7 +5,6 @@ TEST_FAILED = "failed" -- the test failed
 
 ---@class neotest-scala.Framework
 ---@field build_command fun(runner: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
----@field get_test_results fun(output_lines: string[]): table<string, string>
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
 ---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
 
@@ -13,16 +12,18 @@ TEST_FAILED = "failed" -- the test failed
 ---@param framework string
 ---@return neotest-scala.Framework|nil
 function M.get_framework_class(framework)
+    local prefix = "neotest-scala.framework."
+
     if framework == "utest" then
-        return require("neotest-scala.framework.utest")
+        return require(prefix .. "utest")
     elseif framework == "munit" then
-        return require("neotest-scala.framework.munit")
+        return require(prefix .. "munit")
     elseif framework == "scalatest" then
-        return require("neotest-scala.framework.scalatest")
+        return require(prefix .. "scalatest")
     elseif framework == "specs2" then
-        return require("neotest-scala.framework.specs2")
+        return require(prefix .. "specs2")
     elseif framework == "zio-test" then
-        return require("neotest-scala.framework.zio-test")
+        return require(prefix .. "zio-test")
     end
 end
 

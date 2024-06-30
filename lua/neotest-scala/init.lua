@@ -3,7 +3,6 @@ local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local junit = require("neotest-scala.junit")
-local ts = vim.treesitter
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -49,6 +48,8 @@ function adapter.is_test_file(file_path)
     if not vim.endswith(file_path, ".scala") then
         return false
     end
+
+    -- TODO: Can we use utils.get_file_name here?
     local elems = vim.split(file_path, Path.path.sep)
     local file_name = string.lower(elems[#elems])
     local patterns = { "test", "spec", "suite" }
@@ -96,6 +97,7 @@ local function build_position_id(position, parents)
 end
 
 ---@async
+---@param path string Path to the file with tests
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
     --query
@@ -255,68 +257,10 @@ function adapter.build_spec(args)
             build_target_info = build_target_info,
             project_name = project_name,
             framework = framework,
+            runner = runner,
         },
     }
 end
-
--- ---Extract results from the test output.
--- ---@param tree neotest.Tree
--- ---@param test_results table<string, string>
--- ---@param match_func nil|fun(test_results: table<string, string>, position_id :string):string|nil
--- ---@return table<string, neotest.Result>
--- local function get_results(tree, test_results, match_func)
---     local no_results = vim.tbl_isempty(test_results)
---     local results = {}
---     for _, node in tree:iter_nodes() do
---         local position = node:data()
---         if no_results then
---             results[position.id] = { status = TEST_FAILED }
---         else
---             local test_result
---             if match_func then
---                 test_result = match_func(test_results, position.id)
---             else
---                 test_result = test_results[position.id]
---             end
---             if test_result then
---                 results[position.id] = test_result
---             end
---         end
---     end
---     return results
--- end
-
---query
-local junit_query = ts.query.parse(
-    "xml",
-    [[
-(element 
-  (STag 
-    (Name) @_1 (#eq? @_1 "testcase")
-    (Attribute 
-      (Name) @_2 (#eq? @_2 "name")
-      (AttValue) @testcase.name
-    )
-  )
-  (content
-    (element
-      (STag 
-        (Name) @_4 (#eq? @_4 "failure")
-        (Attribute 
-          (Name) @_5 (#eq? @_5 "message")
-          (AttValue) @testcase.message
-        )
-        (Attribute
-          (Name) @_7 (#eq? @_7 "type")
-          (AttValue) @testcase.error_type
-        )
-      )
-      (content) @testcase.error_message
-    )? @testcase.content
-  ) @testcase
-)
-]]
-)
 
 local function collect_result(framework, junit_test, position)
     local test_result = nil
@@ -324,16 +268,11 @@ local function collect_result(framework, junit_test, position)
     if framework.build_test_result then
         test_result = framework.build_test_result(junit_test, position)
     else
-        test_result = {
-            test_id = position.id,
-        }
+        test_result = {}
+
         local message = junit_test.error_message or junit_test.error_stacktrace
         if message then
-            local error = {
-                message = message,
-            }
-
-            test_result.errors = { error }
+            test_result.errors = { { message = message } }
             test_result.status = TEST_FAILED
         else
             test_result.status = TEST_PASSED
@@ -350,22 +289,27 @@ local function build_namespace(ns_node, report_prefix, node)
     local path = data.path
     local id = data.id
     local package_name = utils.get_package_name(path)
-    local file_name = utils.get_file_name(path)
 
     local namespace = {
         path = path,
-        package_name = package_name,
-        namespace_name = id,
-        file_name = file_name,
-        report_file_name = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
-        tests = {},
+        namespace = id,
+        junit_report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        positions = {},
     }
 
     for _, n in node:iter_nodes() do
-        table.insert(namespace["tests"], n:data())
+        table.insert(namespace["positions"], n:data())
     end
 
     return namespace
+end
+
+local function match_test(namespace, junit_result, position)
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+
+    return junit_test_id == test_id
 end
 
 ---@async
@@ -373,15 +317,7 @@ end
 ---@param result neotest.StrategyResult
 ---@param node neotest.Tree
 ---@return table<string, neotest.Result>
-function adapter.results(spec, result, node)
-    if result.code ~= 0 then
-        vim.print("[neotest-scala] There are failed tests detected, reporting stage kicks in...")
-    end
-
-    if not spec.env or not spec.env.framework or not spec.env.build_target_info then
-        return {}
-    end
-
+function adapter.results(spec, _, node)
     local framework = fw.get_framework_class(spec.env.framework)
     if not framework then
         vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
@@ -391,83 +327,59 @@ function adapter.results(spec, result, node)
     local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
     local report_prefix = project_dir .. "target/test-reports/"
 
-    local data = node:data()
+    local ns_data = node:data()
     local namespaces = {}
 
-    if data.type == "file" then
+    if ns_data.type == "file" then
         for _, ns_node in ipairs(node:children()) do
             table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
         end
-    elseif data.type == "namespace" then
+    elseif ns_data.type == "namespace" then
         table.insert(namespaces, build_namespace(node, report_prefix, node))
-    elseif data.type == "test" then
+    elseif ns_data.type == "test" then
         local ns_node = utils.find_namespace(node)
 
         if ns_node then
             table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
         end
     else
-        vim.print("[neotest-scala] Neotest run type '" .. data.type .. "' is not supported")
+        vim.print("[neotest-scala] Neotest run type '" .. ns_data.type .. "' is not supported")
         return {}
     end
 
     local test_results = {}
 
-    for _, namespace in pairs(namespaces) do
-        local junit_results = junit.collect_results(namespace)
+    for _, ns in pairs(namespaces) do
+        local junit_results = junit.collect_results(ns)
 
-        for _, test in ipairs(namespace.tests) do
+        for _, position in ipairs(ns.positions) do
             local test_result = nil
 
             for _, junit_result in ipairs(junit_results) do
-                if junit_result.namespace_name == namespace.namespace_name then
-                    if framework.match_test and framework.match_test(junit_result, test) then
-                        test_result = collect_result(framework, junit_result, test)
-                    else
-                        local junit_test_id = (
-                            namespace.package_name
-                            .. namespace.namespace_name
-                            .. "."
-                            .. junit_result.name
-                        ):gsub("-", "."):gsub(" ", "")
-
-                        local test_id = test.id:gsub("-", "."):gsub(" ", "")
-
-                        -- NOTE: Must make sure that we can normalize the names to make 100% sure
-                        -- we are adding the result of the test in question, that's why match_test function exists,
-                        -- some test frameworks yield specific test names into junit.xml reports
-                        if junit_test_id == test_id then
-                            test_result = collect_result(framework, junit_result, test)
+                if junit_result.namespace == ns.namespace then
+                    if framework.match_test then
+                        if framework.match_test(junit_result, position) then
+                            test_result = collect_result(framework, junit_result, position)
                         end
+                    elseif match_test(ns, junit_result, position) then
+                        test_result = collect_result(framework, junit_result, position)
                     end
                 end
 
                 if test_result then
-                    -- test found in junit_report, stop searching
                     break
                 end
             end
 
             if test_result then
-                test_results[test.id] = test_result
+                test_results[position.id] = test_result
             else
-                test_results[test.id] = {
+                test_results[position.id] = {
                     status = TEST_PASSED,
                 }
             end
         end
     end
-
-    -- TODO: What if there's no junit.xml? Should we fallback to trying parse the output? I think - yes
-    --
-    -- local success, lines = pcall(lib.files.read_lines, result.output)
-    -- if not success or not framework then
-    --     return {}
-    -- end
-    --
-    -- local results = framework.get_test_results(lines)
-    --
-    -- return get_results(tree, results, framework.match_func)
 
     return test_results
 end
