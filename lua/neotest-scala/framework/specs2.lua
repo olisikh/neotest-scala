@@ -65,7 +65,7 @@ function M.build_command(project, tree, name, extra_args)
     else
         local test_path = ""
         if tree:data().type == "test" then
-            test_path = ' -- ex "' .. name .. '"'
+            test_path = ' -- -t "' .. name .. '"'
         end
 
         command = vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
