@@ -79,12 +79,13 @@ end
 ---@param position neotest.Position
 ---@return string|nil
 function M.match_test(junit_test, position)
-    local junit_test_id = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
-
+    local package_name = utils.get_package_name(position.path)
     local test_id = position.id:gsub(" ", ".")
-    -- vim.print(junit_test_id .. " matches " .. test_id)
 
-    return vim.startswith(test_id, junit_test.namespace) and vim.endswith(test_id, junit_test_id)
+    local test_prefix = package_name .. junit_test.namespace
+    local test_postfix = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
+
+    return vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix)
 end
 
 ---@return neotest-scala.Framework
