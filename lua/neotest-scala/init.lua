@@ -286,6 +286,10 @@ end
 ---@param node neotest.Tree
 ---@return table<string, neotest.Result>
 function adapter.results(spec, _, node)
+    if not spec.env then
+        return {}
+    end
+
     local framework = fw.get_framework_class(spec.env.framework)
     if not framework then
         vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
