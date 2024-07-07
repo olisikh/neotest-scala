@@ -21,7 +21,7 @@ Supports the following Scala testing libraries:
 - [specs2](https://etorreborre.github.io/specs2)
 - [zio-test](https://zio.dev/reference/test/https://zio.dev/reference/test)
 
-Runs tests with [bloop](https://scalacenter.github.io/bloop/) or [sbt](https://www.scala-sbt.org). \
+Runs tests with [sbt](https://www.scala-sbt.org). \
 Relies on [nvim-metals](https://github.com/scalameta/nvim-metals) to get project metadata information
 
 ![Hero image](./img/hero.png)
@@ -84,7 +84,7 @@ require("neotest").setup({
 })
 ```
 
-If you are using both Bloop an SBT in your projects, you may want to dynamically specify `args`:
+If you want to dynamically specify `args`:
 
 ```lua
 require("neotest").setup({
@@ -93,20 +93,12 @@ require("neotest").setup({
       args = function(opts)
         local my_args = {}
 
-        if opts.runner == "sbt" then
-          -- example: don't add ANSI colors in SBT
-          table.insert(my_args,  "--no-colors")
-        elseif opts.runner == "bloop" then
-          -- example: don't add ANSI colors if using bloop, bloop expects '--no-color' argument
-          table.insert(my_args, "--no-color")
-        end
-
         if opts.path == "/my/absolute/path" then
           -- path is the folder where build.sbt resides
         end
 
         if opts.framework == "specs2" then
-          -- framework value can be 'munit', 'utest', 'scalatest', 'specs2'
+          -- framework value can be 'munit', 'utest', 'scalatest', 'specs2', 'zio-test'
         end
 
         if opts.project == "my-secret-project" then

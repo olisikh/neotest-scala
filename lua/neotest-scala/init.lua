@@ -2,36 +2,12 @@ local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local junit = require("neotest-scala.junit")
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
-
-local function get_runner(project_info, path, project)
-    local vim_test_runner = vim.g["test#scala#runner"]
-
-    local runner = "sbt"
-
-    if vim_test_runner == "blooptest" then
-        runner = "bloop"
-    elseif vim_test_runner and lib.func_util.index({ "bloop", "sbt" }, vim_test_runner) then
-        runner = vim_test_runner
-    else
-        if project_info and project_info["Classes Directory"] then
-            local classpath = project_info["Classes Directory"]
-
-            for _, jar in ipairs(classpath) do
-                if vim.startswith(jar, "file://" .. path .. "/.bloop/" .. project .. "/bloop-bsp-clients-classes") then
-                    runner = "bloop"
-                    break
-                end
-            end
-        end
-    end
-
-    return runner
-end
 
 local function get_args(_, _, _, _)
     return {}
@@ -45,8 +21,8 @@ function adapter.is_test_file(file_path)
     if not vim.endswith(file_path, ".scala") then
         return false
     end
-    local elems = vim.split(file_path, Path.path.sep)
-    local file_name = string.lower(elems[#elems])
+
+    local file_name = string.lower(utils.get_file_name(file_path))
     local patterns = { "test", "spec", "suite" }
     for _, pattern in ipairs(patterns) do
         if string.find(file_name, pattern) then
@@ -92,10 +68,12 @@ local function build_position_id(position, parents)
 end
 
 ---@async
+---@param path string Path to the file with tests
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
     --query
     local query = [[
+      ;; zio-test
       (object_definition
         name: (identifier) @namespace.name
       ) @namespace.definition
@@ -115,7 +93,7 @@ function adapter.discover_positions(path)
       ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
       (infix_expression 
         left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init "in" "should" "can" ">>")
+        operator: (_) @spec_init (#any-of? @spec_init "-" "in" "should" "can" ">>")
         right: (_)
       ) @test.definition
     ]]
@@ -202,26 +180,22 @@ end
 ---@return neotest.RunSpec
 function adapter.build_spec(args)
     local position = args.tree:data()
-    local path = adapter.root(position.path)
-    assert(path, "[neotest-scala]: Can't resolve root project folder")
+    local root_path = adapter.root(position.path)
+    assert(root_path, "[neotest-scala]: Can't resolve root project folder")
 
-    local project_info = utils.resolve_project(path, position.path)
-    if not project_info then
+    local build_target_info = utils.get_build_target_info(root_path, position.path)
+    if not build_target_info then
         vim.print("[neotest-scala]: Can't resolve project, has Metals initialised? Please try again.")
         return {}
     end
 
-    local project_name = utils.get_project_name(project_info)
+    local project_name = utils.get_project_name(build_target_info)
     if not project_name then
         vim.print("[neotest-scala]: Can't resolve project name")
         return {}
     end
 
-    local runner = get_runner(project_info, path, project_name)
-    assert(lib.func_util.index({ "bloop", "sbt" }, runner), "[neotest-scala]: Runner must be either 'sbt' or 'bloop'")
-
-    local framework = utils.get_framework(project_info)
-
+    local framework = utils.get_framework(build_target_info)
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
         vim.print("[neotest-scala]: Failed to detect testing library used in the project")
@@ -230,75 +204,151 @@ function adapter.build_spec(args)
 
     local extra_args = vim.list_extend(
         get_args({
-            path = path,
-            project = project_name,
-            runner = runner,
+            path = root_path,
+            build_target_info = build_target_info,
+            project_name = project_name,
             framework = framework,
         }),
         args.extra_args or {}
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(runner, project_name, args.tree, test_name, extra_args)
+    local command = framework_class.build_command(project_name, args.tree, test_name, extra_args)
     local strategy = get_strategy_config(args.strategy, args.tree, project_name)
+
+    vim.print("[neotest-scala] Running test command: " .. vim.inspect(command))
 
     return {
         command = command,
         strategy = strategy,
         env = {
-            path = path,
-            project = project_name,
+            root_path = root_path,
+            build_target_info = build_target_info,
+            project_name = project_name,
             framework = framework,
         },
     }
 end
 
----Extract results from the test output.
----@param tree neotest.Tree
----@param test_results table<string, string>
----@param match_func nil|fun(test_results: table<string, string>, position_id :string):string|nil
----@return table<string, neotest.Result>
-local function get_results(tree, test_results, match_func)
-    local no_results = vim.tbl_isempty(test_results)
-    local results = {}
-    for _, node in tree:iter_nodes() do
-        local position = node:data()
-        if no_results then
-            results[position.id] = { status = TEST_FAILED }
+local function collect_result(framework, junit_test, position)
+    local test_result = nil
+
+    if framework.build_test_result then
+        test_result = framework.build_test_result(junit_test, position)
+    else
+        test_result = {}
+
+        local message = junit_test.error_message or junit_test.error_stacktrace
+        if message then
+            test_result.errors = { { message = message } }
+            test_result.status = TEST_FAILED
         else
-            local test_result
-            if match_func then
-                test_result = match_func(test_results, position.id)
-            else
-                test_result = test_results[position.id]
-            end
-            if test_result then
-                results[position.id] = test_result
-            end
+            test_result.status = TEST_PASSED
         end
     end
-    return results
+
+    test_result.test_id = position.id
+
+    return test_result
+end
+
+local function build_namespace(ns_node, report_prefix, node)
+    local data = ns_node:data()
+    local path = data.path
+    local id = data.id
+    local package_name = utils.get_package_name(path)
+
+    local namespace = {
+        path = path,
+        namespace = id,
+        junit_report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        positions = {},
+    }
+
+    for _, n in node:iter_nodes() do
+        table.insert(namespace["positions"], n:data())
+    end
+
+    return namespace
+end
+
+local function match_test(namespace, junit_result, position)
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+
+    return junit_test_id == test_id
 end
 
 ---@async
 ---@param spec neotest.RunSpec
 ---@param result neotest.StrategyResult
----@param tree neotest.Tree
+---@param node neotest.Tree
 ---@return table<string, neotest.Result>
-function adapter.results(spec, result, tree)
-    local success, lines = pcall(lib.files.read_lines, result.output)
-
-    if not spec.env or not spec.env.framework then
-        return {}
-    end
-
+function adapter.results(spec, _, node)
     local framework = fw.get_framework_class(spec.env.framework)
-    if not success or not framework then
+    if not framework then
+        vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
         return {}
     end
 
-    local test_results = framework.get_test_results(lines)
-    return get_results(tree, test_results, framework.match_func)
+    local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
+    local report_prefix = project_dir .. "target/test-reports/"
+
+    local ns_data = node:data()
+    local namespaces = {}
+
+    if ns_data.type == "file" then
+        for _, ns_node in ipairs(node:children()) do
+            table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
+        end
+    elseif ns_data.type == "namespace" then
+        table.insert(namespaces, build_namespace(node, report_prefix, node))
+    elseif ns_data.type == "test" then
+        local ns_node = utils.find_node(node, "namespace", false)
+        if ns_node then
+            table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
+        end
+    else
+        vim.print("[neotest-scala] Neotest run type '" .. ns_data.type .. "' is not supported")
+        return {}
+    end
+
+    local test_results = {}
+
+    for _, ns in pairs(namespaces) do
+        local junit_results = junit.collect_results(ns)
+
+        for _, position in ipairs(ns.positions) do
+            local test_result = nil
+
+            for _, junit_result in ipairs(junit_results) do
+                if junit_result.namespace == ns.namespace then
+                    if framework.match_test then
+                        if framework.match_test(junit_result, position) then
+                            test_result = collect_result(framework, junit_result, position)
+                        end
+                    elseif match_test(ns, junit_result, position) then
+                        test_result = collect_result(framework, junit_result, position)
+                    end
+                end
+
+                if test_result then
+                    break
+                end
+            end
+
+            if test_result then
+                test_results[position.id] = test_result
+            else
+                test_results[position.id] = {
+                    status = TEST_PASSED,
+                }
+            end
+        end
+    end
+
+    return test_results
 end
 
 local function is_callable(obj)
@@ -312,13 +362,6 @@ setmetatable(adapter, {
         elseif opts.args then
             get_args = function()
                 return opts.args
-            end
-        end
-        if is_callable(opts.runner) then
-            get_runner = opts.runner
-        elseif opts.runner then
-            get_runner = function()
-                return opts.runner
             end
         end
         return adapter

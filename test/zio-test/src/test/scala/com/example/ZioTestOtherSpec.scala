@@ -1,3 +1,5 @@
+package com.example
+
 import zio.{test => _, _}
 import zio.test._
 import zio.test.Assertion._
@@ -16,7 +18,10 @@ object ZioTestOtherSpec extends ZIOSpecDefault {
         one <- ZIO.succeed(1)
         two <- ZIO.succeed(2)
         _ <- ZIO.fail(new RuntimeException("oh no, boom"))
-      } yield assertTrue(one + two == 2)
+      } yield assertTrue(one + two == 3)
+    },
+    test("crashing but no zio") {
+      throw new RuntimeException("babaaah!")
     }
   )
 }
