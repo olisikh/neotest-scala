@@ -1,3 +1,5 @@
+package com.example
+
 import utest._
 
 object UtestTestSuite extends TestSuite {

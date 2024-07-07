@@ -1,3 +1,4 @@
+package com.example
 // specs2 mutable.Specification test
 
 import org.specs2.mutable.Specification

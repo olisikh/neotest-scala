@@ -3,45 +3,6 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
--- Builds a test path from the current position in the tree.
----@param tree neotest.Tree
----@return string|nil
-local function build_test_namespace(tree, name)
-    local parent_tree = tree:parent()
-    local type = tree:data().type
-    if parent_tree and parent_tree:data().type == "namespace" then
-        local package = utils.get_package_name(parent_tree:data().path)
-        local parent_name = parent_tree:data().name
-        return package .. parent_name
-    end
-    if parent_tree and parent_tree:data().type == "test" then
-        return nil
-    end
-    if type == "namespace" then
-        local package = utils.get_package_name(tree:data().path)
-        if not package then
-            return nil
-        end
-        return package .. name
-    end
-    if type == "file" then
-        local test_suites = {}
-        for _, child in tree:iter_nodes() do
-            if child:data().type == "namespace" then
-                table.insert(test_suites, child:data().name)
-            end
-        end
-        if test_suites then
-            local package = utils.get_package_name(tree:data().path)
-            return package .. "*"
-        end
-    end
-    if type == "dir" then
-        return "*"
-    end
-    return nil
-end
-
 --- Builds a command for running tests for the framework.
 ---@param project string
 ---@param tree neotest.Tree
@@ -49,7 +10,7 @@ end
 ---@param extra_args table|string
 ---@return string[]
 function M.build_command(project, tree, name, extra_args)
-    local test_namespace = build_test_namespace(tree, name)
+    local test_namespace = utils.build_test_namespace(tree)
 
     if not test_namespace then
         return vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
@@ -67,8 +28,10 @@ end
 ---@param position neotest.Position
 ---@return string|nil
 function M.match_test(junit_test, position)
-    local junit_test_id = junit_test.namespace .. "." .. junit_test.name:gsub(" ", ".")
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = package_name .. junit_test.namespace .. "." .. junit_test.name:gsub(" ", ".")
     local test_id = position.id:gsub(" ", ".")
+
     return junit_test_id == test_id
 end
 

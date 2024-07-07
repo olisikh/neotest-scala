@@ -1,3 +1,5 @@
+package com.example
+
 // scalatest AnyFreeSpec test
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers

@@ -73,6 +73,7 @@ end
 function adapter.discover_positions(path)
     --query
     local query = [[
+      ;; zio-test
       (object_definition
         name: (identifier) @namespace.name
       ) @namespace.definition
@@ -304,8 +305,7 @@ function adapter.results(spec, _, node)
     elseif ns_data.type == "namespace" then
         table.insert(namespaces, build_namespace(node, report_prefix, node))
     elseif ns_data.type == "test" then
-        local ns_node = utils.find_namespace(node)
-
+        local ns_node = utils.find_node(node, "namespace", false)
         if ns_node then
             table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
         end

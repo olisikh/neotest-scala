@@ -14,17 +14,25 @@ function M.get_position_name(position)
 end
 
 ---Find namespace type parent node if available
----@param tree neotest.Tree
+---@param tree neotest.Tree node tree containing tests information
+---@param type string node type file / dir / namespace / test
+---@param down boolean direction of the search, search children or parents
 ---@return neotest.Tree|nil namespace parent node or nil if not found
-function M.find_namespace(tree)
-    if tree:data().type == "namespace" then
+function M.find_node(tree, type, down)
+    if tree:data().type == type then
         return tree
-    else
-        local parent = tree:parent()
-        if parent then
-            return M.find_namespace(parent)
+    elseif not down then
+        local p = tree:parent()
+        if p then
+            return M.find_node(p, type, down)
         else
             return nil
+        end
+    else
+        for _, child in tree:iter_nodes() do
+            if child:data().type == type then
+                return child
+            end
         end
     end
 end
@@ -46,6 +54,58 @@ end
 function M.get_file_name(path)
     local parts = vim.split(path, Path.path.sep)
     return parts[#parts]
+end
+
+function M.build_test_namespace(tree)
+    local type = tree:data().type
+    local path = tree:data().path
+
+    if type == "dir" then
+        -- run all tests, but we could technically figure out the package?
+        return "*"
+    end
+
+    local package = M.get_package_name(path)
+
+    local ns_node = nil
+    if type == "file" then
+        ns_node = M.find_node(tree, "namespace", true)
+    elseif type == "namespace" then
+        ns_node = tree
+    else
+        ns_node = M.find_node(tree, "namespace", false)
+    end
+
+    if ns_node then
+        return package .. ns_node:data().name -- run individual spec
+    else
+        return package .. "*" -- otherwise run tests for whole package
+    end
+end
+
+--- Builds a command for running tests for the framework.
+---@param project string
+---@param tree neotest.Tree
+---@param name string
+---@param extra_args table|string
+---@return string[]
+function M.build_command(project, tree, name, extra_args)
+    local test_namespace = M.build_test_namespace(tree)
+
+    local command = nil
+
+    if not test_namespace then
+        command = vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
+    else
+        local test_path = ""
+        if tree:data().type == "test" then
+            test_path = ' -- -t "' .. name .. '"'
+        end
+
+        command = vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
+    end
+
+    return command
 end
 
 ---@param project string

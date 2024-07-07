@@ -1,3 +1,5 @@
+package com.example
+
 // a HelloWorldSpec that just verifies that scalatest's FunSuite is working
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
