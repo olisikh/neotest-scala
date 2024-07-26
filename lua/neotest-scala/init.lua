@@ -285,7 +285,16 @@ end
 ---@param result neotest.StrategyResult
 ---@param node neotest.Tree
 ---@return table<string, neotest.Result>
-function adapter.results(spec, _, node)
+function adapter.results(spec, result, node)
+    local success, log = pcall(lib.files.read, result.output)
+    if not success then
+        vim.print("[neotest-scala] Failed to read test output")
+        return {}
+    elseif string.match(log, "Compilation failed") then
+        vim.print("[neotest-scala] Compilation failed")
+        return {}
+    end
+
     if not spec.env then
         return {}
     end
