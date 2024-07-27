@@ -17,7 +17,7 @@ local query = [[
   (content
     (element
       (STag 
-        (Name) @_4 (#eq? @_4 "failure")
+        (Name) @_4 (#any-of? @_4 "failure" "error")
         (Attribute 
           (Name) @_5 (#eq? @_5 "message")
           (AttValue) @testcase.message

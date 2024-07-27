@@ -18,9 +18,11 @@ function M.build_command(project, tree, name, extra_args)
         command = vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
     else
         local test_path = ""
-        if tree:data().type == "test" then
-            test_path = ' -- ex "' .. name .. '"'
-        end
+        -- TODO: for some reason specs2 single test selection is not working properly when test contains brackets
+        -- or when it is a grouping of other tests, so have to run entire spec
+        -- if tree:data().type == "test" then
+        --     test_path = ' -- ex "' .. name .. '"'
+        -- end
 
         command = vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
     end
