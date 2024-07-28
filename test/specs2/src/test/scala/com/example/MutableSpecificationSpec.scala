@@ -19,6 +19,10 @@ class MutableSpecificationSpec extends Specification {
       "a failing nested test" >> {
         "hello" must be("world")
       }
+      "a crashing test" >> {
+        throw new RuntimeException("babbahh")
+        1 must equalTo(1)
+      }
     }
   }
 }

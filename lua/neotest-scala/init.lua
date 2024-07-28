@@ -239,8 +239,18 @@ local function collect_result(framework, junit_test, position)
         test_result = {}
 
         local message = junit_test.error_message or junit_test.error_stacktrace
+
         if message then
-            test_result.errors = { { message = message } }
+            local error = { message = message }
+
+            local file_name = utils.get_file_name(position.path)
+            local line = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
+
+            if line then
+                error.line = tonumber(line) - 1
+            end
+
+            test_result.errors = { error }
             test_result.status = TEST_FAILED
         else
             test_result.status = TEST_PASSED
