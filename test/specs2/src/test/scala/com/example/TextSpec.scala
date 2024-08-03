@@ -2,6 +2,8 @@ package com.example
 
 import org.specs2.mutable.Specification
 
+// TODO: not supported, can't use treesitter for parsing positions, should parse string somehow
+// and use string ranges to render errors / successes
 class HelloWorldSpec extends Specification:
 
   override def is = sequential ^ s2"""

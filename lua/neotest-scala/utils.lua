@@ -13,6 +13,13 @@ function M.get_position_name(position)
     return position.name
 end
 
+--- Strip quotes from the (captured) test position.
+---@param test neotest.Tree
+---@return boolean
+function M.has_nested_tests(test)
+    return #test:children() > 0
+end
+
 ---Find namespace type parent node if available
 ---@param tree neotest.Tree node tree containing tests information
 ---@param type string node type file / dir / namespace / test

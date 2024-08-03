@@ -1,4 +1,3 @@
-local Path = require("plenary.path")
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
@@ -271,12 +270,12 @@ local function build_namespace(ns_node, report_prefix, node)
     local namespace = {
         path = path,
         namespace = id,
-        junit_report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
-        positions = {},
+        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        tests = {},
     }
 
     for _, n in node:iter_nodes() do
-        table.insert(namespace["positions"], n:data())
+        table.insert(namespace["tests"], n)
     end
 
     return namespace
@@ -342,7 +341,8 @@ function adapter.results(spec, result, node)
     for _, ns in pairs(namespaces) do
         local junit_results = junit.collect_results(ns)
 
-        for _, position in ipairs(ns.positions) do
+        for _, test in ipairs(ns.tests) do
+            local position = test:data()
             local test_result = nil
 
             for _, junit_result in ipairs(junit_results) do
@@ -364,8 +364,22 @@ function adapter.results(spec, result, node)
             if test_result then
                 test_results[position.id] = test_result
             else
+                -- NOTE: if we were not able to find a matching junit test, this means it was not collected,
+                -- this could happen if the test initialisation has failed, but this could also happen if
+                -- it's a namespace and not a test, there will be no test result in JUnit XML file in this case
+
+                -- TODO: maybe I could check whether it's a leaf (test) or a branch (namespace)
+                -- and if it is a namespace - mark as PASSED, otherwise as FAILED
+
+                local test_status = nil
+                if utils.has_nested_tests(test) then
+                    test_status = TEST_PASSED
+                else
+                    test_status = TEST_FAILED
+                end
+
                 test_results[position.id] = {
-                    status = TEST_PASSED,
+                    status = test_status,
                 }
             end
         end

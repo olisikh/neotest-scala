@@ -12,4 +12,7 @@ class MUnitSuite extends FunSuite {
   test("crashing test") {
     throw new RuntimeException("kaboom!")
   }
+
+  // TODO: exceptions during initialisation should show everything red
+  // throw new RuntimeException("kekw")
 }
