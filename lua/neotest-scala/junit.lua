@@ -38,7 +38,7 @@ local junit_query = ts.query.parse("xml", query)
 M.collect_results = function(ns)
     local results = {}
 
-    local success, junit_xml = pcall(lib.files.read, ns.junit_report_path)
+    local success, junit_xml = pcall(lib.files.read, ns.report_path)
     if not success then
         return {}
     end
