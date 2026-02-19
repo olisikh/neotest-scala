@@ -53,12 +53,29 @@ local get_parent_name = function(pos)
     return utils.get_position_name(pos)
 end
 
+--- Flatten table (replacement for deprecated vim.tbl_flatten)
+---@param tbl table
+---@return table
+local function flatten(tbl)
+    local result = {}
+    for _, v in ipairs(tbl) do
+        if type(v) == "table" then
+            for _, item in ipairs(v) do
+                table.insert(result, item)
+            end
+        else
+            table.insert(result, v)
+        end
+    end
+    return result
+end
+
 ---@param position neotest.Position The position to return an ID for
 ---@param parents neotest.Position[] Parent positions for the position
 ---@return string
 local function build_position_id(position, parents)
     return table.concat(
-        vim.tbl_flatten({
+        flatten({
             vim.tbl_map(get_parent_name, parents),
             utils.get_position_name(position),
         }),
@@ -70,7 +87,6 @@ end
 ---@param path string Path to the file with tests
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
-    --query
     local query = [[
       ;; zio-test
       (object_definition
@@ -107,11 +123,11 @@ end
 ---@param strategy string
 ---@param tree neotest.Tree
 ---@param project string
+---@param root string
 ---@return table|nil
-local function get_strategy_config(strategy, tree, project)
+local function get_strategy_config(strategy, tree, project, root)
     local position = tree:data()
     if strategy == "integrated" then
-        -- NOTE: run with a background process running actual sbt/bloop test, so no debug configuration required
         return nil
     end
 
@@ -139,18 +155,18 @@ local function get_strategy_config(strategy, tree, project)
     end
 
     if position.type == "test" then
-        local root = adapter.root(position.path)
-        local parent = tree:parent():data()
+        local parent = tree:parent()
+        if not parent then
+            return nil
+        end
+        local parent_data = parent:data()
 
-        -- NOTE: Constructs ScalaTestSuitesDebugRequest request, to debug a specific test within a test class.
-        -- Test framework must implement sbt.testing.TestSelector for metals to recognize the individual tests
-        -- https://github.com/scalameta/metals/blob/main/metals/src/main/scala/scala/meta/internal/metals/ServerCommands.scala#L808C18-L808C45
         metals_args = {
             target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
             requestData = {
                 suites = {
                     {
-                        className = get_parent_name(parent),
+                        className = get_parent_name(parent_data),
                         tests = { utils.get_position_name(position) },
                     },
                 },
@@ -164,8 +180,6 @@ local function get_strategy_config(strategy, tree, project)
         return {
             type = "scala",
             request = "launch",
-            -- NOTE: The `from_lens` is set here because nvim-metals passes the
-            -- complete `metals` param to metals server without modifying (reading) it.
             name = "from_lens",
             metals = metals_args,
         }
@@ -212,10 +226,11 @@ function adapter.build_spec(args)
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(project_name, args.tree, test_name, extra_args)
-    local strategy = get_strategy_config(args.strategy, args.tree, project_name)
+    local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args)
+    local strategy = get_strategy_config(args.strategy, args.tree, project_name, root_path)
 
-    vim.print("[neotest-scala] Running test command: " .. vim.inspect(command))
+    local build_tool = utils.get_build_tool(root_path)
+    vim.print("[neotest-scala] Running tests with " .. build_tool .. ": " .. vim.inspect(command))
 
     return {
         command = command,
@@ -243,7 +258,8 @@ local function collect_result(framework, junit_test, position)
             local error = { message = message }
 
             local file_name = utils.get_file_name(position.path)
-            local line = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
+            local stacktrace = junit_test.error_stacktrace or ""
+            local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
 
             if line then
                 error.line = tonumber(line) - 1
@@ -314,7 +330,18 @@ function adapter.results(spec, result, node)
         return {}
     end
 
-    local project_dir = spec.env.build_target_info["Base Directory"][1]:match("^file:(.*)")
+    local base_dir = spec.env.build_target_info["Base Directory"]
+    if not base_dir or not base_dir[1] then
+        vim.print("[neotest-scala] Cannot find base directory")
+        return {}
+    end
+    
+    local project_dir = base_dir[1]:match("^file:(.*)")
+    if not project_dir then
+        vim.print("[neotest-scala] Cannot parse project directory")
+        return {}
+    end
+    
     local report_prefix = project_dir .. "target/test-reports/"
 
     local ns_data = node:data()
@@ -364,13 +391,6 @@ function adapter.results(spec, result, node)
             if test_result then
                 test_results[position.id] = test_result
             else
-                -- NOTE: if we were not able to find a matching junit test, this means it was not collected,
-                -- this could happen if the test initialisation has failed, but this could also happen if
-                -- it's a namespace and not a test, there will be no test result in JUnit XML file in this case
-
-                -- TODO: maybe I could check whether it's a leaf (test) or a branch (namespace)
-                -- and if it is a namespace - mark as PASSED, otherwise as FAILED
-
                 local test_status = nil
                 if utils.has_nested_tests(test) then
                     test_status = TEST_PASSED
@@ -394,6 +414,23 @@ end
 
 setmetatable(adapter, {
     __call = function(_, opts)
+        opts = opts or {}
+        
+        -- Initialize utils with configuration
+        utils.setup({
+            build_tool = opts.build_tool,
+            compile_on_save = opts.compile_on_save,
+            cache_build_info = opts.cache_build_info,
+        })
+        
+        -- Setup compile on save if enabled
+        if opts.compile_on_save then
+            local root = adapter.root(vim.fn.getcwd())
+            if root then
+                utils.setup_compile_on_save(root)
+            end
+        end
+        
         if is_callable(opts.args) then
             get_args = opts.args
         elseif opts.args then
