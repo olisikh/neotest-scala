@@ -7,11 +7,11 @@ Welcome to the neotest-scala documentation.
 - [[Installation|1.-Installation]] — Setup with lazy.nvim, packer, or manual
 - [[Configuration|2.-Configuration]] — Args, dynamic configuration, and options
 - [[Supported Test Libraries|3.-Supported-Test-Libraries]] — Overview of all 5 supported libraries
-- [[ScalaTest]] — FunSuite, FreeSpec, AnyFlatSpec patterns
-- [[munit]] — ScalaTest-style syntax with munit
-- [[specs2]] — Mutable Specification patterns
-- [[utest]] — Lightweight testing with utest
-- [[zio-test]] — ZIO's built-in testing framework
+- [[ScalaTest|5.-ScalaTest]] — FunSuite, FreeSpec, AnyFlatSpec patterns
+- [[munit|7.-munit]] — ScalaTest-style syntax with munit
+- [[specs2|6.-specs2]] — Mutable Specification patterns
+- [[utest|8.-utest]] — Lightweight testing with utest
+- [[zio-test|4.-zio-test]] — ZIO's built-in testing framework
 - [[Debugging]] — nvim-dap integration with Metals
 - [[Troubleshooting]] — Common issues and solutions
 - [[Contributing]] — How to add support for new test libraries
@@ -32,11 +32,11 @@ A [Neotest](https://github.com/rcarriga/neotest) adapter for running Scala tests
 
 | Library | Style | Single Test Debug |
 |---------|-------|-------------------|
-| [ScalaTest](ScalaTest) | BDD, FunSuite, FreeSpec | ✅ Yes |
-| [munit](munit) | ScalaTest-style | ✅ Yes |
-| [specs2](specs2) | Specification-based | ✅ Yes |
-| [utest](utest) | Lightweight | ❌ No |
-| [zio-test](zio-test) | ZIO effects | ✅ Yes |
+| [ScalaTest](5.-ScalaTest) | BDD, FunSuite, FreeSpec | ✅ Yes |
+| [munit](7.-munit) | ScalaTest-style | ✅ Yes |
+| [specs2](6.-specs2) | Specification-based | ✅ Yes |
+| [utest](8.-utest) | Lightweight | ❌ No |
+| [zio-test](4.-zio-test) | ZIO effects | ✅ Yes |
 
 ### Quick Example
 
