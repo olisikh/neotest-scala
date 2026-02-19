@@ -20,7 +20,7 @@ Supports the following Scala testing libraries:
 - [specs2](https://etorreborre.github.io/specs2)
 - [zio-test](https://zio.dev/reference/test/https://zio.dev/reference/test)
 
-Runs tests with [sbt](https://www.scala-sbt.org). \
+Runs tests with [sbt](https://www.scala-sbt.org) or [Bloop](https://scalacenter.github.io/bloop/) (faster!). \
 Requires [nvim-metals](https://github.com/scalameta/nvim-metals) to get project metadata information
 
 ## Installation
@@ -46,6 +46,43 @@ require("neotest").setup({
   }
 })
 ```
+
+### Build Tool Selection
+
+By default, the plugin auto-detects whether to use Bloop or sbt. If a `.bloop/` directory exists, Bloop is used for faster test execution.
+
+You can explicitly configure the build tool:
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      build_tool = "bloop",  -- "auto" (default), "bloop", or "sbt"
+    })
+  }
+})
+```
+
+**Why Bloop?** Bloop is significantly faster than sbt because:
+- It keeps a running compilation server (no JVM startup overhead)
+- It caches compilations incrementally
+- It's already running if you use Metals
+
+### Background Compilation
+
+Enable background compilation on file save for even faster test runs:
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      compile_on_save = true,  -- Compile in background when saving Scala files
+    })
+  }
+})
+```
+
+### Additional Arguments
 
 You may override some arguments that are passed into the build tool when you are running tests:
 

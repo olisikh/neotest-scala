@@ -3,10 +3,6 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
--- Builds a test path from the current position in the tree.
----@param tree neotest.Tree
----@param name string
----@return string|nil
 local function build_test_path(tree, name)
     local parent_tree = tree:parent()
     local type = tree:data().type
@@ -52,9 +48,9 @@ function M.build_test_result(junit_test, position)
     local raw_message = junit_test.error_stacktrace or junit_test.error_message
 
     if raw_message then
-        error.message = raw_message:gsub("/.*/" .. file_name .. ":%d+ ", "") -- prettify message
+        error.message = raw_message:gsub("/.*/" .. file_name .. ":%d+ ", "")
 
-        local line_num = string.match(raw_message, "%(" .. file_name .. ":(%d+)%)") -- figure out line number
+        local line_num = string.match(raw_message, "%(" .. file_name .. ":(%d+)%)")
         if line_num then
             error.line = tonumber(line_num) - 1
         end
@@ -69,15 +65,15 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
---- Builds a command for running tests for the framework.
+---@param root_path string Project root path
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(project, tree, name, extra_args)
+function M.build_command(root_path, project, tree, name, extra_args)
     local test_path = build_test_path(tree, name)
-    return utils.build_command_with_test_path(project, test_path, extra_args)
+    return utils.build_command_with_test_path(root_path, project, test_path, extra_args)
 end
 
 ---@return neotest-scala.Framework

@@ -4,36 +4,25 @@ local utils = require("neotest-scala.utils")
 local M = {}
 
 --- Builds a command for running tests for the framework.
+---@param root_path string Project root path
 ---@param project string
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
 ---@return string[]
-function M.build_command(project, tree, name, extra_args)
+function M.build_command(root_path, project, tree, name, extra_args)
     local test_namespace = utils.build_test_namespace(tree)
 
-    local command = nil
-
     if not test_namespace then
-        command = vim.tbl_flatten({ "sbt", extra_args, project .. "/test" })
-    else
-        local test_path = ""
-        -- TODO: for some reason specs2 single test selection is not working properly when test contains brackets
-        -- or when it is a grouping of other tests, so have to run entire spec
-        -- if tree:data().type == "test" then
-        --     test_path = ' -- ex "' .. name .. '"'
-        -- end
-
-        command = vim.tbl_flatten({ "sbt", extra_args, project .. "/testOnly " .. test_namespace .. test_path })
+        return utils.build_command(root_path, project, tree, name, extra_args)
     end
 
-    return command
+    return utils.build_command(root_path, project, tree, name, extra_args)
 end
 
--- Get test results from the test output.
 ---@param junit_test table<string, string>
 ---@param position neotest.Position
----@return string|nil
+---@return boolean
 function M.match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local test_id = position.id:gsub(" ", ".")

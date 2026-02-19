@@ -1,14 +1,16 @@
 local M = {}
 
-TEST_PASSED = "passed" -- the test passed
-TEST_FAILED = "failed" -- the test failed
+M.TEST_PASSED = "passed"
+M.TEST_FAILED = "failed"
+
+_G.TEST_PASSED = M.TEST_PASSED
+_G.TEST_FAILED = M.TEST_FAILED
 
 ---@class neotest-scala.Framework
----@field build_command fun(project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
+---@field build_command fun(root_path: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
 ---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
 
----Returns a framework class.
 ---@param framework string
 ---@return neotest-scala.Framework|nil
 function M.get_framework_class(framework)
