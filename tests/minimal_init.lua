@@ -55,6 +55,28 @@ if vim.fn.isdirectory(site) == 1 then
   end
 end
 
+-- Mock neotest.lib for tests
+local neotest_lib_files = {
+  read_lines = function(path)
+    local lines = {}
+    for line in io.lines(path) do
+      table.insert(lines, line)
+    end
+    return lines
+  end,
+  match_root_pattern = function(...)
+    return function(path)
+      return vim.fn.getcwd()
+    end
+  end,
+}
+
+package.loaded["neotest.lib"] = {
+  files = neotest_lib_files,
+}
+
+package.loaded["neotest.lib.files"] = neotest_lib_files
+
 -- Minimal settings
 vim.o.swapfile = false
 vim.o.backup = false

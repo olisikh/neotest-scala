@@ -1,0 +1,50 @@
+name: Run Tests
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc curl
+
+      - name: Install Neovim
+        run: |
+          curl -LO https://github.com/neovim/neovim/releases/download/v0.11.6/nvim-linux-x86_64.tar.gz
+          tar xzf nvim-linux-x86_64.tar.gz
+          sudo cp -r nvim-linux-x86_64/* /usr/local/
+          nvim --version | head -1
+
+      - name: Install Neovim plugins
+        run: |
+          mkdir -p ~/.local/share/nvim/site/pack/vendor/start
+          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim \
+            ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
+          git clone --depth 1 https://github.com/nvim-treesitter/nvim-treesitter \
+            ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter
+
+      - name: Install tree-sitter parsers
+        run: |
+          # Build scala parser from source
+          git clone --depth 1 https://github.com/tree-sitter/tree-sitter-scala.git /tmp/tree-sitter-scala
+          cd /tmp/tree-sitter-scala
+          cc -shared -fPIC -o scala.so -I src src/parser.c src/scanner.c
+          mkdir -p ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser
+          cp scala.so ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser/scala.so
+
+          # Build xml parser from source (needed for junit.lua tests)
+          git clone --depth 1 https://github.com/tree-sitter-grammars/tree-sitter-xml.git /tmp/tree-sitter-xml
+          cd /tmp/tree-sitter-xml
+          cc -shared -fPIC -o xml.so -I src src/parser.c
+          cp xml.so ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser/xml.so
+
+      - name: Run tests
+        run: make test

@@ -49,10 +49,10 @@ M.collect_results = function(ns)
     local query_results = junit_query:iter_matches(parsed:root(), report_tree:source())
 
     for _, matches, _ in query_results do
-        local test_name_node = matches[3]
-        local error_message_node = matches[6]
-        local error_type_node = matches[8]
-        local error_stacktrace_node = matches[9]
+        local test_name_node = matches[3] and matches[3][1]
+        local error_message_node = matches[6] and matches[6][1]
+        local error_type_node = matches[8] and matches[8][1]
+        local error_stacktrace_node = matches[9] and matches[9][1]
 
         local result = {}
         if test_name_node then
