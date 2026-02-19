@@ -1,0 +1,153 @@
+# ScalaTest
+
+ScalaTest is the most popular testing library in the Scala ecosystem. neotest-scala supports multiple ScalaTest styles.
+
+## Official Documentation
+
+- Website: [scalatest.org](https://www.scalatest.org/)
+- Getting Started: [scalatest.org/user_guide](https://www.scalatest.org/user_guide/)
+
+## Setup
+
+### build.sbt
+
+```scala
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.18" % Test
+```
+
+## Supported Styles
+
+### AnyFunSuite
+
+The most common style for unit testing:
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+
+class MySpec extends AnyFunSuite with Matchers {
+  test("addition works") {
+    1 + 1 shouldEqual 2
+  }
+
+  test("multiple assertions") {
+    val result = List(1, 2, 3).sum
+    result shouldEqual 6
+  }
+}
+```
+
+**Detection**: The `test("name") { ... }` syntax is detected by Treesitter.
+
+### AnyFreeSpec
+
+BDD-style with natural language test names:
+
+```scala
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
+
+class MySpec extends AnyFreeSpec with Matchers {
+  "A Calculator" - {
+    "should add numbers correctly" in {
+      1 + 1 shouldEqual 2
+    }
+
+    "should handle negative numbers" in {
+      -1 + 1 shouldEqual 0
+    }
+
+    "nested context" - {
+      "with more tests" in {
+        true shouldBe true
+      }
+    }
+  }
+}
+```
+
+**Detection**: The `"name" - { ... }` and `"name" in { ... }` syntax is detected.
+
+### AnyFlatSpec
+
+Classic xUnit-style:
+
+```scala
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
+class MySpec extends AnyFlatSpec with Matchers {
+  "A Calculator" should "add numbers" in {
+    1 + 1 shouldEqual 2
+  }
+
+  it should "handle subtraction" in {
+    2 - 1 shouldEqual 1
+  }
+}
+```
+
+**Note**: FlatSpec test detection may have limitations due to the infix syntax.
+
+## Test Commands
+
+### Run All Tests in Class
+
+```bash
+sbt <project>/testOnly com.example.MySpec
+```
+
+### Run Single Test
+
+```bash
+sbt <project>/testOnly com.example.MySpec -- -z "addition works"
+```
+
+The `-z` flag filters tests by name substring match.
+
+## Test Discovery
+
+| Syntax | Detected | Example |
+|--------|----------|---------|
+| `test("name") { }` | ✅ | FunSuite style |
+| `"name" in { }` | ✅ | FreeSpec, FlatSpec |
+| `"name" - { }` | ✅ | FreeSpec nesting |
+
+## Debugging
+
+ScalaTest supports debugging individual tests via nvim-dap:
+
+```lua
+require('neotest').run.run({ strategy = 'dap' })
+```
+
+See [[Debugging]] for setup instructions.
+
+## Nested Tests
+
+FreeSpec supports deeply nested test structures:
+
+```scala
+"A Feature" - {
+  "with a sub-feature" - {
+    "and another level" - {
+      "should work" in {
+        assert(true)
+      }
+    }
+  }
+}
+```
+
+All nesting levels are detected and shown in the Neotest summary.
+
+## Limitations
+
+- Test names with special characters (e.g., `-`, `(`, `)`) may have matching issues
+- FlatSpec `should`/`must`/`can` infix syntax detection may be incomplete
+
+## Related Pages
+
+- [[Supported Test Libraries|3.-Supported-Test-Libraries]] — All libraries overview
+- [[Debugging]] — Debugging setup
+- [[Configuration|2.-Configuration]] — Configuration options

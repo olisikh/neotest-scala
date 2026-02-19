@@ -1,0 +1,190 @@
+# utest
+
+utest is a lightweight, minimal testing library for Scala by Li Haoyi.
+
+## Official Documentation
+
+- GitHub: [github.com/com-lihaoyi/utest](https://github.com/com-lihaoyi/utest)
+- Documentation: [lihaoyi.github.io/utest](https://lihaoyi.github.io/utest/)
+
+## Setup
+
+### build.sbt
+
+```scala
+libraryDependencies += "com.lihaoyi" %% "utest" % "0.8.3" % Test
+testFrameworks += new TestFramework("utest.runner.Framework")
+```
+
+> **Note**: utest requires both the dependency AND the test framework registration.
+
+## Basic Usage
+
+```scala
+package com.example
+
+import utest._
+
+object MyTests extends TestSuite {
+  val tests = Tests {
+    test("addition works") {
+      1 + 1 ==> 2
+    }
+
+    test("string operations") {
+      val str = "hello"
+      assert(str.length == 5)
+      str ==> "hello"
+    }
+
+    test("failing example") {
+      1 + 1 ==> 3  // This will fail
+    }
+  }
+}
+```
+
+## Test Discovery
+
+The `test("name") { ... }` syntax inside a `Tests { }` block is detected:
+
+```scala
+object MyTests extends TestSuite {
+  val tests = Tests {
+    test("my test") {       // ✅ Detected
+      // test body
+    }
+  }
+}
+```
+
+## Test Commands
+
+### Run All Tests in Object
+
+```bash
+sbt <project>/testOnly com.example.MyTests
+```
+
+### Run Single Test
+
+```bash
+sbt <project>/testOnly -- "com.example.MyTests.addition works"
+```
+
+utest uses a hierarchical test path selector similar to munit.
+
+## Features
+
+### Assertions
+
+```scala
+object AssertionTests extends TestSuite {
+  val tests = Tests {
+    test("arrow assertion") {
+      // ==> asserts equality with nice diff output
+      1 + 1 ==> 2
+    }
+
+    test("boolean assert") {
+      assert(true)
+      assert(1 == 1)
+    }
+
+    test("intercept") {
+      intercept[RuntimeException] {
+        throw new RuntimeException("boom")
+      }
+    }
+  }
+}
+```
+
+### Nested Tests
+
+```scala
+object NestedTests extends TestSuite {
+  val tests = Tests {
+    test("outer") {
+      test("inner 1") {
+        1 ==> 1
+      }
+      test("inner 2") {
+        2 ==> 2
+      }
+    }
+  }
+}
+```
+
+## Debugging Limitation
+
+> ⚠️ **Important**: utest **does not support debugging individual tests**
+
+utest doesn't implement `sbt.testing.TestSelector`, which Metals requires for debugging specific tests.
+
+**Workarounds**:
+1. Debug at the suite level (run the whole test object)
+2. Temporarily comment out other tests
+3. Use a different test library for debugging-intensive work
+
+```lua
+-- This will debug the entire test suite, not just one test
+require('neotest').run.run({ strategy = 'dap' })
+```
+
+## Test Path Building
+
+| Context | Test Path |
+|---------|-----------|
+| File | `package.{TestSuite1,TestSuite2}` |
+| Object (namespace) | `package.ObjectName` |
+| Test | `package.ObjectName.test name` |
+| Nested test | `package.ObjectName.outer.inner` |
+
+## Running Multiple Suites
+
+When running at the file or directory level, utest can run multiple test suites:
+
+```bash
+# Runs all test objects in the file
+sbt <project>/testOnly com.example.*
+
+# Runs all tests in a package
+sbt <project>/testOnly com.example.{Test1,Test2,Test3}
+```
+
+## Tips
+
+### Use `==>` for Better Error Messages
+
+```scala
+test("prefer arrow") {
+  // Better - shows diff on failure
+  computeValue() ==> expectedValue
+  
+  // Worse - generic assertion error
+  assert(computeValue() == expectedValue)
+}
+```
+
+### Group Related Tests
+
+```scala
+val tests = Tests {
+  test("feature A") {
+    test("case 1") { ... }
+    test("case 2") { ... }
+  }
+  
+  test("feature B") {
+    test("case 1") { ... }
+  }
+}
+```
+
+## Related Pages
+
+- [[Supported Test Libraries|3.-Supported-Test-Libraries]] — All libraries overview
+- [[Debugging]] — Debugging (note: utest limitations)
+- [[Configuration|2.-Configuration]] — Configuration options

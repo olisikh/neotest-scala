@@ -1,0 +1,151 @@
+# munit
+
+munit is a modern, opinionated testing library from the ScalaMeta team with ScalaTest-style syntax.
+
+## Official Documentation
+
+- Website: [scalameta.org/munit](https://scalameta.org/munit/)
+- Getting Started: [scalameta.org/munit/docs/getting-started.html](https://scalameta.org/munit/docs/getting-started.html)
+
+## Setup
+
+### build.sbt
+
+```scala
+libraryDependencies += "org.scalameta" %% "munit" % "1.0.0" % Test
+```
+
+## Basic Usage
+
+```scala
+class MySuite extends munit.FunSuite {
+  test("addition works") {
+    assertEquals(1 + 1, 2)
+  }
+
+  test("string operations") {
+    val str = "hello"
+    assertEquals(str.length, 5)
+    assert(str.startsWith("he"))
+  }
+}
+```
+
+## Test Discovery
+
+The `test("name") { ... }` syntax is detected by Treesitter:
+
+```scala
+class MySuite extends munit.FunSuite {
+  test("my test") {        // ✅ Detected
+    // test body
+  }
+}
+```
+
+## Test Commands
+
+### Run All Tests in Class
+
+```bash
+sbt <project>/testOnly com.example.MySuite
+```
+
+### Run Single Test
+
+```bash
+sbt <project>/testOnly -- "com.example.MySuite.addition works"
+```
+
+munit uses a hierarchical test path selector for running individual tests.
+
+## Features
+
+### Assertions
+
+```scala
+class AssertionSuite extends munit.FunSuite {
+  test("assertions") {
+    // Equality
+    assertEquals(1 + 1, 2)
+    
+    // Boolean
+    assert(true)
+    assert(!false)
+    
+    // Double with tolerance
+    assertDoubleEquals(1.0, 1.0, 0.001)
+    
+    // Type checking
+    assertTypeEquals(1, 2)  // Compiles only if same type
+  }
+}
+```
+
+### Fixtures
+
+```scala
+class FixtureSuite extends munit.FunSuite {
+  var tempFile: java.io.File = _
+  
+  override def beforeEach(context: BeforeEach): Unit = {
+    tempFile = java.io.File.createTempFile("test", ".tmp")
+  }
+  
+  override def afterEach(context: AfterEach): Unit = {
+    tempFile.delete()
+  }
+  
+  test("use temp file") {
+    assert(tempFile.exists())
+  }
+}
+```
+
+### Async Tests
+
+```scala
+import scala.concurrent.Future
+import munit.FunSuite
+
+class AsyncSuite extends FunSuite {
+  test("async operation") {
+    Future {
+      1 + 1
+    }.map { result =>
+      assertEquals(result, 2)
+    }
+  }
+}
+```
+
+## Debugging
+
+munit supports debugging individual tests:
+
+```lua
+require('neotest').run.run({ strategy = 'dap' })
+```
+
+See [[Debugging]] for setup instructions.
+
+## Test Path Building
+
+neotest-scala builds hierarchical test paths for munit:
+
+| Context | Test Path |
+|---------|-----------|
+| File | `package.*` |
+| Namespace (class) | `package.ClassName` |
+| Test | `package.ClassName.test name` |
+| Nested test | `package.ClassName.parent name.test name` |
+
+## Limitations
+
+- Nested test suites (tests within tests) are supported but path building may be complex
+
+## Related Pages
+
+- [[Supported Test Libraries|3.-Supported-Test-Libraries]] — All libraries overview
+- [[Debugging]] — Debugging setup
+- [[Configuration|2.-Configuration]] — Configuration options
