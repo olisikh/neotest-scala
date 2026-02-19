@@ -3,7 +3,7 @@ Global / semanticdbEnabled := true
 def module(moduleName: String) = Project(moduleName, file(moduleName))
   .settings(
     name := s"scala-multi-tests-$moduleName",
-    scalaVersion := "3.4.2",
+    scalaVersion := "3.8.1",
   )
 
 
