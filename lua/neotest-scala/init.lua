@@ -230,11 +230,12 @@ function adapter.build_spec(args)
     local strategy = get_strategy_config(args.strategy, args.tree, project_name, root_path)
 
     local build_tool = utils.get_build_tool(root_path)
-    vim.print("[neotest-scala] Running tests with " .. build_tool .. ": " .. vim.inspect(command))
+    -- vim.print("[neotest-scala] Running tests with " .. build_tool .. ": " .. vim.inspect(command))
 
     return {
         command = command,
         strategy = strategy,
+        cwd = root_path,
         env = {
             root_path = root_path,
             build_target_info = build_target_info,
@@ -335,13 +336,13 @@ function adapter.results(spec, result, node)
         vim.print("[neotest-scala] Cannot find base directory")
         return {}
     end
-    
+
     local project_dir = base_dir[1]:match("^file:(.*)")
     if not project_dir then
         vim.print("[neotest-scala] Cannot parse project directory")
         return {}
     end
-    
+
     local report_prefix = project_dir .. "target/test-reports/"
 
     local ns_data = node:data()
@@ -415,14 +416,14 @@ end
 setmetatable(adapter, {
     __call = function(_, opts)
         opts = opts or {}
-        
+
         -- Initialize utils with configuration
         utils.setup({
             build_tool = opts.build_tool,
             compile_on_save = opts.compile_on_save,
             cache_build_info = opts.cache_build_info,
         })
-        
+
         -- Setup compile on save if enabled
         if opts.compile_on_save then
             local root = adapter.root(vim.fn.getcwd())
@@ -430,7 +431,7 @@ setmetatable(adapter, {
                 utils.setup_compile_on_save(root)
             end
         end
-        
+
         if is_callable(opts.args) then
             get_args = opts.args
         elseif opts.args then
