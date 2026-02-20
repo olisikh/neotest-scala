@@ -29,7 +29,6 @@ local function parse_specs2_textspec(content)
     -- Find the s2""" block
     local in_block = false
     local block_start = 0
-    local current_section = nil
     local indent_stack = {}
 
     for i, line in ipairs(lines) do
@@ -39,16 +38,11 @@ local function parse_specs2_textspec(content)
         if not in_block and line:match('s2"""') then
             in_block = true
             block_start = i
-            goto continue
-        end
-
         -- Detect s2""" end (triple quote at start of block content)
-        if in_block and i > block_start and trimmed:match('^"""') then
+        elseif in_block and i > block_start and trimmed:match('^"""') then
             in_block = false
-            goto continue
-        end
-
-        if in_block and trimmed ~= "" then
+        -- Process lines inside the block
+        elseif in_block and trimmed ~= "" then
             local indent = #line - #trimmed
 
             -- Track section hierarchy based on indentation
@@ -83,8 +77,6 @@ local function parse_specs2_textspec(content)
                 })
             end
         end
-
-        ::continue::
     end
 
     return tests
