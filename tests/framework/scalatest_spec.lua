@@ -227,6 +227,21 @@ describe("scalatest", function()
       assert.are.equal(11, result.errors[1].line)
     end)
 
+    it("extracts the HIGHEST line number when multiple file references exist", function()
+      local junit_test = {
+        error_message = "1 did not equal 2",
+        error_stacktrace = "org.scalatest.exceptions.TestFailedException: 1 did not equal 2\n  at org.scalatest.matchers.should.Matchers.shouldEqual(Matchers.scala:6893)\n  at com.example.FunSuiteSpec.shouldEqual(FunSuiteSpec.scala:7)\n  at com.example.FunSuiteSpec.testFun$proxy2$1(FunSuiteSpec.scala:12)\n  at com.example.FunSuiteSpec.$init$$$anonfun$2(FunSuiteSpec.scala:11)",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.are.equal(11, result.errors[1].line)
+    end)
+
     it("extracts message from stacktrace when no error_message", function()
       local junit_test = {
         error_stacktrace = "java.lang.RuntimeException: kaboom\n  at com.example.FunSuiteSpec.test(FunSuiteSpec.scala:15)",
