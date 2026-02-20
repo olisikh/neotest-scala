@@ -67,7 +67,7 @@ describe("scalatest", function()
       H.restore_mocks()
     end)
 
-    it("converts spaces to dots in test names", function()
+    it("removes spaces from test names for matching", function()
       local junit_test = {
         name = "should do something cool",
         namespace = "MySpec",
@@ -75,7 +75,7 @@ describe("scalatest", function()
 
       local position = {
         path = "/path/to/MySpec.scala",
-        id = "com.example.MySpec.should.do.something.cool",
+        id = "com.example.MySpec.shoulddosomethingcool",
       }
 
       local result = scalatest.match_test(junit_test, position)
@@ -123,7 +123,7 @@ describe("scalatest", function()
 
       local position = {
         path = "/path/to/ValidatorSpec.scala",
-        id = "com.example.ValidatorSpec.should.return.true.when.input.is.valid",
+        id = "com.example.ValidatorSpec.shouldreturntruewheninputisvalid",
       }
 
       local result = scalatest.match_test(junit_test, position)
@@ -176,6 +176,22 @@ describe("scalatest", function()
       local position = {
         path = "/path/to/MySpec.scala",
         id = "MySpec.myTest",
+      }
+
+      local result = scalatest.match_test(junit_test, position)
+
+      assert.is_true(result)
+    end)
+
+    it("handles FreeSpec test names with parent context", function()
+      local junit_test = {
+        name = "HelloWorldSpec failing test",
+        namespace = "MySpecSpec",
+      }
+
+      local position = {
+        path = "/path/to/MySpecSpec.scala",
+        id = "com.example.MySpecSpec.HelloWorldSpecfailingtest",
       }
 
       local result = scalatest.match_test(junit_test, position)

@@ -19,8 +19,8 @@ end
 ---@return boolean
 function M.match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
-    local junit_test_id = package_name .. junit_test.namespace .. "." .. junit_test.name:gsub(" ", ".")
-    local test_id = position.id:gsub(" ", ".")
+    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
 
     return junit_test_id == test_id
 end
