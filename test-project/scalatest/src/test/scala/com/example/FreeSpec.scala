@@ -4,7 +4,7 @@ package com.example
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
-class MySpecSpec extends AnyFreeSpec with Matchers {
+class FreeSpec extends AnyFreeSpec with Matchers {
 
   "HelloWorldSpec" - {
     "Hello, ScalaTest!" in {

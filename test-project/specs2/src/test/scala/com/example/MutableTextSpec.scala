@@ -2,7 +2,7 @@ package com.example
 
 import org.specs2.mutable.Specification
 
-class TextSpec extends Specification:
+class MutableTextSpec extends Specification:
 
   override def is = sequential ^ s2"""
 
