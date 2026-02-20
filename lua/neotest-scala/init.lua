@@ -128,6 +128,15 @@ local function discover_textspec_positions(path, content)
     local lines = vim.split(content, "\n")
     local total_lines = #lines
 
+    -- Find the class definition line number
+    local class_line = 1
+    for i, line in ipairs(lines) do
+        if line:match("class%s+" .. class_name) or line:match("object%s+" .. class_name) then
+            class_line = i
+            break
+        end
+    end
+
     -- Build test positions as nested lists for Tree.from_list
     local test_list = {}
     for _, test in ipairs(tests) do
@@ -163,7 +172,7 @@ local function discover_textspec_positions(path, content)
                 name = class_name,
                 path = path,
                 type = "namespace",
-                range = { 0, 0, total_lines - 1, 0 },
+                range = { class_line - 1, 0, total_lines - 1, 0 },
             }
         }, test_list)
     }
