@@ -183,4 +183,90 @@ describe("scalatest", function()
       assert.is_true(result)
     end)
   end)
+
+  describe("build_test_result", function()
+    before_each(function()
+      H.mock_fn("neotest-scala.utils", "get_file_name", function(path)
+        return path:match("([^/]+)$")
+      end)
+    end)
+
+    after_each(function()
+      H.restore_mocks()
+    end)
+
+    it("extracts error message from error_message field", function()
+      local junit_test = {
+        error_message = "1 did not equal 2",
+        error_stacktrace = "org.scalatest.exceptions.TestFailedException: 1 did not equal 2\n  at com.example.FunSuiteSpec.test(FunSuiteSpec.scala:12)",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.is_not_nil(result.errors)
+      assert.are.equal(1, #result.errors)
+      assert.are.equal("1 did not equal 2", result.errors[1].message)
+    end)
+
+    it("extracts line number from stacktrace", function()
+      local junit_test = {
+        error_message = "1 did not equal 2",
+        error_stacktrace = "org.scalatest.exceptions.TestFailedException: 1 did not equal 2\n  at com.example.FunSuiteSpec.test(FunSuiteSpec.scala:12)",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.are.equal(11, result.errors[1].line)
+    end)
+
+    it("extracts message from stacktrace when no error_message", function()
+      local junit_test = {
+        error_stacktrace = "java.lang.RuntimeException: kaboom\n  at com.example.FunSuiteSpec.test(FunSuiteSpec.scala:15)",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.are.equal("java.lang.RuntimeException: kaboom", result.errors[1].message)
+    end)
+
+    it("returns passed status when no error", function()
+      local junit_test = {}
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_PASSED, result.status)
+      assert.is_nil(result.errors)
+    end)
+
+    it("handles missing line number in stacktrace", function()
+      local junit_test = {
+        error_message = "Some error without line info",
+        error_stacktrace = "org.scalatest.exceptions.TestFailedException: Some error",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.are.equal("Some error without line info", result.errors[1].message)
+      assert.is_nil(result.errors[1].line)
+    end)
+  end)
 end)
