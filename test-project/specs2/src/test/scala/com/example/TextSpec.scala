@@ -2,9 +2,7 @@ package com.example
 
 import org.specs2.mutable.Specification
 
-// TODO: not supported, can't use treesitter for parsing positions, should parse string somehow
-// and use string ranges to render errors / successes
-class HelloWorldSpec extends Specification:
+class TextSpec extends Specification:
 
   override def is = sequential ^ s2"""
 
@@ -17,6 +15,6 @@ class HelloWorldSpec extends Specification:
 
   """
 
-  def e1 = "Hello world" must haveSize(11)
+  def e1 = "Hello world" must haveSize(12)
   def e2 = "Hello world" must startWith("Hello")
   def e3 = "Hello world" must endWith("world")
