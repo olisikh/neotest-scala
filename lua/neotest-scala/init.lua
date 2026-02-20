@@ -542,11 +542,11 @@ function adapter.results(spec, result, node)
                 if junit_result.namespace == ns.namespace then
                     -- TextSpec-specific matching using textspec_path
                     if position.extra and position.extra.textspec_path then
-                        -- TextSpec reports use format: TEST-{package}.{class}.xml
-                        -- Test names in JUnit use the hierarchical path
+                        -- TextSpec JUnit output has short names like "contain 11 characters"
+                        -- textspec_path has full path like "The 'Hello world' string should::contain 11 characters"
+                        -- Check if textspec_path contains the JUnit test name
                         local textspec_path = position.extra.textspec_path
-                        -- Try substring matching - junit_test.name should contain textspec_path
-                        if junit_result.name:find(textspec_path, 1, true) then
+                        if textspec_path:find(junit_result.name, 1, true) then
                             test_result = collect_result(framework, junit_result, position)
                         end
                     elseif framework.match_test then
