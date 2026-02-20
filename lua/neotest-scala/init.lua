@@ -65,7 +65,7 @@ local function parse_specs2_textspec(content)
                 for _, item in ipairs(indent_stack) do
                     table.insert(path_parts, item.name)
                 end
-                table.insert(path_parts, test_name:gsub("^%s*", ""):gsub("%s*$", ""))
+                table.insert(path_parts, (test_name:gsub("^%s*", ""):gsub("%s*$", "")))
 
                 local full_path = table.concat(path_parts, "::")
 
