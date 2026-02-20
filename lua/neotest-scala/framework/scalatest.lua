@@ -3,6 +3,36 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
+---Build the full test path for FreeSpec-style tests by traversing up the tree
+---and collecting parent namespace names (contexts marked with "-" operator)
+---@param tree neotest.Tree
+---@param name string The test name
+---@return string The full test path with parent contexts
+local function build_freespec_test_path(tree, name)
+    -- If tree doesn't have :parent() method (e.g., in tests), return name unchanged
+    if type(tree.parent) ~= "function" then
+        return name
+    end
+
+    local parts = { name }
+    local current = tree:parent()
+
+    -- Traverse up the tree collecting parent test/namespace names
+    while current do
+        local data = current:data()
+        -- Only include parents that are tests (FreeSpec contexts are captured as tests)
+        if data.type == "test" then
+            local parent_name = utils.get_position_name(data)
+            if parent_name and parent_name ~= "" then
+                table.insert(parts, 1, parent_name)
+            end
+        end
+        current = current:parent()
+    end
+
+    return table.concat(parts, " ")
+end
+
 --- Builds a command for running tests for the framework.
 ---@param root_path string Project root path
 ---@param project string
@@ -11,6 +41,20 @@ local M = {}
 ---@param extra_args table|string
 ---@return string[]
 function M.build_command(root_path, project, tree, name, extra_args)
+    -- For individual tests, build the full test path (needed for FreeSpec)
+    -- Check if tree is a proper tree object (has :data() method) or a plain table
+    local tree_type = nil
+    if type(tree.data) == "function" then
+        tree_type = tree:data().type
+    elseif type(tree.data) == "table" then
+        tree_type = tree.data.type
+    end
+
+    if tree_type == "test" then
+        local full_test_name = build_freespec_test_path(tree, name)
+        return utils.build_command(root_path, project, tree, full_test_name, extra_args)
+    end
+
     return utils.build_command(root_path, project, tree, name, extra_args)
 end
 
@@ -19,10 +63,27 @@ end
 ---@return boolean
 function M.match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    local junit_name = junit_test.name
+    local position_id = position.id
 
-    return junit_test_id == test_id
+    -- For FreeSpec-style tests, JUnit name includes parent contexts (e.g., "FreeSpec Hello, ScalaTest!")
+    -- We need to check if the JUnit name is a suffix of the position ID (after normalization)
+    local normalized_junit = (package_name .. junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
+    local normalized_position = position_id:gsub("-", "."):gsub(" ", "")
+
+    -- Try exact match first
+    if normalized_junit == normalized_position then
+        return true
+    end
+
+    -- For FreeSpec: JUnit name may have parent contexts that match the end of position.id
+    -- Example: junit_name = "FreeSpec Hello, ScalaTest!", position.id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!"
+    -- After normalization: junit = "com.example.FreeSpec.FreeSpecHello,ScalaTest!", position = "com.example.FreeSpec.FreeSpec.Hello,ScalaTest!"
+    -- We check if junit (without dots) matches position (without dots)
+    local junit_no_dots = normalized_junit:gsub("%.", "")
+    local position_no_dots = normalized_position:gsub("%.", "")
+
+    return junit_no_dots == position_no_dots
 end
 
 ---Extract the highest line number for the given file from stacktrace

@@ -54,6 +54,79 @@ describe("scalatest", function()
       assert(called_with, "build_command should have been called")
       assert.is_nil(called_with[5])
     end)
+
+    it("builds full test path for FreeSpec-style tests with parent contexts", function()
+      local called_with = nil
+      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+        called_with = { root_path, project, tree, name, extra_args }
+        return {}
+      end)
+
+      -- Mock tree structure: "Hello, ScalaTest!" test inside "FreeSpec" context
+      local parent_data = { type = "test", name = '"FreeSpec"' }
+      local parent_mock = {
+        data = function() return parent_data end,
+        parent = function() return nil end,
+      }
+      local tree_data = { type = "test", name = '"Hello, ScalaTest!"' }
+      local tree_mock = {
+        data = function() return tree_data end,
+        parent = function() return parent_mock end,
+      }
+
+      scalatest.build_command("/root", "project", tree_mock, "Hello, ScalaTest!", {})
+
+      assert(called_with, "build_command should have been called")
+      assert.are.equal("FreeSpec Hello, ScalaTest!", called_with[4])
+    end)
+
+    it("builds nested test path for deeply nested FreeSpec tests", function()
+      local called_with = nil
+      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+        called_with = { root_path, project, tree, name, extra_args }
+        return {}
+      end)
+
+      -- Mock tree structure: "nested" test inside "deeply" context inside "FreeSpec" context
+      local grandparent_data = { type = "test", name = '"FreeSpec"' }
+      local grandparent_mock = {
+        data = function() return grandparent_data end,
+        parent = function() return nil end,
+      }
+      local parent_data = { type = "test", name = '"deeply"' }
+      local parent_mock = {
+        data = function() return parent_data end,
+        parent = function() return grandparent_mock end,
+      }
+      local tree_data = { type = "test", name = '"nested"' }
+      local tree_mock = {
+        data = function() return tree_data end,
+        parent = function() return parent_mock end,
+      }
+
+      scalatest.build_command("/root", "project", tree_mock, "nested", {})
+
+      assert(called_with, "build_command should have been called")
+      assert.are.equal("FreeSpec deeply nested", called_with[4])
+    end)
+
+    it("passes name unchanged for non-test types", function()
+      local called_with = nil
+      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+        called_with = { root_path, project, tree, name, extra_args }
+        return {}
+      end)
+
+      local tree_data = { type = "namespace", name = "MySpec" }
+      local tree_mock = {
+        data = function() return tree_data end,
+      }
+
+      scalatest.build_command("/root", "project", tree_mock, "MySpec", {})
+
+      assert(called_with, "build_command should have been called")
+      assert.are.equal("MySpec", called_with[4])
+    end)
   end)
 
   describe("match_test", function()
@@ -192,6 +265,72 @@ describe("scalatest", function()
       local position = {
         path = "/path/to/MySpecSpec.scala",
         id = "com.example.MySpecSpec.HelloWorldSpecfailingtest",
+      }
+
+      local result = scalatest.match_test(junit_test, position)
+
+      assert.is_true(result)
+    end)
+
+    it("matches FreeSpec JUnit names with dots in position.id", function()
+      -- JUnit name has parent context prepended: "FreeSpec Hello, ScalaTest!"
+      -- position.id has dots between all parts: "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!"
+      local junit_test = {
+        name = "FreeSpec Hello, ScalaTest!",
+        namespace = "FreeSpec",
+      }
+
+      local position = {
+        path = "/path/to/FreeSpec.scala",
+        id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
+      }
+
+      local result = scalatest.match_test(junit_test, position)
+
+      assert.is_true(result)
+    end)
+
+    it("matches nested FreeSpec tests with multiple parent contexts", function()
+      local junit_test = {
+        name = "FreeSpec deeply nested",
+        namespace = "FreeSpec",
+      }
+
+      local position = {
+        path = "/path/to/FreeSpec.scala",
+        id = "com.example.FreeSpec.FreeSpec.deeply.nested",
+      }
+
+      local result = scalatest.match_test(junit_test, position)
+
+      assert.is_true(result)
+    end)
+
+    it("returns false for FreeSpec tests with different parent contexts", function()
+      local junit_test = {
+        name = "OtherContext Hello, ScalaTest!",
+        namespace = "FreeSpec",
+      }
+
+      local position = {
+        path = "/path/to/FreeSpec.scala",
+        id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
+      }
+
+      local result = scalatest.match_test(junit_test, position)
+
+      assert.is_false(result)
+    end)
+
+    it("still matches regular tests without parent contexts", function()
+      local junit_test = {
+        name = "testMethod",
+        namespace = "CalculatorSpec",
+      }
+
+      local position = {
+        path = "/path/to/CalculatorSpec.scala",
+        id = "com.example.CalculatorSpec.testMethod",
       }
 
       local result = scalatest.match_test(junit_test, position)
