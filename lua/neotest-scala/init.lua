@@ -590,10 +590,8 @@ function adapter.results(spec, result, node)
                 -- For ScalaTest (including FreeSpec), skip namespace check and use framework matching
                 -- FreeSpec JUnit XML may have different namespace format than treesitter
                 if spec.env.framework == "scalatest" then
-                    if framework.match_test then
-                        if framework.match_test(junit_result, position) then
-                            test_result = collect_result(framework, junit_result, position)
-                        end
+                    if framework.match_test and framework.match_test(junit_result, position) then
+                        test_result = collect_result(framework, junit_result, position)
                     end
                 elseif junit_result.namespace == ns.namespace then
                     -- TextSpec-specific matching using textspec_path
