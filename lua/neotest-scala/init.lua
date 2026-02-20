@@ -153,7 +153,7 @@ local function discover_textspec_positions(path, content)
                 extra = {
                     textspec_path = test.path,
                 },
-            }
+            },
         })
     end
 
@@ -173,8 +173,8 @@ local function discover_textspec_positions(path, content)
                 path = path,
                 type = "namespace",
                 range = { class_line - 1, 0, total_lines - 1, 0 },
-            }
-        }, test_list)
+            },
+        }, test_list),
     }
 
     return require("neotest.types").Tree.from_list(tree_list, function(pos)
