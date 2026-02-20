@@ -85,9 +85,10 @@ function M.match_test(junit_test, position)
 
     -- For FreeSpec with parent contexts in JUnit name (e.g., "FreeSpec Hello, ScalaTest!")
     -- The JUnit name includes parent context names, position.id has them as separate segments
-    -- Compare by removing all dots and checking if the content matches
-    local junit_no_dots = junit_without_package:gsub("%.", "")
+    -- Compare by removing all dots and the package prefix from both sides
     local escaped_package = package_name:gsub("%.", "%%.")
+    local junit_without_package = junit_without_package:gsub("^" .. escaped_package, "")
+    local junit_no_dots = junit_without_package:gsub("%.", "")
     local position_without_package = normalized_position:gsub("^" .. escaped_package, "")
     local position_no_dots = position_without_package:gsub("%.", "")
 
