@@ -49,7 +49,11 @@ end
 function M.is_bloop_available(root_path)
     local bloop_dir = root_path .. "/.bloop"
     local stat = vim.loop.fs_stat(bloop_dir)
-    return stat ~= nil and stat.type == "directory"
+    if not (stat ~= nil and stat.type == "directory") then
+        return false
+    end
+    -- Also check if bloop binary is actually executable
+    return vim.fn.executable("bloop") == 1
 end
 
 --- Determine which build tool to use

@@ -518,21 +518,30 @@ describe('utils', function()
 
   describe('is_bloop_available', function()
     local original_fs_stat
+    local original_executable
 
     before_each(function()
       original_fs_stat = vim.loop.fs_stat
+      original_executable = vim.fn.executable
     end)
 
     after_each(function()
       vim.loop.fs_stat = original_fs_stat
+      vim.fn.executable = original_executable
     end)
 
-    it('returns true when .bloop directory exists', function()
+    it('returns true when .bloop directory exists and bloop is executable', function()
       vim.loop.fs_stat = function(path)
         if path:match('%.bloop$') then
           return { type = 'directory' }
         end
         return nil
+      end
+      vim.fn.executable = function(cmd)
+        if cmd == 'bloop' then
+          return 1
+        end
+        return 0
       end
       H.assert_eq(utils.is_bloop_available('/project/root'), true)
     end)
@@ -550,17 +559,36 @@ describe('utils', function()
       end
       H.assert_eq(utils.is_bloop_available('/project/root'), false)
     end)
+
+    it('returns false when .bloop directory exists but bloop is not executable', function()
+      vim.loop.fs_stat = function(path)
+        if path:match('%.bloop$') then
+          return { type = 'directory' }
+        end
+        return nil
+      end
+      vim.fn.executable = function(cmd)
+        if cmd == 'bloop' then
+          return 0
+        end
+        return 0
+      end
+      H.assert_eq(utils.is_bloop_available('/project/root'), false)
+    end)
   end)
 
   describe('get_build_tool', function()
     local original_fs_stat
+    local original_executable
 
     before_each(function()
       original_fs_stat = vim.loop.fs_stat
+      original_executable = vim.fn.executable
     end)
 
     after_each(function()
       vim.loop.fs_stat = original_fs_stat
+      vim.fn.executable = original_executable
     end)
 
     it('returns bloop when config is set to bloop', function()
@@ -577,6 +605,12 @@ describe('utils', function()
       utils.setup({ build_tool = 'auto' })
       vim.loop.fs_stat = function()
         return { type = 'directory' }
+      end
+      vim.fn.executable = function(cmd)
+        if cmd == 'bloop' then
+          return 1
+        end
+        return 0
       end
       H.assert_eq(utils.get_build_tool('/project/root'), 'bloop')
     end)
