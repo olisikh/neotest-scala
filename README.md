@@ -116,6 +116,15 @@ require("neotest").setup({
 })
 ```
 
+## Diagnostics
+
+The plugin provides diagnostic information for failing tests directly in your editor:
+- Error messages from test failures
+- Stack trace line numbers  
+- Inline error indicators via Neotest
+
+Diagnostics are automatically displayed when tests fail, making it easy to identify and fix issues without leaving Neovim.
+
 ## Debugging
 
 Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
