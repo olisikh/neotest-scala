@@ -63,25 +63,29 @@ end
 ---@return boolean
 function M.match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
-    local junit_name = junit_test.name
+    -- JUnit test names have leading/trailing spaces that need to be trimmed
+    local junit_name = vim.trim(junit_test.name)
     local position_id = position.id
 
+    -- Normalize: remove dashes and spaces for comparison
     local normalized_position = position_id:gsub("-", "."):gsub(" ", "")
 
-    -- Try with package prepended (for regular tests where JUnit namespace doesn't include package)
+    -- Build JUnit test ID - try both with and without package prefix
+    -- For regular tests: package + namespace + name
     local junit_with_package = (package_name .. junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
     if junit_with_package == normalized_position then
         return true
     end
 
-    -- Try without package (for FreeSpec where JUnit namespace already includes package)
+    -- For FreeSpec: namespace already includes package
     local junit_without_package = (junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
     if junit_without_package == normalized_position then
         return true
     end
 
-    -- For FreeSpec: JUnit name includes parent contexts (e.g., "FreeSpec Hello, ScalaTest!")
-    -- position.id has dots between all parts: "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!"
+    -- For FreeSpec with parent contexts in JUnit name (e.g., "FreeSpec Hello, ScalaTest!")
+    -- The JUnit name includes parent context names, position.id has them as separate segments
+    -- Compare by removing all dots and checking if the content matches
     local junit_no_dots = junit_without_package:gsub("%.", "")
     local escaped_package = package_name:gsub("%.", "%%.")
     local position_without_package = normalized_position:gsub("^" .. escaped_package, "")
