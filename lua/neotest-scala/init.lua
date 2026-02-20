@@ -121,55 +121,56 @@ local function discover_textspec_positions(path, content)
         class_name = "Unknown"
     end
 
-    -- Build positions structure
-    local positions = {
-        id = path,
-        name = vim.fn.fnamemodify(path, ":t"),
-        path = path,
-        type = "file",
-        range = { 0, 0, #vim.split(content, "\n"), 0 },
-    }
+    if #tests == 0 then
+        return nil
+    end
 
-    -- Create namespace for the class
-    local namespace = {
-        id = package_name .. class_name,
-        name = class_name,
-        path = path,
-        type = "namespace",
-        range = { 0, 0, #vim.split(content, "\n"), 0 },
-    }
+    local lines = vim.split(content, "\n")
+    local total_lines = #lines
 
-    local test_positions = {}
-
+    -- Build test positions as nested lists for Tree.from_list
+    local test_list = {}
     for _, test in ipairs(tests) do
         local method_line = find_textspec_method_line(content, test.ref)
         local line_num = method_line and (method_line - 1) or (test.line - 1)
 
-        table.insert(test_positions, {
-            id = package_name .. class_name .. "." .. test.path:gsub("::", "."),
-            name = test.name,
-            path = path,
-            type = "test",
-            range = { line_num, 0, line_num, 0 },
-            extra = {
-                textspec_path = test.path,
-                textspec_ref = test.ref,
-            },
+        table.insert(test_list, {
+            {
+                id = package_name .. class_name .. "." .. test.name,
+                name = test.name,
+                path = path,
+                type = "test",
+                range = { line_num, 0, line_num, 0 },
+                extra = {
+                    textspec_path = test.path,
+                },
+            }
         })
     end
 
-    -- Build the tree structure using neotest's tree builder
-    if #test_positions > 0 then
-        namespace.children = test_positions
-        positions.children = { namespace }
-    end
+    -- Build the tree structure as nested lists
+    local tree_list = {
+        {
+            id = path,
+            name = vim.fn.fnamemodify(path, ":t"),
+            path = path,
+            type = "file",
+            range = { 0, 0, total_lines - 1, 0 },
+        },
+        vim.list_extend({
+            {
+                id = package_name .. class_name,
+                name = class_name,
+                path = path,
+                type = "namespace",
+                range = { 0, 0, total_lines - 1, 0 },
+            }
+        }, test_list)
+    }
 
-    -- Create a proper neotest Tree
-    local tree = require("neotest.types").Tree.from_list(positions, function(pos)
+    return require("neotest.types").Tree.from_list(tree_list, function(pos)
         return pos.id
     end)
-
-    return tree
 end
 
 ---Check if subject file is a test file
