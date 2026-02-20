@@ -587,7 +587,15 @@ function adapter.results(spec, result, node)
             local test_result = nil
 
             for _, junit_result in ipairs(junit_results) do
-                if junit_result.namespace == ns.namespace then
+                -- For ScalaTest (including FreeSpec), skip namespace check and use framework matching
+                -- FreeSpec JUnit XML may have different namespace format than treesitter
+                if spec.env.framework == "scalatest" then
+                    if framework.match_test then
+                        if framework.match_test(junit_result, position) then
+                            test_result = collect_result(framework, junit_result, position)
+                        end
+                    end
+                elseif junit_result.namespace == ns.namespace then
                     -- TextSpec-specific matching using textspec_path
                     if position.extra and position.extra.textspec_path then
                         -- TextSpec JUnit output has short names like "contain 11 characters"
