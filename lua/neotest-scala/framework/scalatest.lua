@@ -66,22 +66,26 @@ function M.match_test(junit_test, position)
     local junit_name = junit_test.name
     local position_id = position.id
 
-    -- For FreeSpec-style tests, JUnit name includes parent contexts (e.g., "FreeSpec Hello, ScalaTest!")
-    -- We need to check if the JUnit name is a suffix of the position ID (after normalization)
-    local normalized_junit = (package_name .. junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
     local normalized_position = position_id:gsub("-", "."):gsub(" ", "")
 
-    -- Try exact match first
-    if normalized_junit == normalized_position then
+    -- Try with package prepended (for regular tests where JUnit namespace doesn't include package)
+    local junit_with_package = (package_name .. junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
+    if junit_with_package == normalized_position then
         return true
     end
 
-    -- For FreeSpec: JUnit name may have parent contexts that match the end of position.id
-    -- Example: junit_name = "FreeSpec Hello, ScalaTest!", position.id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!"
-    -- After normalization: junit = "com.example.FreeSpec.FreeSpecHello,ScalaTest!", position = "com.example.FreeSpec.FreeSpec.Hello,ScalaTest!"
-    -- We check if junit (without dots) matches position (without dots)
-    local junit_no_dots = normalized_junit:gsub("%.", "")
-    local position_no_dots = normalized_position:gsub("%.", "")
+    -- Try without package (for FreeSpec where JUnit namespace already includes package)
+    local junit_without_package = (junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
+    if junit_without_package == normalized_position then
+        return true
+    end
+
+    -- For FreeSpec: JUnit name includes parent contexts (e.g., "FreeSpec Hello, ScalaTest!")
+    -- position.id has dots between all parts: "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!"
+    local junit_no_dots = junit_without_package:gsub("%.", "")
+    local escaped_package = package_name:gsub("%.", "%%.")
+    local position_without_package = normalized_position:gsub("^" .. escaped_package, "")
+    local position_no_dots = position_without_package:gsub("%.", "")
 
     return junit_no_dots == position_no_dots
 end
