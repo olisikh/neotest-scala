@@ -35,18 +35,7 @@ jobs:
 
       - name: Install tree-sitter parsers
         run: |
-          # Build scala parser from source
-          git clone --depth 1 https://github.com/tree-sitter/tree-sitter-scala.git /tmp/tree-sitter-scala
-          cd /tmp/tree-sitter-scala
-          cc -shared -fPIC -o scala.so -I src src/parser.c src/scanner.c
-          mkdir -p ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser
-          cp scala.so ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser/scala.so
-
-          # Build xml parser from source (needed for junit.lua tests)
-          git clone --depth 1 https://github.com/tree-sitter-grammars/tree-sitter-xml.git /tmp/tree-sitter-xml
-          cd /tmp/tree-sitter-xml
-          cc -shared -fPIC -o xml.so -I src src/parser.c
-          cp xml.so ~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter/parser/xml.so
+          nvim --headless -c "TSInstall! scala xml" -c "q"
 
       - name: Run tests
         run: make test
