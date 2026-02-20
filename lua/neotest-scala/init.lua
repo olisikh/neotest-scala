@@ -463,6 +463,40 @@ local function build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
+---Check if a namespace contains TextSpec tests
+---@param ns_node neotest.Tree
+---@return boolean
+local function is_textspec_namespace(ns_node)
+    for _, test_node in ns_node:iter_nodes() do
+        local pos = test_node:data()
+        if pos.extra and pos.extra.textspec_path then
+            return true
+        end
+    end
+    return false
+end
+
+---Build namespace for TextSpec (different report path format)
+---@param ns_node neotest.Tree
+---@param report_prefix string
+---@return table
+local function build_textspec_namespace(ns_node, report_prefix)
+    local data = ns_node:data()
+    local namespace = {
+        path = data.path,
+        namespace = data.id,
+        -- TextSpec: id already includes package, don't prepend package_name
+        report_path = report_prefix .. "TEST-" .. data.id .. ".xml",
+        tests = {},
+    }
+    for _, n in ns_node:iter_nodes() do
+        if n:data().type == "test" then
+            table.insert(namespace["tests"], n)
+        end
+    end
+    return namespace
+end
+
 local function match_test(namespace, junit_result, position)
     local package_name = utils.get_package_name(position.path)
     local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
@@ -515,14 +549,26 @@ function adapter.results(spec, result, node)
 
     if ns_data.type == "file" then
         for _, ns_node in ipairs(node:children()) do
-            table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
+            if is_textspec_namespace(ns_node) then
+                table.insert(namespaces, build_textspec_namespace(ns_node, report_prefix))
+            else
+                table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
+            end
         end
     elseif ns_data.type == "namespace" then
-        table.insert(namespaces, build_namespace(node, report_prefix, node))
+        if is_textspec_namespace(node) then
+            table.insert(namespaces, build_textspec_namespace(node, report_prefix))
+        else
+            table.insert(namespaces, build_namespace(node, report_prefix, node))
+        end
     elseif ns_data.type == "test" then
         local ns_node = utils.find_node(node, "namespace", false)
         if ns_node then
-            table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
+            if is_textspec_namespace(ns_node) then
+                table.insert(namespaces, build_textspec_namespace(ns_node, report_prefix))
+            else
+                table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
+            end
         end
     else
         vim.print("[neotest-scala] Neotest run type '" .. ns_data.type .. "' is not supported")
