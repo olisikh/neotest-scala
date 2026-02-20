@@ -216,4 +216,91 @@ describe("specs2", function()
       assert.is_true(result)
     end)
   end)
+
+  describe("match_textspec_test", function()
+    it("matches TextSpec tests by description path", function()
+      local junit_test = {
+        name = "contain 11 characters",
+      }
+
+      local position = {
+        id = "com.example.TextSpec.e1",
+        extra = {
+          textspec_path = "The 'Hello world' string should::contain 11 characters",
+        },
+      }
+
+      local result = specs2.match_test(junit_test, position)
+      assert.is_true(result)
+    end)
+
+    it("matches TextSpec tests with full hierarchical path", function()
+      local junit_test = {
+        name = "contain 11 characters",
+      }
+
+      local position = {
+        id = "com.example.TextSpec.e1",
+        extra = {
+          textspec_path = "The 'Hello world' string should::contain 11 characters",
+        },
+      }
+
+      local result = specs2.match_test(junit_test, position)
+      assert.is_true(result)
+    end)
+
+    it("returns false when description path does not match", function()
+      local junit_test = {
+        name = "start with 'Hello'",
+      }
+
+      local position = {
+        id = "com.example.TextSpec.e1",
+        extra = {
+          textspec_path = "The 'Hello world' string should::contain 11 characters",
+        },
+      }
+
+      local result = specs2.match_test(junit_test, position)
+      assert.is_false(result)
+    end)
+
+    it("handles special characters in description", function()
+      local junit_test = {
+        name = "work",
+      }
+
+      local position = {
+        id = "com.example.TextSpec.e1",
+        extra = {
+          textspec_path = "Test with 'quotes' and special chars::work",
+        },
+      }
+
+      local result = specs2.match_test(junit_test, position)
+      assert.is_true(result)
+    end)
+
+    it("routes to textspec matcher when extra.textspec_path is set", function()
+      H.mock_fn("neotest-scala.utils", "get_package_name", function(path)
+        return "com.example."
+      end)
+
+      local junit_test = {
+        namespace = "TextSpec",
+        name = "test case",
+      }
+
+      local position = {
+        id = "different.id.format",
+        extra = {
+          textspec_path = "description::test case",
+        },
+      }
+
+      local result = specs2.match_test(junit_test, position)
+      assert.is_true(result)
+    end)
+  end)
 end)

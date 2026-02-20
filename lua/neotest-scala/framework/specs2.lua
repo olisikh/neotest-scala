@@ -3,7 +3,6 @@ local utils = require("neotest-scala.utils")
 ---@class neotest-scala.Framework
 local M = {}
 
---- Builds a command for running tests for the framework.
 ---@param root_path string Project root path
 ---@param project string
 ---@param tree neotest.Tree
@@ -24,6 +23,25 @@ end
 ---@param position neotest.Position
 ---@return boolean
 function M.match_test(junit_test, position)
+    if position.extra and position.extra.textspec_path then
+        return M.match_textspec_test(junit_test, position)
+    end
+    return M.match_mutable_spec_test(junit_test, position)
+end
+
+---@param junit_test table<string, string>
+---@param position neotest.Position
+---@return boolean
+function M.match_textspec_test(junit_test, position)
+    local textspec_path = position.extra.textspec_path
+    local junit_name = junit_test.name or ""
+    return textspec_path:find(junit_name, 1, true) ~= nil
+end
+
+---@param junit_test table<string, string>
+---@param position neotest.Position
+---@return boolean
+function M.match_mutable_spec_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local test_id = position.id:gsub(" ", ".")
 

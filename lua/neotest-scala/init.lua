@@ -12,6 +12,200 @@ local function get_args(_, _, _, _)
     return {}
 end
 
+---@param file_content string
+---@return boolean
+local function is_specs2_textspec(file_content)
+    return file_content:match('s2"""') ~= nil
+end
+
+---@param content string The file content
+---@return table[] Array of {name=string, path=string, ref=string, line=number}
+local function parse_specs2_textspec(content)
+    local tests = {}
+    local parent_sections = {}
+
+    local s2_start = content:find('s2"""')
+    if not s2_start then
+        return tests
+    end
+
+    local search_start = s2_start + 5
+    local s2_end = content:find('"""', search_start)
+    if not s2_end then
+        return tests
+    end
+
+    local spec_string = content:sub(s2_start + 5, s2_end - 1)
+    local base_line = 1
+    local before_s2 = content:sub(1, s2_start)
+    for _ in before_s2:gmatch("\n") do
+        base_line = base_line + 1
+    end
+
+    local current_line = base_line
+
+    for line in spec_string:gmatch("([^\n]*)\n?") do
+        current_line = current_line + 1
+        local indent = #line:match("^%s*")
+        local trimmed = line:match("^%s*(.-)%s*$")
+
+        if trimmed and #trimmed > 0 then
+            local has_ref = trimmed:match("%$([%w_]+)")
+            local text_before_ref = trimmed:match("^([^$]+)")
+
+            if text_before_ref then
+                text_before_ref = text_before_ref:match("^%s*(.-)%s*$")
+            end
+
+            if has_ref and text_before_ref and #text_before_ref > 0 then
+                while #parent_sections > 0 and parent_sections[#parent_sections].indent >= indent do
+                    table.remove(parent_sections)
+                end
+
+                local path_parts = {}
+                for _, section in ipairs(parent_sections) do
+                    if section.text and #section.text > 0 then
+                        table.insert(path_parts, section.text)
+                    end
+                end
+                table.insert(path_parts, text_before_ref)
+                local full_path = table.concat(path_parts, "::")
+
+                table.insert(tests, {
+                    name = text_before_ref,
+                    path = full_path,
+                    ref = has_ref,
+                    line = current_line,
+                })
+            elseif not has_ref and #trimmed > 0 then
+                while #parent_sections > 0 and parent_sections[#parent_sections].indent >= indent do
+                    table.remove(parent_sections)
+                end
+                if trimmed and #trimmed > 0 then
+                    table.insert(parent_sections, { text = trimmed, indent = indent })
+                end
+            end
+        end
+    end
+
+    return tests
+end
+
+---Find method definition line for a specs2 TextSpec reference
+---@param content string The file content
+---@param ref string The method reference (e.g., "e1")
+---@return number|nil The line number of the method definition
+local function find_textspec_method_line(content, ref)
+    local pattern = "def%s+" .. ref .. "%s*="
+    local start = content:find(pattern)
+    if not start then
+        return nil
+    end
+    local line = 1
+    for _ in content:sub(1, start):gmatch("\n") do
+        line = line + 1
+    end
+    return line
+end
+
+---Discover positions for specs2 TextSpec files
+---@param path string
+---@param content string
+---@return neotest.Tree|nil
+local function discover_textspec_positions(path, content)
+    local tests = parse_specs2_textspec(content)
+    if #tests == 0 then
+        return nil
+    end
+
+    local class_match = content:match("class%s+([%w_]+)%s+extends")
+    if not class_match then
+        return nil
+    end
+
+    local package_match = content:match("package%s+([%w%.]+)")
+
+    local class_start = content:find("class%s+" .. class_match)
+    local class_line = 1
+    for _ in content:sub(1, class_start):gmatch("\n") do
+        class_line = class_line + 1
+    end
+
+    local test_positions = {}
+    local last_method_line = class_line
+
+    for _, test in ipairs(tests) do
+        local method_line = find_textspec_method_line(content, test.ref)
+        if method_line then
+            if method_line > last_method_line then
+                last_method_line = method_line
+            end
+            table.insert(test_positions, {
+                name = test.name,
+                type = "test",
+                path = path,
+                range = { method_line - 1, 0, method_line - 1, #test.name },
+                extra = { textspec_path = test.path },
+            })
+        end
+    end
+
+    if #test_positions == 0 then
+        return nil
+    end
+
+    local total_lines = 1
+    for _ in content:gmatch("\n") do
+        total_lines = total_lines + 1
+    end
+
+    local positions = {
+        {
+            name = vim.fn.fnamemodify(path, ":t"),
+            type = "file",
+            path = path,
+            range = { 0, 0, total_lines - 1, 0 },
+        },
+        {
+            name = class_match,
+            type = "namespace",
+            path = path,
+            range = { class_line - 1, 0, last_method_line - 1, 0 },
+        },
+    }
+
+    for _, pos in ipairs(test_positions) do
+        table.insert(positions, pos)
+    end
+
+    table.sort(positions, function(a, b)
+        return a.range[1] < b.range[1]
+    end)
+
+    return lib.positions.parse_tree(positions, {
+        nested_tests = true,
+        require_namespaces = false,
+        position_id = function(pos, parents)
+            if pos.type == "file" then
+                return pos.path
+            end
+            local parent_names = {}
+            for _, p in ipairs(parents) do
+                if p.type ~= "file" then
+                    table.insert(parent_names, p.name)
+                end
+            end
+            if pos.type == "namespace" then
+                local pkg = package_match and (package_match .. ".") or ""
+                return pkg .. pos.name
+            end
+            local pkg = package_match and (package_match .. ".") or ""
+            local ns_name = #parent_names > 0 and parent_names[1] or ""
+            return pkg .. ns_name .. "." .. pos.name
+        end,
+    })
+end
+
 ---Check if subject file is a test file
 ---@async
 ---@param file_path string
@@ -87,6 +281,12 @@ end
 ---@param path string Path to the file with tests
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
+    local content = lib.files.read(path)
+
+    if is_specs2_textspec(content) then
+        return discover_textspec_positions(path, content)
+    end
+
     local query = [[
       ;; zio-test
       (object_definition
@@ -105,7 +305,6 @@ function adapter.discover_positions(path)
       )) @test.definition
 
       ;; scalatest (FreeSpec), specs2 (mutable.Specification)
-      ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
       (infix_expression 
         left: (string) @test.name
         operator: (_) @spec_init (#any-of? @spec_init "-" "in" "should" "can" ">>")
@@ -282,25 +481,25 @@ local function build_namespace(ns_node, report_prefix, node)
     local data = ns_node:data()
     local path = data.path
     local id = data.id
-    local package_name = utils.get_package_name(path)
 
     local namespace = {
         path = path,
         namespace = id,
-        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        report_path = report_prefix .. "TEST-" .. id .. ".xml",
         tests = {},
     }
 
     for _, n in node:iter_nodes() do
-        table.insert(namespace["tests"], n)
+        if n:data().type == "test" then
+            table.insert(namespace["tests"], n)
+        end
     end
 
     return namespace
 end
 
 local function match_test(namespace, junit_result, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
+    local junit_test_id = (namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
     local test_id = position.id:gsub("-", "."):gsub(" ", "")
 
     return junit_test_id == test_id
@@ -391,18 +590,9 @@ function adapter.results(spec, result, node)
 
             if test_result then
                 test_results[position.id] = test_result
-            else
-                local test_status = nil
-                if utils.has_nested_tests(test) then
-                    test_status = TEST_PASSED
-                else
-                    test_status = TEST_FAILED
-                end
-
-                test_results[position.id] = {
-                    status = test_status,
-                }
             end
+            -- Don't return results for tests without JUnit results
+            -- Let neotest handle missing results via _missing_results
         end
     end
 
