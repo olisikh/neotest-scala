@@ -12,6 +12,166 @@ local function get_args(_, _, _, _)
     return {}
 end
 
+---Check if file is a specs2 TextSpec (contains s2""" syntax)
+---@param file_content string
+---@return boolean
+local function is_specs2_textspec(file_content)
+    return file_content:match('s2"""') ~= nil
+end
+
+---Parse specs2 TextSpec content and extract tests
+---@param content string
+---@return table[] Array of {name = string, path = string, line = number, ref = string}
+local function parse_specs2_textspec(content)
+    local tests = {}
+    local lines = vim.split(content, "\n")
+
+    -- Find the s2""" block
+    local in_block = false
+    local block_start = 0
+    local current_section = nil
+    local indent_stack = {}
+
+    for i, line in ipairs(lines) do
+        local trimmed = line:match("^%s*(.*)")
+
+        -- Detect s2""" start
+        if not in_block and line:match('s2"""') then
+            in_block = true
+            block_start = i
+            goto continue
+        end
+
+        -- Detect s2""" end (triple quote at start of block content)
+        if in_block and i > block_start and trimmed:match('^"""') then
+            in_block = false
+            goto continue
+        end
+
+        if in_block and trimmed ~= "" then
+            local indent = #line - #trimmed
+
+            -- Track section hierarchy based on indentation
+            while #indent_stack > 0 and indent <= indent_stack[#indent_stack].indent do
+                table.remove(indent_stack)
+            end
+
+            -- Check if this line contains a test reference ($e1, $test, etc.)
+            local test_name, ref = trimmed:match("^(.-)%s*(%$[%w_]+)%s*$")
+
+            if test_name and ref then
+                -- Build hierarchical path
+                local path_parts = {}
+                for _, item in ipairs(indent_stack) do
+                    table.insert(path_parts, item.name)
+                end
+                table.insert(path_parts, test_name:gsub("^%s*", ""):gsub("%s*$", ""))
+
+                local full_path = table.concat(path_parts, "::")
+
+                table.insert(tests, {
+                    name = test_name:gsub("^%s*", ""):gsub("%s*$", ""),
+                    path = full_path,
+                    line = i,
+                    ref = ref:gsub("%$", ""), -- Remove $ prefix
+                })
+            else
+                -- This is a section header
+                table.insert(indent_stack, {
+                    name = trimmed:gsub("^%s*", ""):gsub("%s*$", ""),
+                    indent = indent,
+                })
+            end
+        end
+
+        ::continue::
+    end
+
+    return tests
+end
+
+---Find the line number of a TextSpec method definition
+---@param content string
+---@param ref string The method reference (e.g., "e1", "test")
+---@return number|nil
+local function find_textspec_method_line(content, ref)
+    local lines = vim.split(content, "\n")
+
+    for i, line in ipairs(lines) do
+        -- Match patterns like: def e1 = ..., def e1: Type = ..., def e1 { ... }
+        if line:match("^%s*def%s+" .. ref .. "%s*[=:{]") then
+            return i
+        end
+    end
+
+    return nil
+end
+
+---Build neotest positions tree for TextSpec tests
+---@param path string Path to the file
+---@param content string File content
+---@return neotest.Tree
+local function discover_textspec_positions(path, content)
+    local tests = parse_specs2_textspec(content)
+    local package_name = utils.get_package_name(path) or ""
+
+    -- Find the class/object name
+    local class_name = content:match("class%s+([%w_]+)%s*extends") or content:match("object%s+([%w_]+)%s*extends")
+    if not class_name then
+        class_name = "Unknown"
+    end
+
+    -- Build positions structure
+    local positions = {
+        id = path,
+        name = vim.fn.fnamemodify(path, ":t"),
+        path = path,
+        type = "file",
+        range = { 0, 0, #vim.split(content, "\n"), 0 },
+    }
+
+    -- Create namespace for the class
+    local namespace = {
+        id = package_name .. class_name,
+        name = class_name,
+        path = path,
+        type = "namespace",
+        range = { 0, 0, #vim.split(content, "\n"), 0 },
+    }
+
+    local test_positions = {}
+
+    for _, test in ipairs(tests) do
+        local method_line = find_textspec_method_line(content, test.ref)
+        local line_num = method_line and (method_line - 1) or (test.line - 1)
+
+        table.insert(test_positions, {
+            id = package_name .. class_name .. "." .. test.path:gsub("::", "."),
+            name = test.name,
+            path = path,
+            type = "test",
+            range = { line_num, 0, line_num, 0 },
+            extra = {
+                textspec_path = test.path,
+                textspec_ref = test.ref,
+            },
+        })
+    end
+
+    -- Build the tree structure using neotest's tree builder
+    if #test_positions > 0 then
+        namespace.children = test_positions
+        positions.children = { namespace }
+    end
+
+    -- Create a proper neotest Tree
+    local tree = require("neotest.types").Tree.from_list(positions, function(pos)
+        return pos.id
+    end)
+
+    return tree
+end
+
 ---Check if subject file is a test file
 ---@async
 ---@param file_path string
@@ -87,6 +247,11 @@ end
 ---@param path string Path to the file with tests
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
+    local content = lib.files.read(path)
+    if is_specs2_textspec(content) then
+        return discover_textspec_positions(path, content)
+    end
+
     local query = [[
       ;; zio-test
       (object_definition
@@ -375,7 +540,16 @@ function adapter.results(spec, result, node)
 
             for _, junit_result in ipairs(junit_results) do
                 if junit_result.namespace == ns.namespace then
-                    if framework.match_test then
+                    -- TextSpec-specific matching using textspec_path
+                    if position.extra and position.extra.textspec_path then
+                        -- TextSpec reports use format: TEST-{package}.{class}.xml
+                        -- Test names in JUnit use the hierarchical path
+                        local textspec_path = position.extra.textspec_path
+                        -- Try substring matching - junit_test.name should contain textspec_path
+                        if junit_result.name:find(textspec_path, 1, true) then
+                            test_result = collect_result(framework, junit_result, position)
+                        end
+                    elseif framework.match_test then
                         if framework.match_test(junit_result, position) then
                             test_result = collect_result(framework, junit_result, position)
                         end
