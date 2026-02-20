@@ -1,8 +1,8 @@
 {
-  "active_plan": "/Users/olisikh/Develop/nvim-plugins/neotest-scala/.sisyphus/plans/specs2-textspec-docs.md",
-  "started_at": "2026-02-20T22:23:32.998Z",
+  "active_plan": "/Users/olisikh/Develop/nvim-plugins/neotest-scala/.sisyphus/plans/scalatest-diagnostics.md",
+  "started_at": "2026-02-20T22:40:33.114Z",
   "session_ids": [
     "ses_382dfaafdffen25S7bn55Nb6vh"
   ],
-  "plan_name": "specs2-textspec-docs"
+  "plan_name": "scalatest-diagnostics"
 }
