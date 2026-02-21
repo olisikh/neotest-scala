@@ -61,20 +61,19 @@ function M.build_test_result(junit_test, position)
     local file_name = utils.get_file_name(position.path)
 
     if junit_test.error_message then
-        local msg = vim.split(junit_test.error_message, "\n")
-        table.remove(msg, 1)
-
-        local last_line = table.remove(msg, #msg - 1)
-        local line_num = string.match(vim.trim(last_line), "^at /.*/" .. file_name .. ":(%d+)$")
-            or string.match(junit_test.error_message, "%(" .. file_name .. ":(%d+)%)")
+        -- Try to extract line number from error message
+        -- Pattern 1: ZIO format with ANSI codes: [36mat /path/File.scala:27 [0m
+        local line_num = string.match(junit_test.error_message, "at /.*/" .. file_name .. ":(%d+)")
+        -- Pattern 2: Standard stacktrace format: (File.scala:33)
+        if not line_num then
+            line_num = string.match(junit_test.error_message, "%(" .. file_name .. ":(%d+)%)")
+        end
 
         if line_num then
             error.line = tonumber(line_num) - 1
-        else
-            table.insert(msg, last_line)
         end
 
-        error.message = table.concat(msg, "\n")
+        error.message = junit_test.error_message
     elseif junit_test.error_stacktrace then
         local line_num = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
         if line_num then
