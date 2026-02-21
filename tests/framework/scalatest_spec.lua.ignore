@@ -1,3 +1,11 @@
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {
+  files = {
+    read_lines = function(_)
+      return { "package com.example" }
+    end,
+  },
+}
+
 local scalatest = require("neotest-scala.framework.scalatest")
 local H = require("tests.helpers")
 

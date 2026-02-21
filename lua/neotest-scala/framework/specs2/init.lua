@@ -1,4 +1,5 @@
 local utils = require("neotest-scala.utils")
+local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
@@ -11,13 +12,7 @@ local M = {}
 ---@param extra_args table|string
 ---@return string[]
 function M.build_command(root_path, project, tree, name, extra_args)
-    local test_namespace = utils.build_test_namespace(tree)
-
-    if not test_namespace then
-        return utils.build_command(root_path, project, tree, name, extra_args)
-    end
-
-    return utils.build_command(root_path, project, tree, name, extra_args)
+    return build.command(root_path, project, tree, name, extra_args)
 end
 
 ---@param junit_test table<string, string>

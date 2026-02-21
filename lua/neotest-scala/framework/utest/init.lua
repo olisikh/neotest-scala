@@ -1,4 +1,5 @@
 local utils = require("neotest-scala.utils")
+local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
@@ -20,7 +21,7 @@ local function build_test_path(tree, name)
         if not package then
             return nil
         end
-        return package .. name .. ".*"
+        return package .. name
     end
     if type == "file" then
         local test_suites = {}
@@ -31,38 +32,26 @@ local function build_test_path(tree, name)
         end
         if test_suites then
             local package = utils.get_package_name(tree:data().path)
-            return package .. "*"
+            return package .. "{" .. table.concat(test_suites, ",") .. "}"
         end
     end
     if type == "dir" then
-        return "*"
-    end
-    return nil
-end
-
-function M.build_test_result(junit_test, position)
-    local result = nil
-    local error = {}
-
-    local file_name = utils.get_file_name(position.path)
-    local raw_message = junit_test.error_stacktrace or junit_test.error_message
-
-    if raw_message then
-        error.message = raw_message:gsub("/.*/" .. file_name .. ":%d+ ", "")
-
-        local line_num = string.match(raw_message, "%(" .. file_name .. ":(%d+)%)")
-        if line_num then
-            error.line = tonumber(line_num) - 1
+        local packages = {}
+        local visited = {}
+        for _, child in tree:iter_nodes() do
+            if child:data().type == "namespace" then
+                local package = utils.get_package_name(child:data().path)
+                if package and not visited[package] then
+                    table.insert(packages, package:sub(1, -2))
+                    visited[package] = true
+                end
+            end
+        end
+        if packages then
+            return "{" .. table.concat(packages, ",") .. "}"
         end
     end
-
-    if vim.tbl_isempty(error) then
-        result = { status = TEST_PASSED }
-    else
-        result = { status = TEST_FAILED, errors = { error } }
-    end
-
-    return result
+    return nil
 end
 
 ---@param root_path string Project root path
@@ -73,7 +62,7 @@ end
 ---@return string[]
 function M.build_command(root_path, project, tree, name, extra_args)
     local test_path = build_test_path(tree, name)
-    return utils.build_command_with_test_path(root_path, project, test_path, extra_args)
+    return build.command_with_path(root_path, project, test_path, extra_args)
 end
 
 ---@return neotest-scala.Framework
