@@ -1,8 +1,48 @@
+local lib = require("neotest.lib")
 local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
-local M = {}
+local M = { name = "utest" }
+
+---Detect utest style from file content
+---@param content string
+---@return "suite" | nil
+function M.detect_style(content)
+    if content:match("extends%s+TestSuite") or content:match("utest") then
+        return "suite"
+    end
+    return nil
+end
+
+---Discover test positions for utest
+---@param style "suite"
+---@param path string
+---@param content string
+---@param opts table
+---@return neotest.Tree | nil
+function M.discover_positions(style, path, content, opts)
+    local query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+        function: (identifier) @func_name (#eq? @func_name "test")
+        arguments: (arguments (string) @test.name))
+      )) @test.definition
+    ]]
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+        position_id = utils.build_position_id,
+    })
+end
 
 local function build_test_path(tree, name)
     local parent_tree = tree:parent()

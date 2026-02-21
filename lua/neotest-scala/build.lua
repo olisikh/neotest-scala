@@ -62,8 +62,9 @@ end
 ---@return string
 local function build_test_namespace(tree)
     local utils = require("neotest-scala.utils")
-    local type = tree:data().type
-    local path = tree:data().path
+    local data = tree:data()
+    local type = data.type
+    local path = data.path
 
     if type == "dir" then
         return "*"
@@ -81,7 +82,8 @@ local function build_test_namespace(tree)
     end
 
     if ns_node then
-        return package .. ns_node:data().name
+        local ns_data = ns_node:data()
+        return package .. ns_data.name
     else
         return package .. "*"
     end
@@ -101,7 +103,8 @@ local function build_sbt_command(project, tree, name, extra_args)
     end
 
     local test_path = ""
-    if tree:data().type == "test" then
+    local tree_data = tree:data()
+    if tree_data.type == "test" then
         test_path = ' -- -t "' .. name .. '"'
     end
 
@@ -124,7 +127,8 @@ local function build_bloop_command(project, tree, name, extra_args)
 
     local args = { "bloop", "test", bloop_project, "--only", test_namespace }
 
-    if tree:data().type == "test" then
+    local bloop_tree_data = tree:data()
+    if bloop_tree_data.type == "test" then
         table.insert(args, "-o")
         table.insert(args, name)
     end

@@ -15,9 +15,9 @@ describe("scalatest", function()
       H.restore_mocks()
     end)
 
-    it("delegates to utils.build_command with all arguments", function()
+    it("delegates to build.command with all arguments", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return { "mocked", "command" }
       end)
@@ -41,7 +41,7 @@ describe("scalatest", function()
 
     it("returns the result from utils.build_command unchanged", function()
       local expected_command = { "sbt", "myproject/testOnly", "com.example.TestSpec" }
-      H.mock_fn("neotest-scala.utils", "build_command", function()
+      H.mock_fn("neotest-scala.build", "command", function()
         return expected_command
       end)
 
@@ -52,7 +52,7 @@ describe("scalatest", function()
 
     it("handles nil extra_args", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return {}
       end)
@@ -65,7 +65,7 @@ describe("scalatest", function()
 
     it("builds full test path for FreeSpec-style tests with parent contexts", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return {}
       end)
@@ -90,7 +90,7 @@ describe("scalatest", function()
 
     it("builds nested test path for deeply nested FreeSpec tests", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return {}
       end)
@@ -120,7 +120,7 @@ describe("scalatest", function()
 
     it("passes name unchanged for non-test types", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return {}
       end)

@@ -7,6 +7,7 @@ _G.TEST_PASSED = M.TEST_PASSED
 _G.TEST_FAILED = M.TEST_FAILED
 
 ---@class neotest-scala.Framework
+---@field name string
 ---@field build_command fun(root_path: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
 ---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
@@ -27,6 +28,8 @@ function M.get_framework_class(framework)
     elseif framework == "zio-test" then
         return require(prefix .. "zio-test")
     end
+
+    return nil
 end
 
 return M

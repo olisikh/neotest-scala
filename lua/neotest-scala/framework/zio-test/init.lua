@@ -1,8 +1,48 @@
+local lib = require("neotest.lib")
 local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
-local M = {}
+local M = { name = "zio-test" }
+
+---Detect if this is a ZIO Test spec file
+---@param content string
+---@return string|nil
+function M.detect_style(content)
+    if content:match("extends%s+ZIOSpecDefault") or content:match("zio%.test") then
+        return "spec"
+    end
+    return nil
+end
+
+---Discover test positions in ZIO Test spec
+---@param style string
+---@param path string
+---@param content string
+---@param opts table
+---@return neotest.Tree|nil
+function M.discover_positions(style, path, content, opts)
+    local query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+        function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
+        arguments: (arguments (string) @test.name))
+      )) @test.definition
+    ]]
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+        position_id = utils.build_position_id,
+    })
+end
 
 ---@param root_path string Project root path
 ---@param project string
@@ -21,20 +61,19 @@ function M.build_test_result(junit_test, position)
     local file_name = utils.get_file_name(position.path)
 
     if junit_test.error_message then
-        local msg = vim.split(junit_test.error_message, "\n")
-        table.remove(msg, 1)
-
-        local last_line = table.remove(msg, #msg - 1)
-        local line_num = string.match(vim.trim(last_line), "^at /.*/" .. file_name .. ":(%d+)$")
-            or string.match(junit_test.error_message, "%(" .. file_name .. ":(%d+)%)")
+        -- Try to extract line number from error message
+        -- Pattern 1: ZIO format with ANSI codes: [36mat /path/File.scala:27 [0m
+        local line_num = string.match(junit_test.error_message, "at /.*/" .. file_name .. ":(%d+)")
+        -- Pattern 2: Standard stacktrace format: (File.scala:33)
+        if not line_num then
+            line_num = string.match(junit_test.error_message, "%(" .. file_name .. ":(%d+)%)")
+        end
 
         if line_num then
             error.line = tonumber(line_num) - 1
-        else
-            table.insert(msg, last_line)
         end
 
-        error.message = table.concat(msg, "\n")
+        error.message = junit_test.error_message
     elseif junit_test.error_stacktrace then
         local line_num = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
         if line_num then
