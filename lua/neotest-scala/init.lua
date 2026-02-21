@@ -1,7 +1,9 @@
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
-local junit = require("neotest-scala.junit")
+local textspec = require("neotest-scala.framework.specs2.textspec")
+local strategy = require("neotest-scala.strategy")
+local results = require("neotest-scala.results")
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -12,169 +14,25 @@ local function get_args(_, _, _, _)
     return {}
 end
 
----Check if file is a specs2 TextSpec (contains s2""" syntax)
----@param file_content string
----@return boolean
-local function is_specs2_textspec(file_content)
-    return file_content:match('s2"""') ~= nil
-end
+---@param position neotest.Position
+---@param parents neotest.Position[]
+---@return string
+local function build_position_id(position, parents)
+    local result = {}
 
----Parse specs2 TextSpec content and extract tests
----@param content string
----@return table[] Array of {name = string, path = string, line = number, ref = string}
-local function parse_specs2_textspec(content)
-    local tests = {}
-    local lines = vim.split(content, "\n")
-
-    -- Find the s2""" block
-    local in_block = false
-    local block_start = 0
-    local indent_stack = {}
-
-    for i, line in ipairs(lines) do
-        local trimmed = line:match("^%s*(.*)")
-
-        -- Detect s2""" start
-        if not in_block and line:match('s2"""') then
-            in_block = true
-            block_start = i
-        -- Detect s2""" end (triple quote at start of block content)
-        elseif in_block and i > block_start and trimmed:match('^"""') then
-            in_block = false
-        -- Process lines inside the block
-        elseif in_block and trimmed ~= "" then
-            local indent = #line - #trimmed
-
-            -- Track section hierarchy based on indentation
-            while #indent_stack > 0 and indent <= indent_stack[#indent_stack].indent do
-                table.remove(indent_stack)
-            end
-
-            -- Check if this line contains a test reference ($e1, $test, etc.)
-            local test_name, ref = trimmed:match("^(.-)%s*(%$[%w_]+)%s*$")
-
-            if test_name and ref then
-                -- Build hierarchical path
-                local path_parts = {}
-                for _, item in ipairs(indent_stack) do
-                    table.insert(path_parts, item.name)
-                end
-                table.insert(path_parts, (test_name:gsub("^%s*", ""):gsub("%s*$", "")))
-
-                local full_path = table.concat(path_parts, "::")
-
-                table.insert(tests, {
-                    name = test_name:gsub("^%s*", ""):gsub("%s*$", ""),
-                    path = full_path,
-                    line = i,
-                    ref = ref:gsub("%$", ""), -- Remove $ prefix
-                })
-            else
-                -- This is a section header
-                table.insert(indent_stack, {
-                    name = trimmed:gsub("^%s*", ""):gsub("%s*$", ""),
-                    indent = indent,
-                })
-            end
+    for _, parent in ipairs(parents) do
+        if parent.type == "namespace" then
+            table.insert(result, utils.get_package_name(parent.path) .. parent.name)
+        elseif parent.type ~= "dir" and parent.type ~= "file" then
+            table.insert(result, utils.get_position_name(parent))
         end
     end
 
-    return tests
+    table.insert(result, utils.get_position_name(position))
+
+    return table.concat(result, ".")
 end
 
----Find the line number of a TextSpec method definition
----@param content string
----@param ref string The method reference (e.g., "e1", "test")
----@return number|nil
-local function find_textspec_method_line(content, ref)
-    local lines = vim.split(content, "\n")
-
-    for i, line in ipairs(lines) do
-        -- Match patterns like: def e1 = ..., def e1: Type = ..., def e1 { ... }
-        if line:match("^%s*def%s+" .. ref .. "%s*[=:{]") then
-            return i
-        end
-    end
-
-    return nil
-end
-
----Build neotest positions tree for TextSpec tests
----@param path string Path to the file
----@param content string File content
----@return neotest.Tree
-local function discover_textspec_positions(path, content)
-    local tests = parse_specs2_textspec(content)
-    local package_name = utils.get_package_name(path) or ""
-
-    -- Find the class/object name
-    local class_name = content:match("class%s+([%w_]+)%s*extends") or content:match("object%s+([%w_]+)%s*extends")
-    if not class_name then
-        class_name = "Unknown"
-    end
-
-    if #tests == 0 then
-        return nil
-    end
-
-    local lines = vim.split(content, "\n")
-    local total_lines = #lines
-
-    -- Find the class definition line number
-    local class_line = 1
-    for i, line in ipairs(lines) do
-        if line:match("class%s+" .. class_name) or line:match("object%s+" .. class_name) then
-            class_line = i
-            break
-        end
-    end
-
-    -- Build test positions as nested lists for Tree.from_list
-    local test_list = {}
-    for _, test in ipairs(tests) do
-        local method_line = find_textspec_method_line(content, test.ref)
-        local line_num = method_line and (method_line - 1) or (test.line - 1)
-
-        table.insert(test_list, {
-            {
-                id = package_name .. class_name .. "." .. test.name,
-                name = test.name,
-                path = path,
-                type = "test",
-                range = { line_num, 0, line_num, 0 },
-                extra = {
-                    textspec_path = test.path,
-                },
-            },
-        })
-    end
-
-    -- Build the tree structure as nested lists
-    local tree_list = {
-        {
-            id = path,
-            name = vim.fn.fnamemodify(path, ":t"),
-            path = path,
-            type = "file",
-            range = { 0, 0, total_lines - 1, 0 },
-        },
-        vim.list_extend({
-            {
-                id = package_name .. class_name,
-                name = class_name,
-                path = path,
-                type = "namespace",
-                range = { class_line - 1, 0, total_lines - 1, 0 },
-            },
-        }, test_list),
-    }
-
-    return require("neotest.types").Tree.from_list(tree_list, function(pos)
-        return pos.id
-    end)
-end
-
----Check if subject file is a test file
 ---@async
 ---@param file_path string
 ---@return boolean
@@ -193,87 +51,41 @@ function adapter.is_test_file(file_path)
     return false
 end
 
----Filter directories when searching for test files
 ---@async
----@param name string Name of directory
----@param rel_path string Path to directory, relative to root
----@param root string Root directory of project
+---@param name string
+---@param rel_path string
+---@param root string
 ---@return boolean
 function adapter.filter_dir(_, _, _)
     return true
 end
 
----@param pos neotest.Position
----@return string
-local get_parent_name = function(pos)
-    if pos.type == "dir" or pos.type == "file" then
-        return ""
-    end
-    if pos.type == "namespace" then
-        return utils.get_package_name(pos.path) .. pos.name
-    end
-    return utils.get_position_name(pos)
-end
-
---- Flatten table (replacement for deprecated vim.tbl_flatten)
----@param tbl table
----@return table
-local function flatten(tbl)
-    local result = {}
-    for _, v in ipairs(tbl) do
-        if type(v) == "table" then
-            for _, item in ipairs(v) do
-                table.insert(result, item)
-            end
-        else
-            table.insert(result, v)
-        end
-    end
-    return result
-end
-
----@param position neotest.Position The position to return an ID for
----@param parents neotest.Position[] Parent positions for the position
----@return string
-local function build_position_id(position, parents)
-    return table.concat(
-        flatten({
-            vim.tbl_map(get_parent_name, parents),
-            utils.get_position_name(position),
-        }),
-        "."
-    )
-end
-
 ---@async
----@param path string Path to the file with tests
+---@param path string
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
     local content = lib.files.read(path)
-    if is_specs2_textspec(content) then
-        return discover_textspec_positions(path, content)
+
+    if textspec.is_textspec(content) then
+        return textspec.discover_positions(path, content)
     end
 
     local query = [[
-      ;; zio-test
       (object_definition
         name: (identifier) @namespace.name
       ) @namespace.definition
-	  
+
       (class_definition
         name: (identifier) @namespace.name
       ) @namespace.definition
 
-      ;; utest, munit, zio-test, scalatest (FunSuite)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
         arguments: (arguments (string) @test.name))
       )) @test.definition
 
-      ;; scalatest (FreeSpec), specs2 (mutable.Specification)
-      ;; specs2 supports 'in', 'can', 'should' and '>>' syntax for test blocks
-      (infix_expression 
+      (infix_expression
         left: (string) @test.name
         operator: (_) @spec_init (#any-of? @spec_init "-" "in" "should" "can" ">>")
         right: (_)
@@ -284,75 +96,6 @@ function adapter.discover_positions(path)
         require_namespaces = true,
         position_id = build_position_id,
     })
-end
-
----Builds strategy configuration for running tests.
----@param strategy string
----@param tree neotest.Tree
----@param project string
----@param root string
----@return table|nil
-local function get_strategy_config(strategy, tree, project, root)
-    local position = tree:data()
-    if strategy == "integrated" then
-        return nil
-    end
-
-    if position.type == "dir" then
-        return nil
-    end
-
-    if position.type == "file" then
-        return {
-            type = "scala",
-            request = "launch",
-            name = "NeotestScala",
-            metals = {
-                runType = "testFile",
-                path = position.path,
-            },
-        }
-    end
-
-    local metals_args = nil
-    if position.type == "namespace" then
-        metals_args = {
-            testClass = utils.get_package_name(position.path) .. position.name,
-        }
-    end
-
-    if position.type == "test" then
-        local parent = tree:parent()
-        if not parent then
-            return nil
-        end
-        local parent_data = parent:data()
-
-        metals_args = {
-            target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
-            requestData = {
-                suites = {
-                    {
-                        className = get_parent_name(parent_data),
-                        tests = { utils.get_position_name(position) },
-                    },
-                },
-                jvmOptions = {},
-                environmentVariables = {},
-            },
-        }
-    end
-
-    if metals_args ~= nil then
-        return {
-            type = "scala",
-            request = "launch",
-            name = "from_lens",
-            metals = metals_args,
-        }
-    end
-
-    return nil
 end
 
 ---@async
@@ -394,14 +137,11 @@ function adapter.build_spec(args)
 
     local test_name = utils.get_position_name(position)
     local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args)
-    local strategy = get_strategy_config(args.strategy, args.tree, project_name, root_path)
-
-    local build_tool = utils.get_build_tool(root_path)
-    -- vim.print("[neotest-scala] Running tests with " .. build_tool .. ": " .. vim.inspect(command))
+    local strategy_config = strategy.get_config(args.strategy, args.tree, project_name, root_path)
 
     return {
         command = command,
-        strategy = strategy,
+        strategy = strategy_config,
         cwd = root_path,
         env = {
             root_path = root_path,
@@ -412,229 +152,13 @@ function adapter.build_spec(args)
     }
 end
 
-local function collect_result(framework, junit_test, position)
-    local test_result = nil
-
-    if framework.build_test_result then
-        test_result = framework.build_test_result(junit_test, position)
-    else
-        test_result = {}
-
-        local message = junit_test.error_message or junit_test.error_stacktrace
-
-        if message then
-            local error = { message = message }
-
-            local file_name = utils.get_file_name(position.path)
-            local stacktrace = junit_test.error_stacktrace or ""
-            local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
-
-            if line then
-                error.line = tonumber(line) - 1
-            end
-
-            test_result.errors = { error }
-            test_result.status = TEST_FAILED
-        else
-            test_result.status = TEST_PASSED
-        end
-    end
-
-    test_result.test_id = position.id
-
-    return test_result
-end
-
-local function build_namespace(ns_node, report_prefix, node)
-    local data = ns_node:data()
-    local path = data.path
-    local id = data.id
-    local package_name = utils.get_package_name(path)
-
-    local namespace = {
-        path = path,
-        namespace = id,
-        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
-        tests = {},
-    }
-
-    for _, n in node:iter_nodes() do
-        table.insert(namespace["tests"], n)
-    end
-
-    return namespace
-end
-
----Check if a namespace contains TextSpec tests
----@param ns_node neotest.Tree
----@return boolean
-local function is_textspec_namespace(ns_node)
-    for _, test_node in ns_node:iter_nodes() do
-        local pos = test_node:data()
-        if pos.extra and pos.extra.textspec_path then
-            return true
-        end
-    end
-    return false
-end
-
----Build namespace for TextSpec (different report path format)
----@param ns_node neotest.Tree
----@param report_prefix string
----@return table
-local function build_textspec_namespace(ns_node, report_prefix)
-    local data = ns_node:data()
-    local namespace = {
-        path = data.path,
-        namespace = data.id,
-        -- TextSpec: id already includes package, don't prepend package_name
-        report_path = report_prefix .. "TEST-" .. data.id .. ".xml",
-        tests = {},
-    }
-    for _, n in ns_node:iter_nodes() do
-        if n:data().type == "test" then
-            table.insert(namespace["tests"], n)
-        end
-    end
-    return namespace
-end
-
-local function match_test(namespace, junit_result, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-
-    return junit_test_id == test_id
-end
-
 ---@async
 ---@param spec neotest.RunSpec
 ---@param result neotest.StrategyResult
 ---@param node neotest.Tree
 ---@return table<string, neotest.Result>
 function adapter.results(spec, result, node)
-    local success, log = pcall(lib.files.read, result.output)
-    if not success then
-        vim.print("[neotest-scala] Failed to read test output")
-        return {}
-    elseif string.match(log, "Compilation failed") then
-        vim.print("[neotest-scala] Compilation failed")
-        return {}
-    end
-
-    if not spec.env then
-        return {}
-    end
-
-    local framework = fw.get_framework_class(spec.env.framework)
-    if not framework then
-        vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
-        return {}
-    end
-
-    local base_dir = spec.env.build_target_info["Base Directory"]
-    if not base_dir or not base_dir[1] then
-        vim.print("[neotest-scala] Cannot find base directory")
-        return {}
-    end
-
-    local project_dir = base_dir[1]:match("^file:(.*)")
-    if not project_dir then
-        vim.print("[neotest-scala] Cannot parse project directory")
-        return {}
-    end
-
-    local report_prefix = project_dir .. "target/test-reports/"
-
-    local ns_data = node:data()
-    local namespaces = {}
-
-    if ns_data.type == "file" then
-        for _, ns_node in ipairs(node:children()) do
-            if is_textspec_namespace(ns_node) then
-                table.insert(namespaces, build_textspec_namespace(ns_node, report_prefix))
-            else
-                table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
-            end
-        end
-    elseif ns_data.type == "namespace" then
-        if is_textspec_namespace(node) then
-            table.insert(namespaces, build_textspec_namespace(node, report_prefix))
-        else
-            table.insert(namespaces, build_namespace(node, report_prefix, node))
-        end
-    elseif ns_data.type == "test" then
-        local ns_node = utils.find_node(node, "namespace", false)
-        if ns_node then
-            if is_textspec_namespace(ns_node) then
-                table.insert(namespaces, build_textspec_namespace(ns_node, report_prefix))
-            else
-                table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
-            end
-        end
-    else
-        vim.print("[neotest-scala] Neotest run type '" .. ns_data.type .. "' is not supported")
-        return {}
-    end
-
-    local test_results = {}
-
-    for _, ns in pairs(namespaces) do
-        local junit_results = junit.collect_results(ns)
-
-        for _, test in ipairs(ns.tests) do
-            local position = test:data()
-            local test_result = nil
-
-            for _, junit_result in ipairs(junit_results) do
-                -- For ScalaTest (including FreeSpec), skip namespace check and use framework matching
-                -- FreeSpec JUnit XML may have different namespace format than treesitter
-                if spec.env.framework == "scalatest" then
-                    if framework.match_test and framework.match_test(junit_result, position) then
-                        test_result = collect_result(framework, junit_result, position)
-                    end
-                elseif junit_result.namespace == ns.namespace then
-                    -- TextSpec-specific matching using textspec_path
-                    if position.extra and position.extra.textspec_path then
-                        -- TextSpec JUnit output has short names like "contain 11 characters"
-                        -- textspec_path has full path like "The 'Hello world' string should::contain 11 characters"
-                        -- Check if textspec_path contains the JUnit test name
-                        local textspec_path = position.extra.textspec_path
-                        if textspec_path:find(junit_result.name, 1, true) then
-                            test_result = collect_result(framework, junit_result, position)
-                        end
-                    elseif framework.match_test then
-                        if framework.match_test(junit_result, position) then
-                            test_result = collect_result(framework, junit_result, position)
-                        end
-                    elseif match_test(ns, junit_result, position) then
-                        test_result = collect_result(framework, junit_result, position)
-                    end
-                end
-
-                if test_result then
-                    break
-                end
-            end
-
-            if test_result then
-                test_results[position.id] = test_result
-            else
-                local test_status = nil
-                if utils.has_nested_tests(test) then
-                    test_status = TEST_PASSED
-                else
-                    test_status = TEST_FAILED
-                end
-
-                test_results[position.id] = {
-                    status = test_status,
-                }
-            end
-        end
-    end
-
-    return test_results
+    return results.collect(spec, result, node)
 end
 
 local function is_callable(obj)
@@ -645,14 +169,12 @@ setmetatable(adapter, {
     __call = function(_, opts)
         opts = opts or {}
 
-        -- Initialize utils with configuration
         utils.setup({
             build_tool = opts.build_tool,
             compile_on_save = opts.compile_on_save,
             cache_build_info = opts.cache_build_info,
         })
 
-        -- Setup compile on save if enabled
         if opts.compile_on_save then
             local root = adapter.root(vim.fn.getcwd())
             if root then
