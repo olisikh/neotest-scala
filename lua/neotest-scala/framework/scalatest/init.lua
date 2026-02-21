@@ -1,8 +1,53 @@
+local lib = require("neotest.lib")
 local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
+
+---Detect ScalaTest style from file content
+---@param content string
+---@return "funsuite" | "freespec" | nil
+function M.detect_style(content)
+    if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
+        return "funsuite"
+    elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
+        return "freespec"
+    end
+    return nil
+end
+
+---Discover test positions for ScalaTest
+---@param style "funsuite" | "freespec"
+---@param path string
+---@param content string
+---@param opts table
+---@return neotest.Tree | nil
+function M.discover_positions(style, path, content, opts)
+    local query
+    if style == "funsuite" then
+        query = [[
+((call_expression
+  function: (identifier) @func_name (#eq? @func_name "test")
+  arguments: (arguments (string) @test.name)
+)) @test.definition
+]]
+    else
+        -- FreeSpec: "name" - { } and "name" in { }
+        query = [[
+(infix_expression
+  left: (string) @test.name
+  operator: (_) @spec_init (#any-of? @spec_init "-" "in")
+  right: (_)
+) @test.definition
+]]
+    end
+
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+    })
+end
 
 ---Build the full test path for FreeSpec-style tests by traversing up the tree
 ---and collecting parent namespace names (contexts marked with "-" operator)

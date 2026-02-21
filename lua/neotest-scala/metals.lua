@@ -178,6 +178,40 @@ function M.get_framework(build_target_info)
     return "scalatest"
 end
 
+local FRAMEWORK_PATTERNS = {
+    { pattern = "specs2%-core_.*-.*%.jar", name = "specs2" },
+    { pattern = "munit_.*-.*%.jar", name = "munit" },
+    { pattern = "scalatest_.*-.*%.jar", name = "scalatest" },
+    { pattern = "utest_.*-.*%.jar", name = "utest" },
+    { pattern = "zio%-test_.*-.*%.jar", name = "zio-test" },
+}
+
+function M.get_frameworks(root_path, target_path, cache_enabled)
+    local build_info = M.get_build_target_info(root_path, target_path, cache_enabled)
+    if not build_info then
+        return {}
+    end
+
+    local classpath = build_info["Scala Classpath"] or build_info["Classpath"]
+    if not classpath then
+        return {}
+    end
+
+    local frameworks = {}
+    local found = {}
+
+    for _, jar in ipairs(classpath) do
+        for _, fw in ipairs(FRAMEWORK_PATTERNS) do
+            if jar:match(fw.pattern) and not found[fw.name] then
+                table.insert(frameworks, fw.name)
+                found[fw.name] = true
+            end
+        end
+    end
+
+    return frameworks
+end
+
 function M.prefetch(root_path, file_path, cache_enabled)
     if not cache_enabled then
         return

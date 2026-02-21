@@ -3,7 +3,6 @@ local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local metals = require("neotest-scala.metals")
 local build = require("neotest-scala.build")
-local textspec = require("neotest-scala.framework.specs2.textspec")
 local strategy = require("neotest-scala.strategy")
 local results = require("neotest-scala.results")
 
@@ -69,37 +68,47 @@ end
 ---@return neotest.Tree | nil
 function adapter.discover_positions(path)
     local content = lib.files.read(path)
+    local root = adapter.root(path)
 
-    if textspec.is_textspec(content) then
-        return textspec.discover_positions(path, content)
+    if not root then
+        return {}
     end
 
-    local query = [[
-      (object_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
+    local frameworks = metals.get_frameworks(root, path, cache_build_info)
+    if not frameworks or #frameworks == 0 then
+        return {}
+    end
 
-      (class_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
+    local trees = {}
+    for _, fw_name in ipairs(frameworks) do
+        local framework = fw.get_framework_class(fw_name)
+        if framework and framework.discover_positions then
+            local style = framework.detect_style and framework.detect_style(content) or nil
+            if style then
+                local tree = framework.discover_positions(style, path, content, {})
+                if tree then
+                    table.insert(trees, tree)
+                end
+            end
+        end
+    end
 
-      ((call_expression
-        function: (call_expression
-        function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
-        arguments: (arguments (string) @test.name))
-      )) @test.definition
-
-      (infix_expression
-        left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init "-" "in" "should" "can" ">>")
-        right: (_)
-      ) @test.definition
-    ]]
-    return lib.treesitter.parse_positions(path, query, {
-        nested_tests = true,
-        require_namespaces = true,
-        position_id = build_position_id,
-    })
+    if #trees == 0 then
+        return {}
+    elseif #trees == 1 then
+        return trees[1]
+    else
+        local result = trees[1]
+        for i = 2, #trees do
+            local other = trees[i]
+            if other._children then
+                for _, child in ipairs(other._children) do
+                    table.insert(result._children, child)
+                end
+            end
+        end
+        return result
+    end
 end
 
 ---@async

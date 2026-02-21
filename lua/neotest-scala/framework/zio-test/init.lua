@@ -1,8 +1,38 @@
+local lib = require("neotest.lib")
 local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
+
+---Detect if this is a ZIO Test spec file
+---@param content string
+---@return string|nil
+function M.detect_style(content)
+    if content:match("extends%s+ZIOSpecDefault") or content:match("zio%.test") then
+        return "spec"
+    end
+    return nil
+end
+
+---Discover test positions in ZIO Test spec
+---@param style string
+---@param path string
+---@param content string
+---@param opts table
+---@return neotest.Tree|nil
+function M.discover_positions(style, path, content, opts)
+    local query = [[
+((call_expression
+  function: (identifier) @func_name (#any-of? @func_name "test" "suite")
+  arguments: (arguments (string) @test.name)
+)) @test.definition
+]]
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+    })
+end
 
 ---@param root_path string Project root path
 ---@param project string
