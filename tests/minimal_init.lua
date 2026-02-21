@@ -1,7 +1,7 @@
 --- Minimal Neovim init for running tests with plenary.busted.
 ---
 --- Prerequisites:
----   1. plenary.nvim must be installed and on runtimepath
+---   1. nvim-nio must be installed and on runtimepath
 ---   2. tree-sitter-scala grammar must be installed (`:TSInstall scala`)
 ---
 --- Usage (from project root):
@@ -18,22 +18,15 @@ package.path = root .. '/?.lua;'
   .. root .. '/?/init.lua;'
   .. package.path
 
--- Try to find plenary.nvim in common locations
+-- Load dependencies from multiple possible locations
 local dep_paths = {
   -- lazy.nvim
-  vim.fn.stdpath('data') .. '/lazy/plenary.nvim',
-  vim.fn.stdpath('data') .. '/lazy/nvim-treesitter',
+  vim.fn.stdpath('data') .. '/lazy/nvim-nio',
   -- packer
-  vim.fn.stdpath('data') .. '/site/pack/packer/start/plenary.nvim',
-  vim.fn.stdpath('data') .. '/site/pack/packer/start/nvim-treesitter',
   vim.fn.stdpath('data') .. '/site/pack/packer/start/nvim-nio',
   -- manual / other
-  vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/plenary.nvim'),
-  vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter'),
   vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/nvim-nio'),
   -- nix
-  vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/plenary.nvim',
-  vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/nvim-treesitter',
   vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/nvim-nio',
 }
 

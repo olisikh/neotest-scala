@@ -1,5 +1,5 @@
-local Path = require("plenary.path")
 local lib = require("neotest.lib")
+local sep = package.config:sub(1, 1)
 
 local M = {}
 
@@ -63,7 +63,7 @@ end
 ---@param path string
 ---@return string
 function M.get_file_name(path)
-    local parts = vim.split(path, Path.path.sep)
+    local parts = vim.split(path, sep)
     return parts[#parts]
 end
 
