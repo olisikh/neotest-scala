@@ -33,7 +33,7 @@ function M.discover_positions(style, path, content, opts)
 
       ((call_expression
         function: (call_expression
-        function: (identifier) @func_name (#any-of? @func_name "test" "suite")
+        function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
