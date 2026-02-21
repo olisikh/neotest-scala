@@ -97,5 +97,32 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
+function M.build_namespace(ns_node, report_prefix, node)
+    local data = ns_node:data()
+    local path = data.path
+    local id = data.id
+    local package_name = utils.get_package_name(path)
+
+    local namespace = {
+        path = path,
+        namespace = id,
+        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        tests = {},
+    }
+
+    for _, n in node:iter_nodes() do
+        table.insert(namespace.tests, n)
+    end
+
+    return namespace
+end
+
+function M.match_test(junit_test, position)
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    return junit_test_id == test_id
+end
+
 ---@return neotest-scala.Framework
 return M

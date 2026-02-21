@@ -218,5 +218,25 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
+function M.build_namespace(ns_node, report_prefix, node)
+    local data = ns_node:data()
+    local path = data.path
+    local id = data.id
+    local package_name = utils.get_package_name(path)
+
+    local namespace = {
+        path = path,
+        namespace = id,
+        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
+        tests = {},
+    }
+
+    for _, n in node:iter_nodes() do
+        table.insert(namespace.tests, n)
+    end
+
+    return namespace
+end
+
 ---@return neotest-scala.Framework
 return M
