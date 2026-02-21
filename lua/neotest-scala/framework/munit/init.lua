@@ -1,4 +1,5 @@
 local utils = require("neotest-scala.utils")
+local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
@@ -73,7 +74,7 @@ end
 ---@return string[]
 function M.build_command(root_path, project, tree, name, extra_args)
     local test_path = build_test_path(tree, name)
-    return utils.build_command_with_test_path(root_path, project, test_path, extra_args)
+    return build.command_with_path(root_path, project, test_path, extra_args)
 end
 
 ---@return neotest-scala.Framework

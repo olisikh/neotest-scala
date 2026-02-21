@@ -1,6 +1,8 @@
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local metals = require("neotest-scala.metals")
+local build = require("neotest-scala.build")
 local textspec = require("neotest-scala.framework.specs2.textspec")
 local strategy = require("neotest-scala.strategy")
 local results = require("neotest-scala.results")
@@ -13,6 +15,8 @@ adapter.root = lib.files.match_root_pattern("build.sbt")
 local function get_args(_, _, _, _)
     return {}
 end
+
+local cache_build_info = true
 
 ---@param position neotest.Position
 ---@param parents neotest.Position[]
@@ -106,19 +110,19 @@ function adapter.build_spec(args)
     local root_path = adapter.root(position.path)
     assert(root_path, "[neotest-scala]: Can't resolve root project folder")
 
-    local build_target_info = utils.get_build_target_info(root_path, position.path)
+    local build_target_info = metals.get_build_target_info(root_path, position.path, cache_build_info)
     if not build_target_info then
         vim.print("[neotest-scala]: Can't resolve project, has Metals initialised? Please try again.")
         return {}
     end
 
-    local project_name = utils.get_project_name(build_target_info)
+    local project_name = metals.get_project_name(build_target_info)
     if not project_name then
         vim.print("[neotest-scala]: Can't resolve project name")
         return {}
     end
 
-    local framework = utils.get_framework(build_target_info)
+    local framework = metals.get_framework(build_target_info)
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
         vim.print("[neotest-scala]: Failed to detect testing library used in the project")
@@ -169,16 +173,19 @@ setmetatable(adapter, {
     __call = function(_, opts)
         opts = opts or {}
 
-        utils.setup({
+        cache_build_info = opts.cache_build_info ~= false
+
+        build.setup({
             build_tool = opts.build_tool,
             compile_on_save = opts.compile_on_save,
-            cache_build_info = opts.cache_build_info,
         })
 
         if opts.compile_on_save then
             local root = adapter.root(vim.fn.getcwd())
             if root then
-                utils.setup_compile_on_save(root)
+                build.setup_compile_on_save(root, function(r, p)
+                    return metals.get_build_target_info(r, p, cache_build_info)
+                end)
             end
         end
 

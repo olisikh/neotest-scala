@@ -1,4 +1,5 @@
 local utils = require("neotest-scala.utils")
+local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
 local M = {}
@@ -52,10 +53,10 @@ function M.build_command(root_path, project, tree, name, extra_args)
 
     if tree_type == "test" then
         local full_test_name = build_freespec_test_path(tree, name)
-        return utils.build_command(root_path, project, tree, full_test_name, extra_args)
+        return build.command(root_path, project, tree, full_test_name, extra_args)
     end
 
-    return utils.build_command(root_path, project, tree, name, extra_args)
+    return build.command(root_path, project, tree, name, extra_args)
 end
 
 ---@param junit_test table<string, string>
