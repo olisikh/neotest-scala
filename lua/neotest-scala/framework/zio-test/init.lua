@@ -3,7 +3,7 @@ local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
-local M = {}
+local M = { name = "zio-test" }
 
 ---Detect if this is a ZIO Test spec file
 ---@param content string

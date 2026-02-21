@@ -103,7 +103,7 @@ function adapter.build_spec(args)
 
     local build_target_info = metals.get_build_target_info(root_path, position.path, cache_build_info)
     if not build_target_info then
-        vim.print("[neotest-scala]: Can't resolve project, has Metals initialised? Please try again.")
+        vim.print("[neotest-scala]: Metals returned no build information, try again later")
         return {}
     end
 
@@ -114,9 +114,13 @@ function adapter.build_spec(args)
     end
 
     local framework = metals.get_framework(build_target_info)
+    if not framework then
+        vim.print("[neotest-scala]: Failed to detect testing library based on classpath")
+        return {}
+    end
+
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
-        vim.print("[neotest-scala]: Failed to detect testing library used in the project")
         return {}
     end
 

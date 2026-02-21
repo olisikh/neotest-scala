@@ -155,12 +155,12 @@ end
 
 function M.get_framework(build_target_info)
     if not build_target_info then
-        return "scalatest"
+        return nil
     end
 
     local classpath = build_target_info["Scala Classpath"] or build_target_info["Classpath"]
     if not classpath then
-        return "scalatest"
+        return nil
     end
 
     for _, jar in ipairs(classpath) do
@@ -168,14 +168,14 @@ function M.get_framework(build_target_info)
             or jar:match("(munit)_.*-.*%.jar")
             or jar:match("(scalatest)_.*-.*%.jar")
             or jar:match("(utest)_.*-.*%.jar")
-            or jar:match("(zio%%-test)_.*-.*%.jar")
+            or jar:match("(zio%-test)_.*-.*%.jar")
 
         if framework then
             return framework
         end
     end
 
-    return "scalatest"
+    return nil
 end
 
 local FRAMEWORK_PATTERNS = {
@@ -194,6 +194,7 @@ function M.get_frameworks(root_path, target_path, cache_enabled)
 
     local classpath = build_info["Scala Classpath"] or build_info["Classpath"]
     if not classpath then
+        vim.print("[neotest-scala]: No classpath information found in build target info")
         return {}
     end
 

@@ -184,13 +184,7 @@ function M.collect(spec, result, node)
 
         for _, test in ipairs(ns.tests) do
             local position = test:data()
-            local test_result = find_test_result(
-                framework,
-                junit_results,
-                position,
-                ns,
-                spec.env.framework
-            )
+            local test_result = find_test_result(framework, junit_results, position, ns, spec.env.framework)
 
             if test_result then
                 test_results[position.id] = test_result

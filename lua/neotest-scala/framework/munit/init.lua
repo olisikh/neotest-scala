@@ -3,7 +3,7 @@ local utils = require("neotest-scala.utils")
 local build = require("neotest-scala.build")
 
 ---@class neotest-scala.Framework
-local M = {}
+local M = { name = "munit" }
 
 ---Detect munit style from file content
 ---@param content string
