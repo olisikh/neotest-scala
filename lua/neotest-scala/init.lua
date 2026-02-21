@@ -17,24 +17,6 @@ end
 
 local cache_build_info = true
 
----@param position neotest.Position
----@param parents neotest.Position[]
----@return string
-local function build_position_id(position, parents)
-    local result = {}
-
-    for _, parent in ipairs(parents) do
-        if parent.type == "namespace" then
-            table.insert(result, utils.get_package_name(parent.path) .. parent.name)
-        elseif parent.type ~= "dir" and parent.type ~= "file" then
-            table.insert(result, utils.get_position_name(parent))
-        end
-    end
-
-    table.insert(result, utils.get_position_name(position))
-
-    return table.concat(result, ".")
-end
 
 ---@async
 ---@param file_path string
