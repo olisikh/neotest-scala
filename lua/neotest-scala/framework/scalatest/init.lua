@@ -27,20 +27,36 @@ function M.discover_positions(style, path, content, opts)
     local query
     if style == "funsuite" then
         query = [[
-((call_expression
-  function: (identifier) @func_name (#eq? @func_name "test")
-  arguments: (arguments (string) @test.name)
-)) @test.definition
-]]
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (identifier) @func_name (#eq? @func_name "test")
+        arguments: (arguments (string) @test.name)
+      )) @test.definition
+    ]]
     else
         -- FreeSpec: "name" - { } and "name" in { }
         query = [[
-(infix_expression
-  left: (string) @test.name
-  operator: (_) @spec_init (#any-of? @spec_init "-" "in")
-  right: (_)
-) @test.definition
-]]
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (infix_expression
+        left: (string) @test.name
+        operator: (_) @spec_init (#any-of? @spec_init "-" "in")
+        right: (_)
+      ) @test.definition
+    ]]
     end
 
     return lib.treesitter.parse_positions(path, query, {

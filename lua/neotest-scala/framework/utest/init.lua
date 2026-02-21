@@ -23,11 +23,19 @@ end
 ---@return neotest.Tree | nil
 function M.discover_positions(style, path, content, opts)
     local query = [[
-((call_expression
-  function: (identifier) @func_name (#eq? @func_name "test")
-  arguments: (arguments (string) @test.name)
-)) @test.definition
-]]
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (identifier) @func_name (#eq? @func_name "test")
+        arguments: (arguments (string) @test.name)
+      )) @test.definition
+    ]]
     return lib.treesitter.parse_positions(path, query, {
         nested_tests = true,
         require_namespaces = true,
