@@ -42,12 +42,12 @@ Update wiki documentation to accurately reflect specs2 TextSpec support, removin
   - Updated specs2 syntax summary example
 
 ### Definition of Done
-- [ ] `wiki/6. specs2.md` no longer contains "String-based Specifications: ... is **not supported**"
-- [ ] TextSpec section added with working Scala example
-- [ ] Hierarchical path format (`::` separator) documented
-- [ ] `wiki/3. Supported Test Libraries.md` mentions both specification styles
-- [ ] All wiki links resolve correctly
-- [ ] Examples compile and match actual neotest behavior
+- ] `wiki/6. specs2.md` no longer contains "String-based Specifications: ... is **not supported**"
+- [x] TextSpec section added with working Scala example
+- [x] Hierarchical path format (`::` separator) documented
+- [x] `wiki/3. Supported Test Libraries.md` mentions both specification styles
+- [x] All wiki links resolve correctly
+- [x] Examples compile and match actual neotest behavior
 
 ### Must Have
 - Clear distinction between mutable.Specification and TextSpec styles
@@ -94,7 +94,7 @@ No parallelization - sequential file updates.
 
 ## TODOs
 
-- [ ] 1. Update `wiki/6. specs2.md` with TextSpec documentation
+- [x] 1. Update `wiki/6. specs2.md` with TextSpec documentation
 
   **What to do**:
   - Remove line 145 "String-based Specifications: ... is **not supported**" from Known Limitations
@@ -157,7 +157,7 @@ No parallelization - sequential file updates.
 
 ---
 
-- [ ] 2. Update `wiki/3. Supported Test Libraries.md` specs2 entry
+- [x] 2. Update `wiki/3. Supported Test Libraries.md` specs2 entry
 
   **What to do**:
   - Update specs2 row in overview table (line 11): change "Specification-based" to "mutable.Specification and TextSpec (s2\"\"\")"
@@ -210,9 +210,9 @@ cat wiki/3.Supported\ Test\ Libraries.md | grep -c "TextSpec"  # Should return 1
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] No "not supported" text remaining for TextSpec
-- [ ] Examples are correct and compilable
-- [ ] Wiki links resolve
-- [ ] Formatting follows existing wiki style
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] No "not supported" text remaining for TextSpec
+- [x] Examples are correct and compilable
+- [x] Wiki links resolve
+- [x] Formatting follows existing wiki style

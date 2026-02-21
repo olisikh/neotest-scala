@@ -5,7 +5,6 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = {}
 
----Detect specs2 style from file content
 ---@param content string
 ---@return "mutable" | "text" | nil
 function M.detect_style(content)
@@ -17,7 +16,6 @@ function M.detect_style(content)
     return nil
 end
 
----Discover test positions for specs2
 ---@param style "mutable" | "text"
 ---@param path string
 ---@param content string
@@ -29,7 +27,6 @@ function M.discover_positions(style, path, content, opts)
         return textspec.discover_positions(path, content)
     end
 
-    -- Mutable style - use treesitter query
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -52,7 +49,6 @@ function M.discover_positions(style, path, content, opts)
     })
 end
 
---- Builds a command for running tests for the framework.
 ---@param root_path string Project root path
 ---@param project string
 ---@param tree neotest.Tree

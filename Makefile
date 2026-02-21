@@ -1,4 +1,4 @@
-.PHONY: test test-utils test-junit test-framework test-clean
+.PHONY: test test-utils test-junit test-framework test-integration test-clean
 
 NVIM_TEST := nvim --headless --clean -u tests/minimal_init.lua
 PLENARY_OPTS := {minimal_init = 'tests/minimal_init.lua'}
@@ -18,6 +18,10 @@ test-junit:
 # Run framework-specific tests
 test-framework:
 	$(NVIM_TEST) -c "PlenaryBustedDirectory tests/framework/ $(PLENARY_OPTS)"
+
+# Run integration tests
+test-integration:
+	$(NVIM_TEST) -c "PlenaryBustedDirectory tests/integration/ $(PLENARY_OPTS)"
 
 # Clean up test artifacts
 test-clean:
