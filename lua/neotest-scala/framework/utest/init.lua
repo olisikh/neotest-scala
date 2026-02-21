@@ -39,6 +39,7 @@ function M.discover_positions(style, path, content, opts)
     return lib.treesitter.parse_positions(path, query, {
         nested_tests = true,
         require_namespaces = true,
+        position_id = utils.build_position_id,
     })
 end
 

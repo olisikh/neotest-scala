@@ -114,4 +114,24 @@ function M.string_unescape_xml(s)
     return s
 end
 
+--- Build position ID from position and parents (shared across frameworks)
+---@param position neotest.Position
+---@param parents neotest.Position[]
+---@return string
+function M.build_position_id(position, parents)
+    local result = {}
+
+    for _, parent in ipairs(parents) do
+        if parent.type == "namespace" then
+            table.insert(result, M.get_package_name(parent.path) .. parent.name)
+        elseif parent.type ~= "dir" and parent.type ~= "file" then
+            table.insert(result, M.get_position_name(parent))
+        end
+    end
+
+    table.insert(result, M.get_position_name(position))
+
+    return table.concat(result, ".")
+end
+
 return M
