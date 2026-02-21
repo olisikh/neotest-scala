@@ -32,8 +32,9 @@ function M.discover_positions(style, path, content, opts)
       ) @namespace.definition
 
       ((call_expression
+        function: (call_expression
         function: (identifier) @func_name (#any-of? @func_name "test" "suite")
-        arguments: (arguments (string) @test.name)
+        arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
     return lib.treesitter.parse_positions(path, query, {

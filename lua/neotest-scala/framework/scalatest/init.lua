@@ -36,8 +36,9 @@ function M.discover_positions(style, path, content, opts)
       ) @namespace.definition
 
       ((call_expression
+        function: (call_expression
         function: (identifier) @func_name (#eq? @func_name "test")
-        arguments: (arguments (string) @test.name)
+        arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
     else
