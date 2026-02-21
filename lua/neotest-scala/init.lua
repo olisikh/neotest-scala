@@ -180,8 +180,24 @@ setmetatable(adapter, {
             compile_on_save = opts.compile_on_save,
         })
 
+        local root = adapter.root(vim.fn.getcwd())
+
+        if root then
+            -- Prefetch build info when Scala files are opened
+            vim.api.nvim_create_autocmd("BufReadPost", {
+                pattern = "*.scala",
+                callback = function(args)
+                    local buf_path = args.file
+                    local buf_root = adapter.root(buf_path)
+                    if buf_root == root then
+                        metals.prefetch(root, buf_path, cache_build_info)
+                    end
+                end,
+                group = vim.api.nvim_create_augroup("neotest-scala-prefetch", { clear = true }),
+            })
+        end
+
         if opts.compile_on_save then
-            local root = adapter.root(vim.fn.getcwd())
             if root then
                 build.setup_compile_on_save(root, function(r, p)
                     return metals.get_build_target_info(r, p, cache_build_info)

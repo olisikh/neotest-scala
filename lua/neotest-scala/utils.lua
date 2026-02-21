@@ -45,12 +45,12 @@ end
 
 --- Get package name from top of file
 ---@param path string
----@return string
+---@return string|nil
 function M.get_package_name(path)
     local lib = require("neotest.lib")
     local success, lines = pcall(lib.files.read_lines, path)
     if not success then
-        return ""
+        return nil
     end
     local line = lines[1]
     if vim.startswith(line, "package") then

@@ -64,7 +64,7 @@ describe("munit", function()
       end
       return parts[#parts]
     end)
-    H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+    H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
       captured_test_path = test_path
       return { "sbt", project .. "/testOnly", test_path }
     end)

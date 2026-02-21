@@ -51,7 +51,7 @@ describe("utest", function()
     describe("for single test (type == 'test')", function()
       it("builds path with package.namespace.testname when parent is namespace", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -80,7 +80,7 @@ describe("utest", function()
 
       it("builds path for nested tests", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -121,7 +121,7 @@ describe("utest", function()
     describe("for file (type == 'file')", function()
       it("builds path with brace syntax for multiple suites", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -159,7 +159,7 @@ describe("utest", function()
 
       it("builds path with brace syntax for single suite", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -191,7 +191,7 @@ describe("utest", function()
     describe("for directory (type == 'dir')", function()
       it("builds path with brace syntax for multiple packages", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -235,7 +235,7 @@ describe("utest", function()
 
       it("deduplicates packages in directory", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -273,10 +273,10 @@ describe("utest", function()
       end)
     end)
 
-    describe("delegates to utils.build_command_with_test_path", function()
+    describe("delegates to build.command_with_path", function()
       it("passes all arguments correctly", function()
         local called_with = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           called_with = { root_path, project, test_path, extra_args }
           return { "mocked", "command" }
         end)
@@ -312,7 +312,7 @@ describe("utest", function()
 
       it("handles nil extra_args", function()
         local called_with = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           called_with = { root_path, project, test_path, extra_args }
           return {}
         end)
@@ -343,7 +343,7 @@ describe("utest", function()
     describe("for namespace (type == 'namespace')", function()
       it("builds path with package.namespace", function()
         local test_path_arg = nil
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+        H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
           return { "sbt", "project/testOnly", test_path }
         end)
@@ -365,9 +365,9 @@ describe("utest", function()
 
       it("returns nil when package is not found", function()
         local test_path_arg = "not_set"
-        H.mock_fn("neotest-scala.utils", "build_command_with_test_path", function(root_path, project, test_path, extra_args)
+      H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
           test_path_arg = test_path
-          return {}
+          return { "sbt", "project/testOnly", test_path }
         end)
         H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
           return nil

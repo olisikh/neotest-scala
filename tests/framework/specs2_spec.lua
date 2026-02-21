@@ -11,11 +11,7 @@ describe("specs2", function()
       local called = false
       local captured_args = {}
 
-      H.mock_fn("neotest-scala.utils", "build_test_namespace", function(tree)
-        return "com.example.SpecClass"
-      end)
-
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called = true
         captured_args = {
           root_path = root_path,
@@ -27,7 +23,7 @@ describe("specs2", function()
         return { "sbt", "test" }
       end)
 
-      local tree = { data = { type = "test" } }
+      local tree = { _data = { type = "test", path = "/test/path.scala" }, data = function(self) return self._data end }
       local result = specs2.build_command("/root", "myproject", tree, "testName", { "-v" })
 
       assert.is_true(called)
@@ -39,19 +35,15 @@ describe("specs2", function()
       assert.are.same({ "sbt", "test" }, result)
     end)
 
-    it("delegates to utils.build_command when build_test_namespace returns nil", function()
+    it("delegates to build.command", function()
       local called = false
 
-      H.mock_fn("neotest-scala.utils", "build_test_namespace", function(tree)
-        return nil
-      end)
-
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called = true
         return { "sbt", "test" }
       end)
 
-      local tree = { data = { type = "dir" } }
+      local tree = { _data = { type = "dir", path = "/test/path.scala" }, data = function(self) return self._data end }
       local result = specs2.build_command("/root", "myproject", tree, nil, {})
 
       assert.is_true(called)

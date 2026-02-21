@@ -1,25 +1,13 @@
-local lib = require("neotest.lib")
+local nio = require("nio")
 
 local M = {}
 
--- Cache for build target info
-local build_target_cache = {}
+local cache = {}
 local cache_timestamp = {}
+local in_flight = {}
 
----Returns Metals LSP client if Metals is active on current buffer
----@param bufnr integer? buffer to look for metals client
----@return vim.lsp.Client?
-function M.find_client(bufnr)
-    local clients = vim.lsp.get_clients({ name = "metals", bufnr = bufnr })
-    if #clients > 0 then
-        return clients[1]
-    end
-    return nil
-end
+local CACHE_TTL = 60
 
----NOTE: If the format in which metals returns decoded file output changes - this function might start failing
----@param text string
----@return table
 local function parse_build_target_info(text)
     local result = {}
     local curr_section = nil
@@ -39,152 +27,199 @@ local function parse_build_target_info(text)
     return result
 end
 
----Get project report from Metals
----@param metals vim.lsp.Client metals client
----@param path string project path (root folder)
----@param project string project name
----@param timeout integer? timeout for the request
----@return table | nil report about the project
-local function fetch_build_target_info(metals, path, project, timeout)
-    local build_target_info = nil
-
-    if metals then
-        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", path, project)
-
-        local params = {
-            command = "metals.file-decode",
-            arguments = { metals_uri },
-        }
-        local response = metals.request_sync("workspace/executeCommand", params, timeout or 10000, 0)
-        if not response or response.err then
-            vim.print("[neotest-scala]: Failed to get build target info, please try again")
-        else
-            build_target_info = parse_build_target_info(response.result.value)
-        end
-    end
-
-    return build_target_info
-end
-
---- Get cache key for build target info
----@param root_path string
----@param target_path string
----@return string
 local function get_cache_key(root_path, target_path)
     return root_path .. ":" .. target_path
 end
 
----Get the build target info by listing build targets that Metals has found
----@param root_path string project path where build.sbt is
----@param target_path string path to the file or folder that is being tested
----@param cache_enabled boolean whether to cache results
----@param timeout integer? timeout for the request
----@return table | nil build target info
-function M.get_build_target_info(root_path, target_path, cache_enabled, timeout)
-    if cache_enabled then
-        local cache_key = get_cache_key(root_path, target_path)
-        local cached = build_target_cache[cache_key]
-        local timestamp = cache_timestamp[cache_key]
+local function is_cache_valid(key)
+    local timestamp = cache_timestamp[key]
+    if not timestamp then
+        return false
+    end
+    return (os.time() - timestamp) < CACHE_TTL
+end
 
-        if cached and timestamp and (os.time() - timestamp) < 60 then
-            return cached
-        end
+local function do_get_build_target_info(root_path, target_path, timeout_ms)
+    timeout_ms = timeout_ms or 10000
+
+    local metals = nio.lsp.get_clients({ name = "metals" })[1]
+    if not metals then
+        return nil
     end
 
-    local metals = M.find_client()
-    local result = nil
-    timeout = timeout or 10000
+    local err, targets_result = metals.request.workspace_executeCommand({
+        command = "metals.list-build-targets",
+    })
 
-    if metals then
-        local body = { command = "metals.list-build-targets" }
-        local response = metals.request_sync("workspace/executeCommand", body, timeout, 0)
+    if err or not targets_result or #targets_result == 0 then
+        vim.schedule(function()
+            vim.print("[neotest-scala]: Metals returned no build targets")
+        end)
+        return nil
+    end
 
-        if not response or #response.result == 0 then
-            vim.print("[neotest-scala]: Metals returned no project name, please try again.")
-        elseif response.err then
-            vim.print("[neotest-scala]: Request to metals failed: " .. response.err.message)
-        else
-            if #response.result > 1 then
-                local target_src_path = target_path:gsub("%*$", "")
+    if #targets_result == 1 then
+        local project = targets_result[1]
+        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", root_path, project)
 
-                for _, name in ipairs(response.result) do
-                    local build_target_info = fetch_build_target_info(metals, root_path, name, timeout)
-                    if build_target_info and build_target_info["Sources"] then
-                        for _, src_path in ipairs(build_target_info["Sources"]) do
-                            src_path = src_path:gsub("%*$", "")
+        local decode_err, decode_result = metals.request.workspace_executeCommand({
+            command = "metals.file-decode",
+            arguments = { metals_uri },
+        })
 
-                            if vim.startswith(target_src_path, src_path) then
-                                result = build_target_info
-                                break
-                            end
-                        end
+        if decode_err or not decode_result or not decode_result.value then
+            return nil
+        end
+
+        return parse_build_target_info(decode_result.value)
+    end
+
+    local target_src_path = target_path:gsub("%*$", "")
+
+    for _, project in ipairs(targets_result) do
+        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", root_path, project)
+
+        local decode_err, decode_result = metals.request.workspace_executeCommand({
+            command = "metals.file-decode",
+            arguments = { metals_uri },
+        })
+
+        if not decode_err and decode_result and decode_result.value then
+            local project_info = parse_build_target_info(decode_result.value)
+
+            if project_info and project_info["Sources"] then
+                for _, src_path in ipairs(project_info["Sources"]) do
+                    src_path = src_path:gsub("%*$", "")
+
+                    if vim.startswith(target_src_path, src_path) then
+                        return project_info
                     end
                 end
-            else
-                result = response.result[1]
             end
         end
     end
 
-    if cache_enabled and result then
-        local cache_key = get_cache_key(root_path, target_path)
-        build_target_cache[cache_key] = result
-        cache_timestamp[cache_key] = os.time()
-    end
-
-    return result
+    return nil
 end
 
----Invalidate build target cache
----@param root_path string|nil Optional: invalidate only for this root
+function M.get_build_target_info(root_path, target_path, cache_enabled, timeout_ms)
+    local key = get_cache_key(root_path, target_path)
+
+    if cache_enabled and is_cache_valid(key) and cache[key] ~= nil then
+        return cache[key]
+    end
+
+    if in_flight[key] then
+        return in_flight[key].wait()
+    end
+
+    local future = nio.create(function()
+        local result = do_get_build_target_info(root_path, target_path, timeout_ms)
+
+        if cache_enabled and result then
+            cache[key] = result
+            cache_timestamp[key] = os.time()
+        end
+
+        in_flight[key] = nil
+        return result
+    end)
+
+    in_flight[key] = future
+
+    return future()
+end
+
 function M.invalidate_cache(root_path)
     if root_path then
-        for key, _ in pairs(build_target_cache) do
-            if vim.startswith(key, root_path) then
-                build_target_cache[key] = nil
-                cache_timestamp[key] = nil
+        for k, _ in pairs(cache) do
+            if vim.startswith(k, root_path) then
+                cache[k] = nil
+                cache_timestamp[k] = nil
             end
         end
     else
-        build_target_cache = {}
+        cache = {}
         cache_timestamp = {}
     end
 end
 
----Take build target name and turn it into a module name
----@param build_target_info table
----@return string|nil
 function M.get_project_name(build_target_info)
     if build_target_info and build_target_info["Target"] then
         return (build_target_info["Target"][1]:gsub("-test$", ""))
     end
+    return nil
 end
 
----Search for a test library dependency in a test build target
----@param build_target_info table build target info
----@return string name of the test library being used in the project
 function M.get_framework(build_target_info)
-    local framework = nil
+    if not build_target_info then
+        return "scalatest"
+    end
 
-    if build_target_info then
-        local classpath = build_target_info["Scala Classpath"] or build_target_info["Classpath"]
+    local classpath = build_target_info["Scala Classpath"] or build_target_info["Classpath"]
+    if not classpath then
+        return "scalatest"
+    end
 
-        if classpath then
-            for _, jar in ipairs(classpath) do
-                framework = jar:match("(specs2)-core_.*-.*%.jar")
-                    or jar:match("(munit)_.*-.*%.jar")
-                    or jar:match("(scalatest)_.*-.*%.jar")
-                    or jar:match("(utest)_.*-.*%.jar")
-                    or jar:match("(zio%%-test)_.*-.*%.jar")
+    for _, jar in ipairs(classpath) do
+        local framework = jar:match("(specs2)-core_.*-.*%.jar")
+            or jar:match("(munit)_.*-.*%.jar")
+            or jar:match("(scalatest)_.*-.*%.jar")
+            or jar:match("(utest)_.*-.*%.jar")
+            or jar:match("(zio%%-test)_.*-.*%.jar")
 
-                if framework then
-                    break
-                end
-            end
+        if framework then
+            return framework
         end
     end
 
-    return framework or "scalatest"
+    return "scalatest"
 end
+
+function M.prefetch(root_path, file_path, cache_enabled)
+    if not cache_enabled then
+        return
+    end
+
+    local key = get_cache_key(root_path, file_path)
+
+    if cache[key] ~= nil or in_flight[key] then
+        return
+    end
+
+    local future = nio.create(function()
+        local result = do_get_build_target_info(root_path, file_path, 10000)
+
+        if result then
+            cache[key] = result
+            cache_timestamp[key] = os.time()
+        end
+
+        in_flight[key] = nil
+        return result
+    end)
+
+    in_flight[key] = future
+
+    nio.run(future)
+end
+
+pcall(function()
+    vim.lsp.handlers["metals/buildTargetChanged"] = function(_, result, ctx)
+        if not result then
+            return
+        end
+
+        vim.schedule(function()
+            local client = vim.lsp.get_client_by_id(ctx.client_id)
+            if client then
+                local root_path = client.config.root_dir
+                if root_path then
+                    M.invalidate_cache(root_path)
+                end
+            end
+        end)
+    end
+end)
 
 return M

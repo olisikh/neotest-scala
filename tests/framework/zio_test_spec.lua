@@ -10,14 +10,14 @@ describe("zio-test", function()
 
     it("delegates to utils.build_command with all arguments", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return { "mocked", "command" }
       end)
 
       local root_path = "/project/root"
       local project = "myproject"
-      local tree = { data = { type = "test" } }
+      local tree = { _data = { type = "test", path = "/test/path.scala" }, data = function(self) return self._data end }
       local name = "MyTestClass"
       local extra_args = { "--verbose" }
 
@@ -34,23 +34,25 @@ describe("zio-test", function()
 
     it("returns the result from utils.build_command unchanged", function()
       local expected_command = { "sbt", "myproject/testOnly", "com.example.TestSpec" }
-      H.mock_fn("neotest-scala.utils", "build_command", function()
+      H.mock_fn("neotest-scala.build", "command", function()
         return expected_command
       end)
 
-      local result = zio_test.build_command("/root", "myproject", {}, "TestSpec", {})
+      local mock_tree = { _data = { type = "namespace", path = "/test/path.scala" }, data = function(self) return self._data end }
+      local result = zio_test.build_command("/root", "myproject", mock_tree, "TestSpec", {})
 
       assert.are.same(expected_command, result)
     end)
 
     it("handles nil extra_args", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.utils", "build_command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
         called_with = { root_path, project, tree, name, extra_args }
         return {}
       end)
 
-      zio_test.build_command("/root", "project", {}, "Test", nil)
+      local mock_tree = { _data = { type = "test", path = "/test/path.scala" }, data = function(self) return self._data end }
+      zio_test.build_command("/root", "project", mock_tree, "Test", nil)
 
       assert(called_with, "build_command should have been called")
       assert.is_nil(called_with[5])
