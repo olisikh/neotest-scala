@@ -81,3 +81,12 @@ package.loaded["neotest.lib.files"] = neotest_lib_files
 vim.o.swapfile = false
 vim.o.backup = false
 vim.o.writebackup = false
+
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  callback = function()
+    local ok, metals = pcall(require, "neotest-scala.metals")
+    if ok and metals.cleanup then
+      metals.cleanup()
+    end
+  end,
+})

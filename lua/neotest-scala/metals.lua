@@ -5,6 +5,8 @@ local M = {}
 local cache = {}
 local cache_timestamp = {}
 local in_flight = {}
+local running_tasks = {}
+local handler_registered = false
 
 local CACHE_TTL = 60
 
@@ -196,30 +198,59 @@ function M.prefetch(root_path, file_path, cache_enabled)
         end
 
         in_flight[key] = nil
+        running_tasks[key] = nil
         return result
     end)
 
     in_flight[key] = future
-
-    nio.run(future)
+    running_tasks[key] = nio.run(future)
 end
 
-pcall(function()
-    vim.lsp.handlers["metals/buildTargetChanged"] = function(_, result, ctx)
-        if not result then
-            return
+function M.cleanup()
+    for key, task in pairs(running_tasks) do
+        if task and task.cancel then
+            pcall(function() task:cancel() end)
         end
-
-        vim.schedule(function()
-            local client = vim.lsp.get_client_by_id(ctx.client_id)
-            if client then
-                local root_path = client.config.root_dir
-                if root_path then
-                    M.invalidate_cache(root_path)
-                end
-            end
-        end)
     end
-end)
+    running_tasks = {}
+
+    in_flight = {}
+    cache = {}
+    cache_timestamp = {}
+
+    if handler_registered then
+        vim.lsp.handlers["metals/buildTargetChanged"] = nil
+        handler_registered = false
+    end
+end
+
+local function register_lsp_handler()
+    if handler_registered then
+        return
+    end
+
+    pcall(function()
+        vim.lsp.handlers["metals/buildTargetChanged"] = function(_, result, ctx)
+            if not result then
+                return
+            end
+
+            vim.schedule(function()
+                local client = vim.lsp.get_client_by_id(ctx.client_id)
+                if client then
+                    local root_path = client.config.root_dir
+                    if root_path then
+                        M.invalidate_cache(root_path)
+                    end
+                end
+            end)
+        end
+    end)
+    handler_registered = true
+end
+
+function M.setup()
+    register_lsp_handler()
+end
 
 return M

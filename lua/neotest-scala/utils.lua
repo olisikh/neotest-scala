@@ -1,4 +1,5 @@
 local Path = require("plenary.path")
+local lib = require("neotest.lib")
 
 local M = {}
 
@@ -47,7 +48,6 @@ end
 ---@param path string
 ---@return string|nil
 function M.get_package_name(path)
-    local lib = require("neotest.lib")
     local success, lines = pcall(lib.files.read_lines, path)
     if not success then
         return nil

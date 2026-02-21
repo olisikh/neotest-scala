@@ -175,6 +175,8 @@ setmetatable(adapter, {
 
         cache_build_info = opts.cache_build_info ~= false
 
+        metals.setup()
+
         build.setup({
             build_tool = opts.build_tool,
             compile_on_save = opts.compile_on_save,

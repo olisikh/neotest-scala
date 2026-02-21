@@ -9,11 +9,11 @@ test:
 
 # Run utility tests
 test-utils:
-	$(NVIM_TEST) -c "PlenaryBustedDirectory tests/utils/ $(PLENARY_OPTS)"
+	$(NVIM_TEST) -c "PlenaryBustedFile tests/utils_spec.lua $(PLENARY_OPTS)"
 
 # Run JUnit test detection tests
 test-junit:
-	$(NVIM_TEST) -c "PlenaryBustedDirectory tests/junit/ $(PLENARY_OPTS)"
+	$(NVIM_TEST) -c "PlenaryBustedFile tests/junit_spec.lua $(PLENARY_OPTS)"
 
 # Run framework-specific tests
 test-framework:
