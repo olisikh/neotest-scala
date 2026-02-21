@@ -26,12 +26,15 @@ local dep_paths = {
   -- packer
   vim.fn.stdpath('data') .. '/site/pack/packer/start/plenary.nvim',
   vim.fn.stdpath('data') .. '/site/pack/packer/start/nvim-treesitter',
+  vim.fn.stdpath('data') .. '/site/pack/packer/start/nvim-nio',
   -- manual / other
   vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/plenary.nvim'),
   vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/nvim-treesitter'),
+  vim.fn.expand('~/.local/share/nvim/site/pack/vendor/start/nvim-nio'),
   -- nix
   vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/plenary.nvim',
   vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/nvim-treesitter',
+  vim.fn.stdpath('data') .. '/site/pack/myNeovimPackages/start/nvim-nio',
 }
 
 for _, p in ipairs(dep_paths) do
