@@ -1,9 +1,32 @@
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local junit = require("neotest-scala.junit")
-local textspec = require("neotest-scala.framework.specs2.textspec")
 
 local M = {}
+
+local function build_test_result(junit_test, position)
+    local error_message = junit_test.error_message or junit_test.error_stacktrace
+    if error_message then
+        local error = { message = error_message }
+
+        local file_name = utils.get_file_name(position.path)
+        local stacktrace = junit_test.error_stacktrace or ""
+        local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
+
+        if line then
+            error.line = tonumber(line) - 1
+        end
+
+        return {
+            errors = { error },
+            status = TEST_FAILED,
+        }
+    end
+
+    return {
+        status = TEST_PASSED,
+    }
+end
 
 local function collect_result(framework, junit_test, position)
     local test_result = nil
@@ -11,26 +34,7 @@ local function collect_result(framework, junit_test, position)
     if framework.build_test_result then
         test_result = framework.build_test_result(junit_test, position)
     else
-        test_result = {}
-
-        local message = junit_test.error_message or junit_test.error_stacktrace
-
-        if message then
-            local error = { message = message }
-
-            local file_name = utils.get_file_name(position.path)
-            local stacktrace = junit_test.error_stacktrace or ""
-            local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
-
-            if line then
-                error.line = tonumber(line) - 1
-            end
-
-            test_result.errors = { error }
-            test_result.status = TEST_FAILED
-        else
-            test_result.status = TEST_PASSED
-        end
+        test_result = build_test_result(junit_test, position)
     end
 
     test_result.test_id = position.id
@@ -38,60 +42,24 @@ local function collect_result(framework, junit_test, position)
     return test_result
 end
 
-local function build_namespace(ns_node, report_prefix, node)
-    local data = ns_node:data()
-    local path = data.path
-    local id = data.id
-    local package_name = utils.get_package_name(path)
-
-    local namespace = {
-        path = path,
-        namespace = id,
-        report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
-        tests = {},
-    }
-
-    for _, n in node:iter_nodes() do
-        table.insert(namespace["tests"], n)
-    end
-
-    return namespace
-end
-
-local function match_test(namespace, junit_result, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. namespace.namespace .. "." .. junit_result.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-
-    return junit_test_id == test_id
-end
-
-local function collect_namespaces(node, report_prefix)
+local function collect_namespaces(framework, node, report_prefix)
     local ns_data = node:data()
     local namespaces = {}
 
     if ns_data.type == "file" then
         for _, ns_node in ipairs(node:children()) do
-            if textspec.is_textspec_namespace(ns_node) then
-                table.insert(namespaces, textspec.build_namespace(ns_node, report_prefix))
-            else
-                table.insert(namespaces, build_namespace(ns_node, report_prefix, ns_node))
+            if framework.build_namespace then
+                table.insert(namespaces, framework.build_namespace(ns_node, report_prefix, ns_node))
             end
         end
     elseif ns_data.type == "namespace" then
-        if textspec.is_textspec_namespace(node) then
-            table.insert(namespaces, textspec.build_namespace(node, report_prefix))
-        else
-            table.insert(namespaces, build_namespace(node, report_prefix, node))
+        if framework.build_namespace then
+            table.insert(namespaces, framework.build_namespace(node, report_prefix, node))
         end
     elseif ns_data.type == "test" then
         local ns_node = utils.find_node(node, "namespace", false)
-        if ns_node then
-            if textspec.is_textspec_namespace(ns_node) then
-                table.insert(namespaces, textspec.build_namespace(ns_node, report_prefix))
-            else
-                table.insert(namespaces, build_namespace(ns_node, report_prefix, node))
-            end
+        if ns_node and framework.build_namespace then
+            table.insert(namespaces, framework.build_namespace(ns_node, report_prefix, node))
         end
     else
         vim.print("[neotest-scala] Neotest run type '" .. ns_data.type .. "' is not supported")
@@ -101,30 +69,15 @@ local function collect_namespaces(node, report_prefix)
     return namespaces
 end
 
-local function match_junit_result(framework, junit_result, position, ns)
-    if framework.match_test and framework.match_test(junit_result, position) then
-        return true
-    end
-
-    if position.extra and position.extra.textspec_path then
-        return textspec.match_test(junit_result, position)
-    end
-
-    return match_test(ns, junit_result, position)
-end
-
-local function find_test_result(framework, junit_results, position, ns, framework_name)
+local function find_test_result(framework, junit_results, position, ns)
     for _, junit_result in ipairs(junit_results) do
-        local matches = false
+        -- Scalatest bypasses namespace check; frameworks handle their own matching
+        local skip_namespace_check = framework.name == "scalatest"
 
-        if framework_name == "scalatest" then
-            matches = framework.match_test and framework.match_test(junit_result, position)
-        elseif junit_result.namespace == ns.namespace then
-            matches = match_junit_result(framework, junit_result, position, ns)
-        end
-
-        if matches then
-            return collect_result(framework, junit_result, position)
+        if skip_namespace_check or junit_result.namespace == ns.namespace then
+            if framework.match_test and framework.match_test(junit_result, position) then
+                return collect_result(framework, junit_result, position)
+            end
         end
     end
 
@@ -171,7 +124,7 @@ function M.collect(spec, result, node)
     end
 
     local report_prefix = project_dir .. "target/test-reports/"
-    local namespaces = collect_namespaces(node, report_prefix)
+    local namespaces = collect_namespaces(framework, node, report_prefix)
 
     if not namespaces then
         return {}
@@ -184,7 +137,7 @@ function M.collect(spec, result, node)
 
         for _, test in ipairs(ns.tests) do
             local position = test:data()
-            local test_result = find_test_result(framework, junit_results, position, ns, spec.env.framework)
+            local test_result = find_test_result(framework, junit_results, position, ns)
 
             if test_result then
                 test_results[position.id] = test_result

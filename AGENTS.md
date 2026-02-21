@@ -1,170 +1,116 @@
-# AGENTS.md - Project Documentation
+# AGENTS.md - neotest-scala
 
-## 1. Project Overview
+## Project Overview
 
-`neotest-scala` is a Neovim adapter for [neotest](https://github.com/rcarriga/neotest) that enables running Scala tests directly from Neovim. It supports multiple Scala test libraries (ScalaTest, munit, specs2, utest, zio-test) and integrates with nvim-metals for project metadata.
+Neovim adapter for [neotest](https://github.com/rcarriga/neotest) that runs Scala tests. Supports: ScalaTest, munit, specs2, utest, zio-test. Integrates with nvim-metals for project metadata.
 
-**Dependencies**: `neotest`, `neotest-plenary`, `nvim-metals` (Scala LSP), `sbt` (build tool).
-
----
-
-## 2. Project Structure
-
-```
-neotest-scala/
-├── lua/neotest-scala/
-│   ├── init.lua           # Main adapter - neotest interface
-│   ├── framework.lua      # Test library registry
-│   ├── utils.lua          # Utilities (Metals integration, commands)
-│   ├── junit.lua          # JUnit XML parsing for test results
-│   └── framework/         # Test library-specific handlers
-│       ├── scalatest.lua
-│       ├── munit.lua
-│       ├── specs2.lua
-│       ├── utest.lua
-│       └── zio-test.lua
-├── test/                  # Scala test projects for each library
-│   ├── build.sbt          # Root project config
-│   ├── scalatest/
-│   ├── munit/
-│   ├── specs2/
-│   ├── utest/
-│   └── zio-test/
-├── stylua.toml            # Lua formatting config
-└── wiki/                  # Documentation (GitHub Wiki)
-```
+**Dependencies**: `neotest`, `nvim-nio`, `nvim-metals` (Scala LSP), `sbt` or `bloop`.
 
 ---
 
-## 3. Architecture
+## Build & Test Commands
 
-### Adapter Flow
-
-```
-:Neotest run
-    │
-    ├─► discover_positions()     # Treesitter query to find tests
-    │
-    ├─► build_spec()             # Build sbt command + DAP config
-    │   ├─► Metals for project info
-    │   ├─► Detect test library via classpath
-    │   └─► Build sbt command
-    │
-    └─► results()                # Parse JUnit XML output
-        └─► junit.lua            # Treesitter XML parser
+### Run All Tests
+```bash
+make test
 ```
 
-### Key Modules
+### Run Single Test File
+```bash
+# Via makefile
+make test-utils        # tests/utils_spec.lua
+make test-junit        # tests/junit_spec.lua
+make test-framework    # tests/framework/*_spec.lua
+make test-integration  # tests/integration/*
 
-| Module | Purpose |
-| :--- | :--- |
-| `init.lua` | Main adapter implementing neotest interface |
-| `framework.lua` | Registry - maps library name to handler |
-| `utils.lua` | Metals integration, package detection, command building |
-| `junit.lua` | Parses JUnit XML reports via Treesitter XML parser |
-| `framework/*.lua` | Library-specific command building + result matching |
+# Direct plenary command
+nvim --headless --clean -u tests/minimal_init.lua \
+  -c "PlenaryBustedFile tests/utils_spec.lua {minimal_init = 'tests/minimal_init.lua'}"
+```
 
----
+### Run Specific Test Pattern
+```bash
+nvim --headless --clean -u tests/minimal_init.lua \
+  -c "PlenaryBustedFile tests/framework/scalatest_spec.lua {minimal_init = 'tests/minimal_init.lua'}"
+```
 
-## 4. Build & Test Commands
-
-### Lua Code (Neovim Plugin)
-
-**Format Code:**
+### Format Code
 ```bash
 stylua lua/neotest-scala/
+stylua --check lua/neotest-scala/  # verify only
 ```
-
-**Verify Formatting:**
-```bash
-stylua --check lua/neotest-scala/
-```
-
-### Scala Test Projects
-
-The plugin uses sbt to run tests. Test projects are in `test/` subdirectory.
-
-**Run All Test Projects:**
-```bash
-cd test && sbt test
-```
-
-**Run Single Framework Tests:**
-```bash
-cd test/scalatest && sbt test
-cd test/munit && sbt test
-cd test/specs2 && sbt test
-cd test/utest && sbt test
-cd test/zio-test && sbt test
-```
-
-**Run Single Test Class:**
-```bash
-cd test/scalatest && sbt "testOnly com.example.FunSuiteSpec"
-```
-
-**Run Single Test:**
-```bash
-cd test/scalatest && sbt "testOnly com.example.FunSuiteSpec -- -z \"Hello, & ScalaTest!\""
-```
-
-### Manual Testing in Neovim
-
-1. Open a Scala test file in one of the test projects
-2. Ensure Metals is running (`:LspInfo`)
-3. Run `:Neotest summary` to see discovered tests
-4. Run `:Neotest run` on a test
 
 ---
 
-## 5. Code Style Guidelines
+## Project Structure
 
-### Formatting (stylua.toml)
+```
+lua/neotest-scala/
+├── init.lua           # Main adapter (neotest interface)
+├── framework.lua      # Framework registry + global constants
+├── metals.lua         # Metals LSP integration
+├── build.lua          # sbt/bloop command building
+├── utils.lua          # Helpers (package detection, tree utils)
+├── junit.lua          # JUnit XML parsing (treesitter)
+├── strategy.lua       # DAP strategy config
+├── results.lua        # Test result collection
+└── framework/         # Framework-specific handlers
+    ├── scalatest/init.lua
+    ├── munit/init.lua
+    ├── specs2/
+    │   ├── init.lua       # MutableSpec handling
+    │   └── textspec.lua   # TextSpec handling
+    ├── utest/init.lua
+    └── zio-test/init.lua
 
-```toml
-line_endings = "Unix"
-indent_type = "Spaces"
-quote_style = "AutoPreferDouble"
+tests/
+├── minimal_init.lua   # Test environment setup
+├── helpers/init.lua   # Test utilities (mocking, buffers)
+├── framework_spec.lua
+├── utils_spec.lua
+├── junit_spec.lua
+├── framework/         # Per-framework tests
+└── integration/       # Integration tests
 ```
 
-**Rules:**
+---
+
+## Code Style
+
+### Formatting (stylua.toml)
 - 2-space indentation
-- Double quotes preferred (AutoPreferDouble)
+- Double quotes preferred (`AutoPreferDouble`)
 - Unix line endings (LF)
 
-### Lua Conventions
-
-**Imports:**
+### Imports
 ```lua
 local lib = require("neotest.lib")
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
+local build = require("neotest-scala.build")
 ```
 
-**Naming:**
-- Modules: `camelCase` (e.g., `myModule.lua`)
-- Functions: `camelCase` (e.g., `buildCommand`)
+### Naming
+- Files: `camelCase.lua` (e.g., `textspec.lua`)
+- Functions: `snake_case` for module exports, `camelCase` for local helpers
 - Constants: `UPPER_SNAKE_CASE` (e.g., `TEST_PASSED`)
-- Variables: `camelCase` or `snake_case`
 
-**Type Annotations:**
-Use LuaLS annotations for clarity:
+### Type Annotations
 ```lua
 ---@param file_path string
 ---@return boolean
 function adapter.is_test_file(file_path)
-```
 
-**Tables as Types:**
-```lua
 ---@class neotest-scala.Framework
----@field build_command fun(project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
+---@field name string
+---@field build_command fun(root_path: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
+---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table
+---@field discover_positions nil|fun(style: string, path: string, content: string, opts: table): neotest.Tree
+---@field detect_style nil|fun(content: string): string|nil
 ```
 
 ### Error Handling
-
-Use `pcall` for potentially failing operations:
 ```lua
 local success, result = pcall(some_function, args)
 if not success then
@@ -173,115 +119,86 @@ if not success then
 end
 ```
 
-### Treesitter Queries
-
-Defined inline in `init.lua` and `junit.lua`:
-```lua
-local query = [[
-  (call_expression
-    function: (identifier) @func_name
-  ) @test.definition
-]]
-```
-
-- Use S-expression format
-- Use `#eq?` and `#any-of?` predicates for matching
-- Capture nodes with `@name` syntax
-
 ---
 
-## 6. Test Library Interface
+## Framework Interface
 
-Each test library handler must implement:
+Each framework module in `lua/neotest-scala/framework/<name>/init.lua` must implement:
 
 ```lua
----@class neotest-scala.Framework
-local M = {}
+local M = { name = "framework-name" }
 
--- Required: Build sbt command
-function M.build_command(project, tree, name, extra_args)
-    -- Return string[] command
-end
+-- Required: Detect style from file content
+function M.detect_style(content) -> string|nil
 
--- Optional: Custom test matching
-function M.match_test(junit_test, position)
-    -- Return boolean
-end
+-- Required: Discover test positions
+function M.discover_positions(style, path, content, opts) -> neotest.Tree
 
--- Optional: Custom result building
-function M.build_test_result(junit_test, position)
-    -- Return table with status/errors
-end
+-- Required: Build sbt/bloop command
+function M.build_command(root_path, project, tree, name, extra_args) -> string[]
+
+-- Optional: Match JUnit result to position (default: ID comparison)
+function M.match_test(junit_test, position) -> boolean
+
+-- Optional: Build result with errors (default: generic parsing)
+function M.build_test_result(junit_test, position) -> table
+
+-- Optional: Build namespace for JUnit lookup
+function M.build_namespace(ns_node, report_prefix, node) -> table
 
 return M
 ```
 
-**Registry:** Add new libraries in `framework.lua`:
-```lua
-function M.get_framework_class(framework)
-    -- ...
-    elseif framework == "mylibrary" then
-        return require(prefix .. "mylibrary")
-    end
-end
-```
+### Adding a New Framework
+1. Create `lua/neotest-scala/framework/mylib/init.lua` with interface above
+2. Register in `framework.lua:get_framework_class()`
+3. Add JAR detection pattern in `metals.lua:get_framework()`
+4. Create tests in `tests/framework/mylib_spec.lua`
+5. Add Scala test project in `test/mylib/`
 
-**Detection:** Add JAR pattern in `utils.lua`:
+---
+
+## Key Patterns
+
+### Delegation Pattern
+Core modules delegate framework-specific logic to framework modules:
+- `init.lua` → `framework.discover_positions()`, `framework.build_command()`
+- `results.lua` → `framework.build_namespace()`, `framework.match_test()`
+
+**Never import framework-specific code directly in core files.**
+
+### Treesitter Queries
 ```lua
-or jar:match("(mylibrary)_.*-.*%.jar")
+local query = [[
+  (call_expression
+    function: (call_expression
+      function: (identifier) @func_name (#eq? @func_name "test")
+      arguments: (arguments (string) @test.name))
+  ) @test.definition
+]]
+```
+- Nested `call_expression` for `test("name")` syntax
+- Use `#eq?` and `#any-of?` predicates
+
+### Position IDs
+```lua
+-- Dot-separated: package.NamespaceClass.TestName
+position_id = utils.build_position_id
+```
+Must match JUnit report test IDs for result matching.
+
+### Test Mocking
+```lua
+local H = require("tests.helpers")
+H.mock_fn("neotest-scala.build", "command", function() return {} end)
+-- ... test code ...
+H.restore_mocks()
 ```
 
 ---
 
-## 7. Adding a New Test Library
+## Known Limitations
 
-1. Create `lua/neotest-scala/framework/mylibrary.lua` with the interface above
-2. Register in `lua/neotest-scala/framework.lua`
-3. Add detection in `lua/neotest-scala/utils.lua:get_framework()`
-4. Add Treesitter query patterns in `init.lua:discover_positions()` if needed
-5. Add test project in `test/mylibrary/`
-6. Add documentation in `wiki/`
-
----
-
-## 8. Known Limitations
-
-- **specs2**: Single test execution is limited; runs full spec for some tests
-- **utest**: Does not implement `sbt.testing.TestSelector`; cannot debug individual tests
-- Test ID matching may fail for names with special characters (`.`, `-`, spaces)
-- Framework detection relies on Metals build target info
-
----
-
-## 9. Key Patterns
-
-### Position ID Building
-```lua
--- Dot-separated path from package + namespace hierarchy
-local function build_position_id(position, parents)
-    return table.concat(
-        vim.tbl_flatten({
-            vim.tbl_map(get_parent_name, parents),
-            utils.get_position_name(position),
-        }),
-        "."
-    )
-end
-```
-
-### Test Matching
-```lua
--- Match JUnit result to discovered test
-local function match_test(namespace, junit_result, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. namespace .. "." .. junit_result.name)
-    local test_id = position.id
-    return junit_test_id == test_id
-end
-```
-
-### Metals Integration
-```lua
--- Query Metals for build target info
-local response = metals.request_sync("workspace/executeCommand", params, timeout)
-```
+- **specs2**: Single test execution limited; some tests run full spec
+- **utest**: No `sbt.testing.TestSelector`; cannot debug individual tests
+- Test ID matching may fail for names with `.`, `-`, spaces
