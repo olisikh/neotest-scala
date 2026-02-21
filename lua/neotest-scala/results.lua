@@ -1,6 +1,7 @@
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local junit = require("neotest-scala.junit")
+local build = require("neotest-scala.build")
 
 local M = {}
 
@@ -123,7 +124,14 @@ function M.collect(spec, result, node)
         return {}
     end
 
-    local report_prefix = project_dir .. "target/test-reports/"
+    local build_tool = build.get_tool(spec.env.root_path)
+
+    local report_prefix
+    if build_tool == "bloop" then
+        report_prefix = "/tmp/bloop-test-reports/"
+    else
+        report_prefix = project_dir .. "target/test-reports/"
+    end
     local namespaces = collect_namespaces(framework, node, report_prefix)
 
     if not namespaces then

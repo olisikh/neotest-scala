@@ -120,12 +120,13 @@ end
 local function build_bloop_command(project, tree, name, extra_args)
     local test_namespace = build_test_namespace(tree)
     local bloop_project = project .. "-test"
+    local junit_path = "/tmp/bloop-test-reports"
 
     if not test_namespace or test_namespace == "*" then
-        return flatten({ "bloop", "test", bloop_project, extra_args })
+        return flatten({ "bloop", "test", bloop_project, "--args", "-u", "--args", junit_path, extra_args })
     end
 
-    local args = { "bloop", "test", bloop_project, "--only", test_namespace }
+    local args = { "bloop", "test", bloop_project, "--args", "-u", "--args", junit_path, "--only", test_namespace }
 
     local bloop_tree_data = tree:data()
     if bloop_tree_data.type == "test" then
@@ -162,12 +163,14 @@ end
 function M.command_with_path(root_path, project, test_path, extra_args)
     local build_tool = M.get_tool(root_path)
     local bloop_project = project .. "-test"
+    local junit_path = "/tmp/bloop-test-reports"
 
     if build_tool == "bloop" then
         if not test_path then
-            return flatten({ "bloop", "test", bloop_project, extra_args })
+            return flatten({ "bloop", "test", bloop_project, "--args", "-u", "--args", junit_path, extra_args })
         end
-        return flatten({ "bloop", "test", bloop_project, "--only", test_path, extra_args })
+
+        return flatten({ "bloop", "test", bloop_project, "--args", "-u", "--args", junit_path, "--only", test_path, extra_args })
     else
         if not test_path then
             return flatten({ "sbt", extra_args, project .. "/test" })
