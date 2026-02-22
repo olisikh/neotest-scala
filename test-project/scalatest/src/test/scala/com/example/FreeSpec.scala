@@ -33,6 +33,8 @@ class FreeSpec extends AnyFreeSpec with Matchers {
       throw Babbah
     }
   }
+
+  sys.error("kekw")
 }
 
 object Babbah extends NoStackTrace {

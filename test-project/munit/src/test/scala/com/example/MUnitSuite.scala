@@ -18,6 +18,8 @@ class MUnitSuite extends FunSuite {
     throw Boom
   }
 
+  throw Boom
+
   // TODO: exceptions during initialisation should show everything red
   // throw new RuntimeException("kekw")
 }
