@@ -25,6 +25,16 @@ object ZioSpec extends ZIOSpecDefault {
       for {
         value <- ZIO.none
       } yield assert(value)(isSome(equalTo(3)))
+    },
+    test("crashing test") {
+      for {
+        one <- ZIO.succeed(1)
+        two <- ZIO.succeed(2)
+        _ <- ZIO.fail(new RuntimeException("oh no, boom"))
+      } yield assertTrue(one + two == 3)
+    },
+    test("crashing but no zio") {
+      throw new RuntimeException("babaaah!")
     }
   )
 }

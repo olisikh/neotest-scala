@@ -150,7 +150,6 @@ end
 ---@return table<string, neotest.Result> Test results indexed by position.id
 function M.parse_stdout_results(output, tree)
     local results = {}
-    local utils = require("neotest-scala.utils")
 
     output = utils.string_remove_ansi(output)
 
@@ -172,8 +171,6 @@ function M.parse_stdout_results(output, tree)
         for j = start_idx, math.min(start_idx + 15, #lines) do
             local trace_line = lines[j] or ""
             local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
-
-            vim.print(trace_line)
 
             if line_num and trace_line:find(file_pattern, 1, true) then
                 return tonumber(line_num)
