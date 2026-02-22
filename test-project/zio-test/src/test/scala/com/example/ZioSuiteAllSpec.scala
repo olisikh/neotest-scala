@@ -29,4 +29,7 @@ object ZioSuiteAllSpec extends ZIOSpecDefault {
       } yield assert(value)(isSome(equalTo(3)))
     }
   }
+
+  // TODO: if test can't be initialized then why everything is green?
+  // throw new RuntimeException("babaaah!")
 }

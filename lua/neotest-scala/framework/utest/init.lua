@@ -191,10 +191,20 @@ function M.parse_stdout_results(output, tree)
         end
     end
 
-    -- Mark any unmatched positions as passed
+    local global_failure = nil
+    if output:match("Failed to compile") then
+        global_failure = "Compilation failed"
+    elseif output:match("Test suite aborted") or output:match("Failed to initialize") then
+        global_failure = "Test suite aborted"
+    end
+
     for pos_id in pairs(positions) do
         if not results[pos_id] then
-            results[pos_id] = { status = TEST_PASSED }
+            if global_failure then
+                results[pos_id] = { status = TEST_FAILED, errors = { { message = global_failure } } }
+            else
+                results[pos_id] = { status = TEST_PASSED }
+            end
         end
     end
 

@@ -117,9 +117,9 @@ describe('utils', function()
       H.assert_eq(utils.string_remove_ansi('[1;32mgreen bold[0m'), 'green bold')
     end)
 
-    it('preserves ESC character (implementation only removes bracket sequences)', function()
+    it('removes ESC characters along with bracket sequences', function()
       local result = utils.string_remove_ansi(ESC .. '[31mred text' .. ESC .. '[0m')
-      H.assert_eq(result, ESC .. 'red text' .. ESC)
+      H.assert_eq(result, 'red text')
     end)
   end)
 

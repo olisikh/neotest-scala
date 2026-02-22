@@ -19,4 +19,4 @@ Specs2:
 - exceptions are not matched correctly
 
 ## Next steps
-- FlatSpec: is not supported, but is quite challening to support
+- FlatSpec: is not supported, but is quite challenging to support

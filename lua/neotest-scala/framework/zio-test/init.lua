@@ -133,51 +133,116 @@ function M.parse_stdout_results(output, tree)
 
     output = utils.string_remove_ansi(output)
 
-    local positions = {}
+    -- Build position lookup by file name
+    local positions_by_file = {}
     for _, node in tree:iter_nodes() do
         local data = node:data()
         if data.type == "test" then
-            positions[data.id] = data
+            local file_name = utils.get_file_name(data.path)
+            if not positions_by_file[file_name] then
+                positions_by_file[file_name] = {}
+            end
+            table.insert(positions_by_file[file_name], {
+                id = data.id,
+                range = data.range,
+            })
         end
     end
 
-    for pos_id in pairs(positions) do
-        results[pos_id] = { status = TEST_PASSED }
+    -- Find the most specific (narrowest) position containing a JVM line number
+    local function find_position_for_line(file_name, jvm_line_num)
+        local positions = positions_by_file[file_name]
+        if not positions then return nil end
+
+        local line_0idx = jvm_line_num - 1
+        local best_match = nil
+        local best_span = math.huge
+
+        for _, pos in ipairs(positions) do
+            if pos.range then
+                if pos.range[1] <= line_0idx and line_0idx <= pos.range[3] then
+                    local span = pos.range[3] - pos.range[1]
+                    if span < best_span then
+                        best_match = pos
+                        best_span = span
+                    end
+                end
+            end
+        end
+        return best_match
     end
 
-    local current_failed_id = nil
     local lines = {}
     for line in output:gmatch("[^\r\n]+") do
         table.insert(lines, line)
     end
 
+    local failed_ids = {}
+
+    -- Detect compilation or bootstrapping failures
+    local global_failure = nil
+    if output:match("Failed to compile") then
+        global_failure = "Compilation failed"
+    elseif output:match("Test suite aborted") or output:match("Failed to initialize") then
+        global_failure = "Test suite aborted"
+    end
+
     for i, line in ipairs(lines) do
-        local fail_name = line:match("^%s*%- (.+)$")
-        if fail_name then
-            current_failed_id = nil
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and fail_name:find(pos_name, 1, true) then
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    current_failed_id = pos_id
-                    break
+        -- Pattern 1: "at /full/path/File.scala:22" (assertion failures)
+        local full_path, line_num_str = line:match("at ([^:]+%.scala):(%d+)%s*$")
+
+        -- Pattern 2: "at pkg.Class(File.scala:33)" (stack traces)
+        if not full_path then
+            full_path, line_num_str = line:match("%(([^:]+%.scala):(%d+)%)")
+        end
+
+        if full_path and line_num_str then
+            local file_name = utils.get_file_name(full_path)
+            local line_num = tonumber(line_num_str)
+            local pos = find_position_for_line(file_name, line_num)
+
+            if pos and not failed_ids[pos.id] then
+                -- Look backwards for error message
+                local err_msg = "Test failed"
+                for j = i - 1, math.max(1, i - 10), -1 do
+                    local prev = lines[j]
+                    -- Assertion message: "✗ message"
+                    local msg = prev:match("^%s*✗ (.+)$")
+                    if msg then
+                        err_msg = msg
+                        break
+                    end
+                    -- Exception message: "...Exception: message"
+                    local exc = prev:match("Exception[^:]*:%s*(.+)$")
+                    if exc then
+                        err_msg = exc
+                        break
+                    end
                 end
+
+                results[pos.id] = {
+                    status = TEST_FAILED,
+                    errors = { { message = err_msg, line = line_num - 1 } }  -- 0-indexed for neotest
+                }
+                failed_ids[pos.id] = true
             end
         end
+    end
 
-        local assert_msg = line:match("^%s*✗ (.+)$")
-        if assert_msg and current_failed_id then
-            local result = results[current_failed_id]
-            if result and result.errors then
-                table.insert(result.errors, { message = assert_msg })
-            end
-        end
+    local default_status = TEST_PASSED
+    local default_error = nil
+    if global_failure then
+        default_status = TEST_FAILED
+        default_error = { message = global_failure }
+    end
 
-        local _, line_num = line:match("at ([^:]+):(%d+)")
-        if line_num and current_failed_id then
-            local result = results[current_failed_id]
-            if result and result.errors and #result.errors > 0 and not result.errors[1].line then
-                result.errors[1].line = tonumber(line_num)
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" and not results[data.id] then
+            if default_error then
+                results[data.id] = { status = default_status, errors = { default_error } }
+            else
+                results[data.id] = { status = default_status }
             end
         end
     end
