@@ -167,6 +167,7 @@ function M.command_with_path(root_path, project, test_path, extra_args)
         if not test_path then
             return flatten({ "bloop", "test", bloop_project, extra_args })
         end
+
         return flatten({ "bloop", "test", bloop_project, "--only", test_path, extra_args })
     else
         if not test_path then

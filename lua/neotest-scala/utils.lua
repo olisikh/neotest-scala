@@ -88,11 +88,17 @@ function M.string_remove_dquotes(s)
     return (s:gsub('^s*"', ""):gsub('"$', ""))
 end
 
---- Remove ANSI
+--- Remove ANSI escape sequences
 ---@param s string
 ---@return string
 function M.string_remove_ansi(s)
-    return (s:gsub("%[%d*;?%d*m", ""))
+    -- Remove ESC[ followed by any parameters and a letter (standard ANSI sequences)
+    s = s:gsub("\27%[[%d;]*[a-zA-Z]", "")
+    -- Remove any remaining ESC characters
+    s = s:gsub("\27", "")
+    -- Remove bracket sequences without ESC (like [32m)
+    s = s:gsub("%[[%d;]+[a-zA-Z]", "")
+    return s
 end
 
 --- Unescape XML entities

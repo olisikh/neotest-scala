@@ -1,6 +1,7 @@
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local junit = require("neotest-scala.junit")
+local build = require("neotest-scala.build")
 
 local M = {}
 
@@ -109,6 +110,15 @@ function M.collect(spec, result, node)
     if not framework then
         vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
         return {}
+    end
+
+    -- Branch on build tool
+    local root_path = spec.env.root_path
+    if root_path then
+        local build_tool = build.get_tool(root_path)
+        if build_tool == "bloop" and framework.parse_stdout_results then
+            return framework.parse_stdout_results(log, node)
+        end
     end
 
     local base_dir = spec.env.build_target_info["Base Directory"]

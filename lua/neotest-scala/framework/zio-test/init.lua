@@ -124,5 +124,66 @@ function M.match_test(junit_test, position)
     return junit_test_id == test_id
 end
 
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+
+    output = utils.string_remove_ansi(output)
+
+    local positions = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            positions[data.id] = data
+        end
+    end
+
+    for pos_id in pairs(positions) do
+        results[pos_id] = { status = TEST_PASSED }
+    end
+
+    local current_failed_id = nil
+    local lines = {}
+    for line in output:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    for i, line in ipairs(lines) do
+        local fail_name = line:match("^%s*%- (.+)$")
+        if fail_name then
+            current_failed_id = nil
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and fail_name:find(pos_name, 1, true) then
+                    results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    current_failed_id = pos_id
+                    break
+                end
+            end
+        end
+
+        local assert_msg = line:match("^%s*✗ (.+)$")
+        if assert_msg and current_failed_id then
+            local result = results[current_failed_id]
+            if result and result.errors then
+                table.insert(result.errors, { message = assert_msg })
+            end
+        end
+
+        local _, line_num = line:match("at ([^:]+):(%d+)")
+        if line_num and current_failed_id then
+            local result = results[current_failed_id]
+            if result and result.errors and #result.errors > 0 and not result.errors[1].line then
+                result.errors[1].line = tonumber(line_num)
+            end
+        end
+    end
+
+    return results
+end
+
 ---@return neotest-scala.Framework
 return M

@@ -132,5 +132,74 @@ function M.match_test(junit_test, position)
     return junit_test_id == test_id
 end
 
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+
+    -- Strip ANSI codes first
+    output = utils.string_remove_ansi(output)
+
+    -- Build position lookup for matching
+    local positions = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            positions[data.id] = data
+        end
+    end
+
+    local current_failure_id = nil
+
+    for line in output:gmatch("[^\r\n]+") do
+        -- Result: "+ path time" or "X path time"
+        -- Path is like "com.example.UtestTestSuite.test name"
+        local status_char, test_path = line:match("^([%+X])%s+(.+)%s+%d+ms")
+        if test_path then
+            local is_pass = status_char == "+"
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and test_path:find(pos_name, 1, true) then
+                    if is_pass then
+                        results[pos_id] = { status = TEST_PASSED }
+                    else
+                        results[pos_id] = { status = TEST_FAILED, errors = {} }
+                        current_failure_id = pos_id
+                    end
+                end
+            end
+        end
+
+        -- Stack frame: "Class.method(File.scala:line)"
+        local file, line_num = line:match("%(([^:]+%.scala):(%d+)%)")
+        if file and line_num and current_failure_id then
+            local result = results[current_failure_id]
+            if result and result.errors and #result.errors == 0 then
+                table.insert(result.errors, { line = tonumber(line_num) - 1, message = "Test failed" })
+            end
+        end
+
+        -- Exception: "java.lang.Exception: message"
+        local exc, msg = line:match("(%S+Exception):%s*(.*)")
+        if exc and current_failure_id then
+            local result = results[current_failure_id]
+            if result and result.errors and #result.errors > 0 then
+                result.errors[1].message = exc .. (msg ~= "" and ": " .. msg or "")
+            end
+        end
+    end
+
+    -- Mark any unmatched positions as passed
+    for pos_id in pairs(positions) do
+        if not results[pos_id] then
+            results[pos_id] = { status = TEST_PASSED }
+        end
+    end
+
+    return results
+end
+
 ---@return neotest-scala.Framework
 return M
