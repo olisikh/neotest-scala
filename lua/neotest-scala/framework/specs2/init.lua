@@ -105,5 +105,71 @@ function M.match_test(junit_test, position)
     return vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix)
 end
 
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+    local utils = require("neotest-scala.utils")
+
+    output = utils.string_remove_ansi(output)
+
+    -- Build position lookup for matching
+    local positions = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            positions[data.id] = data
+        end
+    end
+
+    local pending_failure_name = nil
+
+    for line in output:gmatch("[^\r\n]+") do
+        -- Pass: "+ name"
+        local pass_name = line:match("^%s*%+%s*(.+)$")
+        if pass_name then
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and pass_name:find(pos_name:gsub("['\"]", ""), 1, true) then
+                    results[pos_id] = { status = TEST_PASSED }
+                end
+            end
+        end
+
+        -- Fail: "x name"
+        local fail_name = line:match("^%s*x%s*(.+)$")
+        if fail_name then
+            pending_failure_name = fail_name
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
+                    results[pos_id] = { status = TEST_FAILED, errors = {} }
+                end
+            end
+        end
+
+        -- Error: "[E] message (file:line)"
+        local error_msg, file, line_num = line:match("^%[E%]%s*(.+)%s*%(([^:]+):(%d+)%)$")
+        if error_msg and file and line_num then
+            for pos_id, result in pairs(results) do
+                if result.status == TEST_FAILED and result.errors and #result.errors == 0 then
+                    table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                end
+            end
+        end
+    end
+
+    -- Mark any unmatched positions as passed
+    for pos_id in pairs(positions) do
+        if not results[pos_id] then
+            results[pos_id] = { status = TEST_PASSED }
+        end
+    end
+
+    return results
+end
+
 ---@return neotest-scala.Framework
 return M

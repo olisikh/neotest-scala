@@ -144,5 +144,96 @@ function M.match_test(junit_test, position)
     return junit_test_id == test_id
 end
 
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+    local utils = require("neotest-scala.utils")
+
+    output = utils.string_remove_ansi(output)
+
+    local positions = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            positions[data.id] = data
+        end
+    end
+
+    local lines = {}
+    for line in output:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    local function find_line_in_trace(start_idx, file_pattern)
+        -- TODO: arbitrary +15 looks hacky
+        for j = start_idx, math.min(start_idx + 15, #lines) do
+            local trace_line = lines[j] or ""
+            local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
+
+            vim.print(trace_line)
+
+            if line_num and trace_line:find(file_pattern, 1, true) then
+                return tonumber(line_num)
+            end
+        end
+        return nil
+    end
+
+    for i, line in ipairs(lines) do
+        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$")
+        if pass_name then
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and pass_name:find(pos_name, 1, true) then
+                    results[pos_id] = { status = TEST_PASSED }
+                end
+            end
+        end
+
+        local fail_line = line:match("^==> X (.+)$")
+        if fail_line then
+            local test_path = fail_line:match("^(.+)  %d+%.%d+s")
+            if test_path then
+                for pos_id, pos in pairs(positions) do
+                    local pos_name = utils.get_position_name(pos) or pos.name
+                    local matched_file = utils.get_file_name(pos.path)
+                    if pos_name and test_path:find(pos_name, 1, true) then
+                        local line_num, msg = fail_line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
+                        if line_num and msg then
+                            results[pos_id] = {
+                                status = TEST_FAILED,
+                                errors = { { message = msg, line = tonumber(line_num) - 1 } },
+                            }
+                        else
+                            local exc = fail_line:match("%s+([%w%.$]+: .+)$")
+                            if exc then
+                                local trace_line = find_line_in_trace(i + 1, matched_file or "")
+                                results[pos_id] = {
+                                    status = TEST_FAILED,
+                                    errors = { { message = exc, line = trace_line } },
+                                }
+                            else
+                                results[pos_id] = { status = TEST_FAILED, errors = {} }
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    for pos_id in pairs(positions) do
+        if not results[pos_id] then
+            results[pos_id] = { status = TEST_PASSED }
+        end
+    end
+
+    return results
+end
+
 ---@return neotest-scala.Framework
 return M

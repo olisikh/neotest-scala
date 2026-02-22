@@ -112,6 +112,15 @@ function M.collect(spec, result, node)
         return {}
     end
 
+    -- Branch on build tool
+    local root_path = spec.env.root_path
+    if root_path then
+        local build_tool = build.get_tool(root_path)
+        if build_tool == "bloop" and framework.parse_stdout_results then
+            return framework.parse_stdout_results(log, node)
+        end
+    end
+
     local base_dir = spec.env.build_target_info["Base Directory"]
     if not base_dir or not base_dir[1] then
         vim.print("[neotest-scala] Cannot find base directory")
@@ -124,14 +133,7 @@ function M.collect(spec, result, node)
         return {}
     end
 
-    local build_tool = build.get_tool(spec.env.root_path)
-
-    local report_prefix
-    if build_tool == "bloop" then
-        report_prefix = "/tmp/bloop-test-reports/"
-    else
-        report_prefix = project_dir .. "target/test-reports/"
-    end
+    local report_prefix = project_dir .. "target/test-reports/"
     local namespaces = collect_namespaces(framework, node, report_prefix)
 
     if not namespaces then
