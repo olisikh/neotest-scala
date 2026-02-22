@@ -9,14 +9,9 @@ local function build_test_result(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
         local error = { message = error_message }
-
         local file_name = utils.get_file_name(position.path)
-        local stacktrace = junit_test.error_stacktrace or ""
-        local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
 
-        if line then
-            error.line = tonumber(line) - 1
-        end
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
 
         return {
             errors = { error },

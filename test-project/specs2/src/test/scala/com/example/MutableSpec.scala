@@ -25,5 +25,5 @@ class MutableSpec extends Specification {
     }
   }
 
-  throw new RuntimeException("babaaah!")
+  // throw new RuntimeException("babaaah!")
 }

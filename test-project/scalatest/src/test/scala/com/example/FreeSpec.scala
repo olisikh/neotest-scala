@@ -33,10 +33,8 @@ class FreeSpec extends AnyFreeSpec with Matchers {
       throw Babbah
     }
   }
-
-  sys.error("kekw")
 }
 
 object Babbah extends NoStackTrace {
-  override def toString: String = "Boom"
+  override def toString: String = "Boomchik"
 }

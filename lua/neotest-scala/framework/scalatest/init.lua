@@ -105,8 +105,6 @@ end
 ---@param extra_args table|string
 ---@return string[]
 function M.build_command(root_path, project, tree, name, extra_args)
-    -- For individual tests, build the full test path (needed for FreeSpec)
-    -- Check if tree is a proper tree object (has :data() method) or a plain table
     local tree_type = nil
     if type(tree.data) == "function" then
         tree_type = tree:data().type
@@ -114,12 +112,28 @@ function M.build_command(root_path, project, tree, name, extra_args)
         tree_type = tree.data.type
     end
 
-    if tree_type == "test" then
-        local full_test_name = build_freespec_test_path(tree, name)
-        return build.command(root_path, project, tree, full_test_name, extra_args)
+    local junit_args = {}
+    if build.get_tool(root_path) == "bloop" then
+        junit_args = {
+            "--args",
+            "-u",
+            "--args",
+            root_path .. "/" .. project .. "/target/test-reports",
+        }
     end
 
-    return build.command(root_path, project, tree, name, extra_args)
+    if tree_type == "test" then
+        local full_test_name = build_freespec_test_path(tree, name)
+        return build.command(
+            root_path,
+            project,
+            tree,
+            full_test_name,
+            vim.tbl_deep_extend("force", junit_args, extra_args)
+        )
+    end
+
+    return build.command(root_path, project, tree, name, vim.tbl_deep_extend("force", junit_args, extra_args))
 end
 
 ---@param junit_test table<string, string>
@@ -161,26 +175,6 @@ function M.match_test(junit_test, position)
     return junit_no_dots == position_no_dots
 end
 
----Extract the highest line number for the given file from stacktrace
----ScalaTest stacktraces have multiple file references (class def, test method, etc.)
----We want the highest line number which corresponds to the actual test assertion
----@param stacktrace string
----@param file_name string
----@return number|nil
-local function extract_line_number(stacktrace, file_name)
-    local max_line_num = nil
-    local pattern = "%(" .. file_name .. ":(%d+)%)"
-
-    for line_num_str in string.gmatch(stacktrace, pattern) do
-        local line_num = tonumber(line_num_str)
-        if not max_line_num or line_num > max_line_num then
-            max_line_num = line_num
-        end
-    end
-
-    return max_line_num and (max_line_num - 1) or nil
-end
-
 ---Build test result with diagnostic message for failed tests
 ---@param junit_test table<string, string>
 ---@param position neotest.Position
@@ -195,13 +189,11 @@ function M.build_test_result(junit_test, position)
         error.message = junit_test.error_message
 
         if junit_test.error_stacktrace then
-            error.line = extract_line_number(junit_test.error_stacktrace, file_name)
+            error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         end
     elseif junit_test.error_stacktrace then
-        local lines = vim.split(junit_test.error_stacktrace, "\n")
-        error.message = lines[1]
-
-        error.line = extract_line_number(junit_test.error_stacktrace, file_name)
+        error.message = junit_test.error_stacktrace
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
     end
 
     if error.message then
@@ -236,191 +228,6 @@ function M.build_namespace(ns_node, report_prefix, node)
     end
 
     return namespace
-end
-
---- Parse bloop stdout output for test results
----@param output string The raw stdout from bloop test
----@param tree neotest.Tree The test tree for matching
----@return table<string, neotest.Result> Test results indexed by position.id
-function M.parse_stdout_results(output, tree)
-    local results = {}
-
-    output = utils.string_remove_ansi(output)
-
-    local positions = {}
-    for _, node in tree:iter_nodes() do
-        local data = node:data()
-        if data.type == "test" then
-            positions[data.id] = data
-        end
-    end
-
-    local lines = {}
-    for line in output:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-
-    local function find_line_in_trace(start_idx, file_pattern)
-        for j = start_idx, math.min(start_idx + 15, #lines) do
-            local trace_line = lines[j] or ""
-            local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
-            if line_num and trace_line:find(file_pattern, 1, true) then
-                return tonumber(line_num)
-            end
-        end
-        return nil
-    end
-
-    local function get_indent(s)
-        return #s:match("^(%s*)")
-    end
-
-    for i, line in ipairs(lines) do
-        local indent, fail_name = line:match("^(%s*)%- (.+) %*%*%* FAILED %*%*%*$")
-        if fail_name then
-            local matched_pos_id = nil
-            local matched_file = nil
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    matched_pos_id = pos_id
-                    matched_file = utils.get_file_name(pos.path)
-                    break
-                end
-            end
-
-            if matched_pos_id then
-                local fail_indent = get_indent(indent)
-                local next_line = lines[i + 1] or ""
-                local next_indent = get_indent(next_line)
-
-                if next_indent > fail_indent then
-                    local err_msg, file, line_num = next_line:match("^%s+(.+) %(([^:]+%.scala):(%d+)%)$")
-                    if err_msg and line_num then
-                        local result = results[matched_pos_id]
-                        if result and result.errors then
-                            table.insert(result.errors, { message = err_msg, line = tonumber(line_num) })
-                        end
-                    else
-                        local exc_msg = next_line:match("^%s+(.+)$")
-                        if exc_msg and #exc_msg > 0 and exc_msg ~= "..." then
-                            local result = results[matched_pos_id]
-                            if result and result.errors then
-                                local trace_line = find_line_in_trace(i + 2, matched_file or "")
-                                table.insert(result.errors, { message = exc_msg, line = trace_line })
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        local pass_name = line:match("^%s*%- (.+)$")
-        if pass_name and not line:find("%*%*%* FAILED %*%*%*") then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and pass_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    if not results[pos_id] then
-                        results[pos_id] = { status = TEST_PASSED }
-                    end
-                end
-            end
-        end
-    end
-
-    for pos_id in pairs(positions) do
-        if not results[pos_id] then
-            results[pos_id] = { status = TEST_PASSED }
-        end
-    end
-
-    local lines = {}
-    for line in output:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-
-    for i, line in ipairs(lines) do
-        -- Fail: "  - test name *** FAILED ***" (any indentation level)
-        local indent, fail_name = line:match("^(%s*)%- (.+) %*%*%* FAILED %*%*%*$")
-        if fail_name then
-            local matched_pos_id = nil
-            local matched_file = nil
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    matched_pos_id = pos_id
-                    matched_file = utils.get_file_name(pos.path)
-                    break
-                end
-            end
-
-            if matched_pos_id then
-                local fail_indent = get_indent(indent)
-                local next_line = lines[i + 1] or ""
-                local next_indent = get_indent(next_line)
-
-                if next_indent > fail_indent then
-                    -- Assertion with location: "    1 did not equal 2 (File.scala:12)"
-                    local err_msg, file, line_num = next_line:match("^%s+(.+) %(([^:]+%.scala):(%d+)%)$")
-                    if err_msg and line_num then
-                        local result = results[matched_pos_id]
-                        if result and result.errors then
-                            table.insert(result.errors, { message = err_msg, line = tonumber(line_num) - 1 })
-                        end
-                    else
-                        -- Exception message: "    some.package.ExceptionType: message"
-                        local exc_msg = next_line:match("^%s+(.+)$")
-                        if exc_msg and #exc_msg > 0 then
-                            local result = results[matched_pos_id]
-                            if result and result.errors then
-                                local trace_line = find_line_in_trace(i + 2, matched_file or "")
-                                table.insert(result.errors, {
-                                    message = exc_msg,
-                                    line = trace_line and (trace_line - 1) or nil,
-                                })
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        -- Pass: "- test name" (no FAILED marker, any indentation)
-        local pass_name = line:match("^%s*%- (.+)$")
-        if pass_name and not line:find("%*%*%* FAILED %*%*%*") then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and pass_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    if not results[pos_id] then
-                        results[pos_id] = { status = TEST_PASSED }
-                    end
-                end
-            end
-        end
-    end
-
-    local global_failure = nil
-    if output:match("Failed to compile") then
-        global_failure = "Compilation failed"
-    elseif output:match("Test suite aborted") or output:match("Failed to initialize") then
-        global_failure = "Test suite aborted"
-    elseif output:match("SuiteSelector") then
-        global_failure = "Suite initialization failed"
-    end
-
-    for pos_id in pairs(positions) do
-        if not results[pos_id] then
-            if global_failure then
-                results[pos_id] = { status = TEST_FAILED, errors = { { message = global_failure } } }
-            else
-                results[pos_id] = { status = TEST_PASSED }
-            end
-        end
-    end
-
-    return results
 end
 
 ---@return neotest-scala.Framework

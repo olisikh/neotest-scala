@@ -21,8 +21,6 @@ class FunSuiteSpec extends AnyFunSuite with Matchers {
     throw Boom
   }
 
-  throw Boom
-
   // TODO: exceptions during initialisation should show everything red
   // throw new RuntimeException("kekw")
 }

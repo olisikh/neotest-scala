@@ -86,15 +86,11 @@ function M.build_test_result(junit_test, position)
     local error = {}
 
     local file_name = utils.get_file_name(position.path)
-    local raw_message = junit_test.error_stacktrace or junit_test.error_message
+    local message = junit_test.error_stacktrace or junit_test.error_message
 
-    if raw_message then
-        error.message = raw_message:gsub("/.*/" .. file_name .. ":%d+ ", "")
-
-        local line_num = string.match(raw_message, "%(" .. file_name .. ":(%d+)%)")
-        if line_num then
-            error.line = tonumber(line_num) - 1
-        end
+    if message then
+        error.message = message:gsub("/.*/" .. file_name .. ":%d+ ", "")
+        error.line = utils.extract_line_number(message, file_name)
     end
 
     if vim.tbl_isempty(error) then

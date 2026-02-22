@@ -75,11 +75,7 @@ function M.build_test_result(junit_test, position)
 
         error.message = junit_test.error_message
     elseif junit_test.error_stacktrace then
-        local line_num = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
-        if line_num then
-            error.line = tonumber(line_num) - 1
-        end
-
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         error.message = junit_test.error_stacktrace
     end
 
@@ -152,7 +148,9 @@ function M.parse_stdout_results(output, tree)
     -- Find the most specific (narrowest) position containing a JVM line number
     local function find_position_for_line(file_name, jvm_line_num)
         local positions = positions_by_file[file_name]
-        if not positions then return nil end
+        if not positions then
+            return nil
+        end
 
         local line_0idx = jvm_line_num - 1
         local best_match = nil
@@ -224,7 +222,7 @@ function M.parse_stdout_results(output, tree)
 
                 results[pos.id] = {
                     status = TEST_FAILED,
-                    errors = { { message = err_msg, line = line_num - 1 } }  -- 0-indexed for neotest
+                    errors = { { message = err_msg, line = line_num - 1 } }, -- 0-indexed for neotest
                 }
                 failed_ids[pos.id] = true
             end

@@ -20,6 +20,27 @@ function M.has_nested_tests(test)
     return #test:children() > 0
 end
 
+
+---Extract the highest line number for the given file from stacktrace
+---ScalaTest stacktraces have multiple file references (class def, test method, etc.)
+---We want the highest line number which corresponds to the actual test assertion
+---@param stacktrace string
+---@param file_name string
+---@return number|nil
+function M.extract_line_number(stacktrace, file_name)
+    local max_line_num = nil
+    local pattern = "%(" .. file_name .. ":(%d+)%)"
+
+    for line_num_str in string.gmatch(stacktrace, pattern) do
+        local line_num = tonumber(line_num_str)
+        if not max_line_num or line_num > max_line_num then
+            max_line_num = line_num
+        end
+    end
+
+    return max_line_num and (max_line_num - 1) or nil
+end
+
 --- Find namespace type parent node
 ---@param tree neotest.Tree
 ---@param type string

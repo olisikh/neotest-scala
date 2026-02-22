@@ -111,7 +111,6 @@ end
 ---@return table<string, neotest.Result> Test results indexed by position.id
 function M.parse_stdout_results(output, tree)
     local results = {}
-    local utils = require("neotest-scala.utils")
 
     output = utils.string_remove_ansi(output)
 
@@ -123,8 +122,6 @@ function M.parse_stdout_results(output, tree)
             positions[data.id] = data
         end
     end
-
-    local pending_failure_name = nil
 
     for line in output:gmatch("[^\r\n]+") do
         -- Pass: "+ name"
