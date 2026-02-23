@@ -91,7 +91,7 @@ describe("build", function()
       assert.are.equal("bloop", tool)
     end)
 
-    it("does not treat zio-test-sbt jar as sbt indicator when bloop paths exist", function()
+    it("prefers sbt over bloop paths when Scala Classpath contains sbt-named jars", function()
       local tool = build.get_tool_from_build_target_info({
         ["Classpath"] = {
           "/Users/me/project/.bloop/zio-test/bloop-bsp-clients-classes/test-classes-Metals-abc/",
@@ -102,10 +102,10 @@ describe("build", function()
         },
       })
 
-      assert.are.equal("bloop", tool)
+      assert.are.equal("sbt", tool)
     end)
 
-    it("prefers sbt when Scala Classpath is present even if bloop paths are also present", function()
+    it("prefers sbt over bloop paths when Scala Classpath points to target classes", function()
       local tool = build.get_tool_from_build_target_info({
         ["Scala Classpath"] = {
           "/Users/me/project/target/scala-3.8.1/test-classes",
