@@ -14,7 +14,7 @@ class FreeSpec extends AnyFreeSpec with Matchers {
     "deeeeeeeeep" - {
       "even deeeeeeeeeper" - {
         "test" in {
-          1 shouldEqual 1
+          1 shouldEqual 2
         }
       }
     }
@@ -22,8 +22,10 @@ class FreeSpec extends AnyFreeSpec with Matchers {
       1 shouldEqual 2
     }
     "deeply" - {
-      "nested" in {
-        1 shouldEqual 5
+      "nested" - {
+        "event more nested lol" in {
+          1 shouldEqual 5
+        }
       }
     }
     "failing" in {
