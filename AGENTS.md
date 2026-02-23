@@ -132,7 +132,7 @@ local M = { name = "framework-name" }
 function M.detect_style(content) -> string|nil
 
 -- Required: Discover test positions
-function M.discover_positions(style, path, content, opts) -> neotest.Tree
+function M.discover_positions(style, path, content) -> neotest.Tree
 
 -- Required: Build sbt/bloop command
 function M.build_command(root_path, project, tree, name, extra_args) -> string[]

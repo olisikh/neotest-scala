@@ -5,6 +5,20 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "zio-test" }
 
+---@class neotest-scala.ZioTestDiscoverOpts
+---@field style "spec"
+---@field path string
+---@field content string
+---@field opts? table
+
+---@class neotest-scala.ZioTestBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---Detect if this is a ZIO Test spec file
 ---@param content string
 ---@return string|nil
@@ -16,10 +30,10 @@ function M.detect_style(content)
 end
 
 ---Discover test positions in ZIO Test spec
----@param opts table
+---@param opts neotest-scala.ZioTestDiscoverOpts
 ---@return neotest.Tree|nil
 function M.discover_positions(opts)
-    path = opts.path
+    local path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -42,7 +56,7 @@ function M.discover_positions(opts)
     })
 end
 
----@param opts table
+---@param opts neotest-scala.ZioTestBuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
     return build.command({

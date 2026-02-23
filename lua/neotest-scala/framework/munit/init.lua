@@ -5,6 +5,20 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "munit" }
 
+---@class neotest-scala.MUnitDiscoverOpts
+---@field style "funsuite"
+---@field path string
+---@field content string
+---@field opts? table
+
+---@class neotest-scala.MUnitBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---Detect munit style from file content
 ---@param content string
 ---@return "funsuite" | nil
@@ -16,10 +30,10 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for munit
----@param opts table
+---@param opts neotest-scala.MUnitDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
-    path = opts.path
+    local path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -100,7 +114,7 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
----@param opts table
+---@param opts neotest-scala.MUnitBuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
     local root_path = opts.root_path

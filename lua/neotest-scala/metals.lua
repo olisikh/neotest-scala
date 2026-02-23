@@ -11,6 +11,12 @@ local previous_build_target_handler = nil
 
 local CACHE_TTL = 60
 
+---@class neotest-scala.MetalsBuildTargetInfoOpts
+---@field root_path string
+---@field target_path string
+---@field cache_enabled boolean
+---@field timeout_ms? integer
+
 local function parse_build_target_info(text)
     local result = {}
     local curr_section = nil
@@ -105,6 +111,8 @@ local function do_get_build_target_info(root_path, target_path, timeout_ms)
     return nil
 end
 
+---@param opts neotest-scala.MetalsBuildTargetInfoOpts
+---@return table<string, string[]>|nil
 function M.get_build_target_info(opts)
     local root_path = opts.root_path
     local target_path = opts.target_path

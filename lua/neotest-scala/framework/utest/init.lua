@@ -5,6 +5,20 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "utest" }
 
+---@class neotest-scala.UTestDiscoverOpts
+---@field style "suite"
+---@field path string
+---@field content string
+---@field opts? table
+
+---@class neotest-scala.UTestBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---Detect utest style from file content
 ---@param content string
 ---@return "suite" | nil
@@ -16,10 +30,10 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for utest
----@param opts table
+---@param opts neotest-scala.UTestDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
-    path = opts.path
+    local path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -92,16 +106,17 @@ local function build_test_path(tree, name)
     return nil
 end
 
----@param opts table
+---@param opts neotest-scala.UTestBuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
     local root_path = opts.root_path
-    project = opts.project
-    tree = opts.tree
-    name = opts.name
-    extra_args = opts.extra_args
-    build_tool = opts.build_tool
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
+    local build_tool = opts.build_tool
     local test_path = build_test_path(tree, name)
+
     return build.command_with_path({
         root_path = root_path,
         project = project,

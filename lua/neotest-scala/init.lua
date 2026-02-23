@@ -6,11 +6,25 @@ local build = require("neotest-scala.build")
 local strategy = require("neotest-scala.strategy")
 local results = require("neotest-scala.results")
 
+---@class neotest-scala.AdapterArgsContext
+---@field path string
+---@field build_target_info table<string, string[]>
+---@field project_name string
+---@field framework string
+
+---@class neotest-scala.AdapterSetupOpts
+---@field cache_build_info? boolean
+---@field build_tool? "auto"|"bloop"|"sbt"
+---@field compile_on_save? boolean
+---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
+
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
+---@param _ neotest-scala.AdapterArgsContext
+---@return string[]
 local function get_args(_)
     return {}
 end
@@ -70,8 +84,7 @@ function adapter.discover_positions(path)
                 local tree = framework.discover_positions({
                     style = style,
                     path = path,
-                    content = content,
-                    opts = {},
+                    content = content
                 })
                 if tree then
                     table.insert(trees, tree)
@@ -189,6 +202,9 @@ local function is_callable(obj)
 end
 
 setmetatable(adapter, {
+    ---@param _ table
+    ---@param opts neotest-scala.AdapterSetupOpts|nil
+    ---@return neotest.Adapter
     __call = function(_, opts)
         opts = opts or {}
 

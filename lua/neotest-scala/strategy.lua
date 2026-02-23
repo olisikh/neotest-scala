@@ -2,7 +2,13 @@ local utils = require("neotest-scala.utils")
 
 local M = {}
 
----@param opts table
+---@class neotest-scala.StrategyGetConfigOpts
+---@field strategy string|nil
+---@field tree neotest.Tree
+---@field project string
+---@field root string
+
+---@param opts neotest-scala.StrategyGetConfigOpts
 ---@return table|nil
 function M.get_config(opts)
     local strategy = opts.strategy

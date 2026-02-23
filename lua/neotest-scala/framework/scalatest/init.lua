@@ -5,6 +5,20 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "scalatest" }
 
+---@class neotest-scala.ScalaTestDiscoverOpts
+---@field style "funsuite"|"freespec"
+---@field path string
+---@field content string
+---@field opts? table
+
+---@class neotest-scala.ScalaTestBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---Detect ScalaTest style from file content
 ---@param content string
 ---@return "funsuite" | "freespec" | nil
@@ -18,12 +32,13 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for ScalaTest
----@param opts table
+---@param opts neotest-scala.ScalaTestDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
     local style = opts.style
-    path = opts.path
+    local path = opts.path
     local query
+
     if style == "funsuite" then
         query = [[
       (object_definition
@@ -97,7 +112,7 @@ local function build_freespec_test_path(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param opts table
+---@param opts neotest-scala.ScalaTestBuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
     local root_path = opts.root_path

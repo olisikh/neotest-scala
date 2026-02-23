@@ -2,6 +2,29 @@ local lib = require("neotest.lib")
 
 local M = {}
 
+---@alias neotest-scala.BuildTool "bloop"|"sbt"
+
+---@class neotest-scala.BuildSetupOpts
+---@field build_tool? "auto"|neotest-scala.BuildTool
+---@field compile_on_save? boolean
+
+---@class neotest-scala.BuildCommandPayload
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+
+---@class neotest-scala.BuildCommandOpts: neotest-scala.BuildCommandPayload
+---@field root_path string
+---@field tool_override? neotest-scala.BuildTool
+
+---@class neotest-scala.BuildCommandWithPathOpts
+---@field root_path string
+---@field project string
+---@field test_path string|nil
+---@field extra_args nil|string|string[]
+---@field tool_override? neotest-scala.BuildTool
+
 -- Configuration
 local config = {
     build_tool = "auto",
@@ -24,7 +47,7 @@ local function flatten(tbl)
 end
 
 --- Update configuration
----@param opts table
+---@param opts neotest-scala.BuildSetupOpts
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 end
@@ -154,7 +177,7 @@ local function build_test_namespace(tree)
 end
 
 --- Build command using sbt
----@param opts table
+---@param opts neotest-scala.BuildCommandPayload
 ---@return string[]
 local function build_sbt_command(opts)
     local project = opts.project
@@ -177,7 +200,7 @@ local function build_sbt_command(opts)
 end
 
 --- Build command using bloop
----@param opts table
+---@param opts neotest-scala.BuildCommandPayload
 ---@return string[]
 local function build_bloop_command(opts)
     local project = opts.project
@@ -203,7 +226,7 @@ local function build_bloop_command(opts)
 end
 
 --- Builds a command for running tests
----@param opts table
+---@param opts neotest-scala.BuildCommandOpts
 ---@return string[]
 function M.command(opts)
     local root_path = opts.root_path
@@ -232,7 +255,7 @@ function M.command(opts)
 end
 
 --- Build command with explicit test path (used by munit/utest)
----@param opts table
+---@param opts neotest-scala.BuildCommandWithPathOpts
 ---@return string[]
 function M.command_with_path(opts)
     local root_path = opts.root_path

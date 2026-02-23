@@ -6,6 +6,20 @@ local textspec = require("neotest-scala.framework.specs2.textspec")
 ---@class neotest-scala.Framework
 local M = { name = "specs2" }
 
+---@class neotest-scala.Specs2DiscoverOpts
+---@field style "mutable"|"text"
+---@field path string
+---@field content string
+---@field opts? table
+
+---@class neotest-scala.Specs2BuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---@param content string
 ---@return "mutable" | "text" | nil
 function M.detect_style(content)
@@ -17,14 +31,14 @@ function M.detect_style(content)
     return nil
 end
 
----@param opts table
+---@param opts neotest-scala.Specs2DiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
     local style = opts.style
-    path = opts.path
-    content = opts.content
+    local path = opts.path
+    local content = opts.content
+
     if style == "text" then
-        local textspec = require("neotest-scala.framework.specs2.textspec")
         return textspec.discover_positions(path, content)
     end
 
@@ -80,7 +94,7 @@ function M.build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
----@param opts table
+---@param opts neotest-scala.Specs2BuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
     return build.command({

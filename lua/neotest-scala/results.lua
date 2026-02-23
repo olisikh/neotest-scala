@@ -5,6 +5,12 @@ local build = require("neotest-scala.build")
 
 local M = {}
 
+---@class neotest-scala.FindTestResultOpts
+---@field framework neotest-scala.Framework
+---@field junit_results table[]
+---@field position neotest.Position
+---@field ns table
+
 local function build_test_result(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
@@ -65,6 +71,8 @@ local function collect_namespaces(framework, node, report_prefix)
     return namespaces
 end
 
+---@param opts neotest-scala.FindTestResultOpts
+---@return neotest.Result|nil
 local function find_test_result(opts)
     local framework = opts.framework
     local junit_results = opts.junit_results
