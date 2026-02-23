@@ -124,6 +124,8 @@ function adapter.build_spec(args)
         return {}
     end
 
+    local build_tool = build.get_tool(root_path)
+
     local extra_args = vim.list_extend(
         get_args({
             path = root_path,
@@ -135,7 +137,7 @@ function adapter.build_spec(args)
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args)
+    local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args, build_tool)
     local strategy_config = strategy.get_config(args.strategy, args.tree, project_name, root_path)
 
     return {
@@ -147,6 +149,7 @@ function adapter.build_spec(args)
             build_target_info = build_target_info,
             project_name = project_name,
             framework = framework,
+            build_tool = build_tool,
         },
     }
 end

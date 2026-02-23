@@ -49,9 +49,10 @@ end
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
+---@param build_tool string|nil
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
-    return build.command(root_path, project, tree, name, extra_args)
+function M.build_command(root_path, project, tree, name, extra_args, build_tool)
+    return build.command(root_path, project, tree, name, extra_args, build_tool)
 end
 
 function M.build_test_result(junit_test, position)

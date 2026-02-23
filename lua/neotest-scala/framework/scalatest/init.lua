@@ -103,8 +103,9 @@ end
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
+---@param build_tool string|nil
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
+function M.build_command(root_path, project, tree, name, extra_args, build_tool)
     local tree_type = nil
     if type(tree.data) == "function" then
         tree_type = tree:data().type
@@ -113,7 +114,7 @@ function M.build_command(root_path, project, tree, name, extra_args)
     end
 
     local junit_args = {}
-    if build.get_tool(root_path) == "bloop" then
+    if build.resolve_tool(root_path, build_tool) == "bloop" then
         junit_args = {
             "--args",
             "-u",
@@ -122,6 +123,8 @@ function M.build_command(root_path, project, tree, name, extra_args)
         }
     end
 
+    local merged_args = build.merge_args(junit_args, extra_args)
+
     if tree_type == "test" then
         local full_test_name = build_freespec_test_path(tree, name)
         return build.command(
@@ -129,11 +132,19 @@ function M.build_command(root_path, project, tree, name, extra_args)
             project,
             tree,
             full_test_name,
-            vim.tbl_deep_extend("force", junit_args, extra_args)
+            merged_args,
+            build_tool
         )
     end
 
-    return build.command(root_path, project, tree, name, vim.tbl_deep_extend("force", junit_args, extra_args))
+    return build.command(
+        root_path,
+        project,
+        tree,
+        name,
+        merged_args,
+        build_tool
+    )
 end
 
 ---@param junit_test table<string, string>
@@ -192,7 +203,7 @@ function M.build_test_result(junit_test, position)
             error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         end
     elseif junit_test.error_stacktrace then
-        error.message = junit_test.error_stacktrace
+        error.message = junit_test.error_stacktrace:match("^[^\r\n]+") or junit_test.error_stacktrace
         error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
     end
 

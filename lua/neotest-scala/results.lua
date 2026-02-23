@@ -109,11 +109,14 @@ function M.collect(spec, result, node)
 
     -- Branch on build tool
     local root_path = spec.env.root_path
-    if root_path then
-        local build_tool = build.get_tool(root_path)
-        if build_tool == "bloop" and framework.parse_stdout_results then
-            return framework.parse_stdout_results(log, node)
-        end
+    local build_tool = spec.env.build_tool
+
+    if not build_tool and root_path then
+        build_tool = build.get_tool(root_path)
+    end
+
+    if build_tool == "bloop" and framework.parse_stdout_results then
+        return framework.parse_stdout_results(log, node)
     end
 
     local base_dir = spec.env.build_target_info["Base Directory"]

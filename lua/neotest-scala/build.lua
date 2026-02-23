@@ -57,6 +57,70 @@ function M.get_tool(root_path)
     end
 end
 
+--- Resolve which build tool to use, optionally honoring a per-run override.
+---@param root_path string Project root path
+---@param tool_override string|nil
+---@return string "bloop" or "sbt"
+function M.resolve_tool(root_path, tool_override)
+    if tool_override == "bloop" or tool_override == "sbt" then
+        return tool_override
+    end
+
+    return M.get_tool(root_path)
+end
+
+--- Merge two argument values (nil|string|string[]), preserving caller-friendly behavior.
+--- Rules:
+--- - nil + X => X
+--- - X + nil => X
+--- - table + table => concatenated table
+--- - string + string => { left, right }
+--- - string + table => { left, ...table }
+--- - table + string => { ...table, right }
+---@param left nil|string|string[]
+---@param right nil|string|string[]
+---@return nil|string|string[]
+function M.merge_args(left, right)
+    local left_is_table = type(left) == "table"
+    local right_is_table = type(right) == "table"
+
+    if left_is_table and #left == 0 then
+        left = nil
+        left_is_table = false
+    end
+
+    if right_is_table and #right == 0 then
+        right = nil
+        right_is_table = false
+    end
+
+    if left == nil then
+        return right
+    end
+
+    if right == nil then
+        return left
+    end
+
+    if left_is_table and right_is_table then
+        local result = vim.deepcopy(left)
+        return vim.list_extend(result, vim.deepcopy(right))
+    end
+
+    if left_is_table then
+        local result = vim.deepcopy(left)
+        table.insert(result, right)
+        return result
+    end
+
+    if right_is_table then
+        local result = { left }
+        return vim.list_extend(result, vim.deepcopy(right))
+    end
+
+    return { left, right }
+end
+
 --- Build test namespace from tree
 ---@param tree neotest.Tree
 ---@return string
@@ -142,9 +206,10 @@ end
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
+---@param tool_override string|nil
 ---@return string[]
-function M.command(root_path, project, tree, name, extra_args)
-    local build_tool = M.get_tool(root_path)
+function M.command(root_path, project, tree, name, extra_args, tool_override)
+    local build_tool = M.resolve_tool(root_path, tool_override)
 
     if build_tool == "bloop" then
         return build_bloop_command(project, tree, name, extra_args)
@@ -158,9 +223,10 @@ end
 ---@param project string
 ---@param test_path string|nil
 ---@param extra_args table|string
+---@param tool_override string|nil
 ---@return string[]
-function M.command_with_path(root_path, project, test_path, extra_args)
-    local build_tool = M.get_tool(root_path)
+function M.command_with_path(root_path, project, test_path, extra_args, tool_override)
+    local build_tool = M.resolve_tool(root_path, tool_override)
     local bloop_project = project .. "-test"
 
     if build_tool == "bloop" then

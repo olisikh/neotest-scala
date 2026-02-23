@@ -7,6 +7,7 @@ local cache_timestamp = {}
 local in_flight = {}
 local running_tasks = {}
 local handler_registered = false
+local previous_build_target_handler = nil
 
 local CACHE_TTL = 60
 
@@ -254,7 +255,8 @@ function M.cleanup()
     cache_timestamp = {}
 
     if handler_registered then
-        vim.lsp.handlers["metals/buildTargetChanged"] = nil
+        vim.lsp.handlers["metals/buildTargetChanged"] = previous_build_target_handler
+        previous_build_target_handler = nil
         handler_registered = false
     end
 end
@@ -265,12 +267,18 @@ local function register_lsp_handler()
     end
 
     pcall(function()
+        previous_build_target_handler = vim.lsp.handlers["metals/buildTargetChanged"]
+
         vim.lsp.handlers["metals/buildTargetChanged"] = function(_, result, ctx)
-            if not result then
-                return
+            if previous_build_target_handler then
+                pcall(previous_build_target_handler, nil, result, ctx)
             end
 
             vim.schedule(function()
+                if not ctx or not ctx.client_id then
+                    return
+                end
+
                 local client = vim.lsp.get_client_by_id(ctx.client_id)
                 if client then
                     local root_path = client.config.root_dir

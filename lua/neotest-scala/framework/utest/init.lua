@@ -99,10 +99,11 @@ end
 ---@param tree neotest.Tree
 ---@param name string
 ---@param extra_args table|string
+---@param build_tool string|nil
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
+function M.build_command(root_path, project, tree, name, extra_args, build_tool)
     local test_path = build_test_path(tree, name)
-    return build.command_with_path(root_path, project, test_path, extra_args)
+    return build.command_with_path(root_path, project, test_path, extra_args, build_tool)
 end
 
 function M.build_namespace(ns_node, report_prefix, node)
