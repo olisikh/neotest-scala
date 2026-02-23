@@ -30,28 +30,6 @@ end
 
 local cache_build_info = true
 
-local REMOVED_FRAMEWORK_OPTIONS = {
-    "frameworks",
-    "enabled_frameworks",
-    "disabled_frameworks",
-    "libraries",
-    "enabled_libraries",
-    "disabled_libraries",
-}
-
----@param opts table
----@return table
-local function sanitize_setup_opts(opts)
-    for _, option_name in ipairs(REMOVED_FRAMEWORK_OPTIONS) do
-        if opts[option_name] ~= nil then
-            opts[option_name] = nil
-            vim.print("[neotest-scala]: Option '" .. option_name .. "' is not supported; framework selection is automatic")
-        end
-    end
-
-    return opts
-end
-
 
 ---@async
 ---@param file_path string
@@ -176,6 +154,7 @@ function adapter.build_spec(args)
     end
 
     local build_tool = build.get_tool(root_path, build_target_info)
+    build_tool = build.enforce_framework_tool(build_tool, framework)
 
     local extra_args = vim.list_extend(
         get_args({
@@ -235,7 +214,7 @@ setmetatable(adapter, {
     ---@param opts neotest-scala.AdapterSetupOpts|nil
     ---@return neotest.Adapter
     __call = function(_, opts)
-        opts = sanitize_setup_opts(opts or {})
+        opts = opts or {}
 
         cache_build_info = opts.cache_build_info ~= false
 

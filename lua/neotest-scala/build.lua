@@ -32,6 +32,11 @@ local config = {
     build_tool = "auto",
 }
 
+local BLOOP_UNSUPPORTED_FRAMEWORKS = {
+    utest = true,
+    ["zio-test"] = true,
+}
+
 -- Flatten a table
 local function flatten(tbl)
     local result = {}
@@ -176,6 +181,18 @@ function M.resolve_tool(root_path, tool_override, build_target_info)
     end
 
     return M.get_tool(root_path, build_target_info)
+end
+
+--- Enforce framework-specific build tool constraints.
+---@param build_tool neotest-scala.BuildTool
+---@param framework string|nil
+---@return neotest-scala.BuildTool
+function M.enforce_framework_tool(build_tool, framework)
+    if build_tool == "bloop" and framework and BLOOP_UNSUPPORTED_FRAMEWORKS[framework] then
+        return "sbt"
+    end
+
+    return build_tool
 end
 
 --- Merge two argument values (nil|string|string[]), preserving caller-friendly behavior.

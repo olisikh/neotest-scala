@@ -84,6 +84,48 @@ local function match_test(junit_test, position)
     return junit_test_id == test_id
 end
 
+---@param message string
+---@return string
+local function strip_test_header_line(message)
+    local first_line, rest = message:match("^([^\r\n]*)\r?\n(.*)$")
+    if first_line and rest and first_line:match("^%s*%-%s+.+$") then
+        return rest
+    end
+
+    return message
+end
+
+---@param message string
+---@return string
+local function trim_line_indentation(message)
+    local first_line = message:match("^([^\r\n]*)") or ""
+    local base_indent = #(first_line:match("^( *)") or "")
+
+    if base_indent == 0 then
+        return message
+    end
+
+    local lines = {}
+
+    local function remove_base_indent(line)
+        local leading_spaces = #(line:match("^( *)") or "")
+        local remove_count = math.min(leading_spaces, base_indent)
+        return line:sub(remove_count + 1)
+    end
+
+    for line in (message .. "\n"):gmatch("([^\n]*)\n") do
+        table.insert(lines, remove_base_indent(line))
+    end
+
+    return table.concat(lines, "\n")
+end
+
+---@param message string
+---@return string
+local function sanitize_error_message(message)
+    return trim_line_indentation(strip_test_header_line(message))
+end
+
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return neotest.Result|nil
@@ -110,10 +152,10 @@ function M.build_test_result(junit_test, position)
             error.line = tonumber(line_num) - 1
         end
 
-        error.message = junit_test.error_message
+        error.message = sanitize_error_message(junit_test.error_message)
     elseif junit_test.error_stacktrace then
         error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
-        error.message = junit_test.error_stacktrace
+        error.message = sanitize_error_message(junit_test.error_stacktrace)
     end
 
     if not vim.tbl_isempty(error) then

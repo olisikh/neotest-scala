@@ -68,8 +68,6 @@ require("neotest").setup({
 })
 ```
 
-Test library selection is automatic per file. Manual enable/disable framework options are intentionally not supported.
-
 ### Build Tool Selection
 
 By default (`build_tool = "auto"`), the plugin follows build tool information from Metals build target metadata to stay in sync with your editor session.
@@ -78,6 +76,9 @@ Selection priority in auto mode:
 - If Metals metadata clearly indicates `sbt`, use `sbt` (recommended default for stability)
 - If Metals metadata clearly indicates `bloop`, use `bloop`
 - If metadata is ambiguous, fall back to local detection (`.bloop/` + `bloop` executable), otherwise `sbt`
+
+Framework compatibility guard:
+- If selected tool is `bloop` but the detected test library does not support bloop execution, neotest-scala automatically runs that test with `sbt`.
 
 You can explicitly configure the build tool:
 
