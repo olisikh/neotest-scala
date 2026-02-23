@@ -1,64 +1,22 @@
 local fw = require("neotest-scala.framework")
 local utils = require("neotest-scala.utils")
 local junit = require("neotest-scala.junit")
+local build = require("neotest-scala.build")
 
 local M = {}
-
-local function build_test_result(junit_test, position)
-    local error_message = junit_test.error_message or junit_test.error_stacktrace
-    if error_message then
-        local error = { message = error_message }
-
-        local file_name = utils.get_file_name(position.path)
-        local stacktrace = junit_test.error_stacktrace or ""
-        local line = string.match(stacktrace, "%(" .. file_name .. ":(%d+)%)")
-
-        if line then
-            error.line = tonumber(line) - 1
-        end
-
-        return {
-            errors = { error },
-            status = TEST_FAILED,
-        }
-    end
-
-    return {
-        status = TEST_PASSED,
-    }
-end
-
-local function collect_result(framework, junit_test, position)
-    local test_result = nil
-
-    if framework.build_test_result then
-        test_result = framework.build_test_result(junit_test, position)
-    else
-        test_result = build_test_result(junit_test, position)
-    end
-
-    test_result.test_id = position.id
-
-    return test_result
-end
-
 local function collect_namespaces(framework, node, report_prefix)
     local ns_data = node:data()
     local namespaces = {}
 
     if ns_data.type == "file" then
         for _, ns_node in ipairs(node:children()) do
-            if framework.build_namespace then
-                table.insert(namespaces, framework.build_namespace(ns_node, report_prefix, ns_node))
-            end
+            table.insert(namespaces, framework.build_namespace(ns_node, report_prefix, ns_node))
         end
     elseif ns_data.type == "namespace" then
-        if framework.build_namespace then
-            table.insert(namespaces, framework.build_namespace(node, report_prefix, node))
-        end
+        table.insert(namespaces, framework.build_namespace(node, report_prefix, node))
     elseif ns_data.type == "test" then
         local ns_node = utils.find_node(node, "namespace", false)
-        if ns_node and framework.build_namespace then
+        if ns_node then
             table.insert(namespaces, framework.build_namespace(ns_node, report_prefix, node))
         end
     else
@@ -67,21 +25,6 @@ local function collect_namespaces(framework, node, report_prefix)
     end
 
     return namespaces
-end
-
-local function find_test_result(framework, junit_results, position, ns)
-    for _, junit_result in ipairs(junit_results) do
-        -- Scalatest bypasses namespace check; frameworks handle their own matching
-        local skip_namespace_check = framework.name == "scalatest"
-
-        if skip_namespace_check or junit_result.namespace == ns.namespace then
-            if framework.match_test and framework.match_test(junit_result, position) then
-                return collect_result(framework, junit_result, position)
-            end
-        end
-    end
-
-    return nil
 end
 
 ---@async
@@ -111,6 +54,19 @@ function M.collect(spec, result, node)
         return {}
     end
 
+    -- Branch on build tool
+    local root_path = spec.env.root_path
+    local build_tool = spec.env.build_tool
+    local build_target_info = spec.env.build_target_info
+
+    if not build_tool and root_path then
+        build_tool = build.get_tool(root_path, build_target_info)
+    end
+
+    if build_tool == "bloop" then
+        return framework.parse_stdout_results(log, node)
+    end
+
     local base_dir = spec.env.build_target_info["Base Directory"]
     if not base_dir or not base_dir[1] then
         vim.print("[neotest-scala] Cannot find base directory")
@@ -137,17 +93,19 @@ function M.collect(spec, result, node)
 
         for _, test in ipairs(ns.tests) do
             local position = test:data()
-            local test_result = find_test_result(framework, junit_results, position, ns)
+            local test_result = framework.build_position_result({
+                position = position,
+                test_node = test,
+                junit_results = junit_results,
+                namespace = ns,
+            })
 
-            if test_result then
-                test_results[position.id] = test_result
-            else
-                local test_status = utils.has_nested_tests(test) and TEST_PASSED or TEST_FAILED
-
-                test_results[position.id] = {
-                    status = test_status,
-                }
+            if not test_result then
+                vim.print("[neotest-scala] Framework '" .. framework.name .. "' returned no result for position '" .. position.id .. "'")
+                test_result = { status = TEST_FAILED }
             end
+
+            test_results[position.id] = test_result
         end
     end
 

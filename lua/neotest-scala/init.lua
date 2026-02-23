@@ -6,12 +6,26 @@ local build = require("neotest-scala.build")
 local strategy = require("neotest-scala.strategy")
 local results = require("neotest-scala.results")
 
+---@class neotest-scala.AdapterArgsContext
+---@field path string
+---@field build_target_info table<string, string[]>
+---@field project_name string
+---@field framework string
+
+---@class neotest-scala.AdapterSetupOpts
+---@field cache_build_info? boolean
+---@field build_tool? "auto"|"bloop"|"sbt"
+---@field compile_on_save? boolean
+---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
+
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
-local function get_args(_, _, _, _)
+---@param _ neotest-scala.AdapterArgsContext
+---@return string[]
+local function get_args(_)
     return {}
 end
 
@@ -64,13 +78,13 @@ function adapter.discover_positions(path)
     local trees = {}
     for _, fw_name in ipairs(frameworks) do
         local framework = fw.get_framework_class(fw_name)
-        if framework and framework.discover_positions then
-            local style = framework.detect_style and framework.detect_style(content) or nil
-            if style then
-                local tree = framework.discover_positions(style, path, content, {})
-                if tree then
-                    table.insert(trees, tree)
-                end
+        if framework then
+            local tree = framework.discover_positions({
+                path = path,
+                content = content,
+            })
+            if tree then
+                table.insert(trees, tree)
             end
         end
     end
@@ -101,7 +115,24 @@ function adapter.build_spec(args)
     local root_path = adapter.root(position.path)
     assert(root_path, "[neotest-scala]: Can't resolve root project folder")
 
-    local build_target_info = metals.get_build_target_info(root_path, position.path, cache_build_info)
+    local build_target_info = metals.get_build_target_info({
+        root_path = root_path,
+        target_path = position.path,
+        cache_enabled = cache_build_info,
+    })
+
+    if build.is_auto_mode() and cache_build_info then
+        local fresh_build_target_info = metals.get_build_target_info({
+            root_path = root_path,
+            target_path = position.path,
+            cache_enabled = false,
+        })
+
+        if fresh_build_target_info then
+            build_target_info = fresh_build_target_info
+        end
+    end
+
     if not build_target_info then
         vim.print("[neotest-scala]: Metals returned no build information, try again later")
         return {}
@@ -124,6 +155,8 @@ function adapter.build_spec(args)
         return {}
     end
 
+    local build_tool = build.get_tool(root_path, build_target_info)
+
     local extra_args = vim.list_extend(
         get_args({
             path = root_path,
@@ -135,8 +168,20 @@ function adapter.build_spec(args)
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args)
-    local strategy_config = strategy.get_config(args.strategy, args.tree, project_name, root_path)
+    local command = framework_class.build_command({
+        root_path = root_path,
+        project = project_name,
+        tree = args.tree,
+        name = test_name,
+        extra_args = extra_args,
+        build_tool = build_tool,
+    })
+    local strategy_config = strategy.get_config({
+        strategy = args.strategy,
+        tree = args.tree,
+        project = project_name,
+        root = root_path,
+    })
 
     return {
         command = command,
@@ -147,6 +192,7 @@ function adapter.build_spec(args)
             build_target_info = build_target_info,
             project_name = project_name,
             framework = framework,
+            build_tool = build_tool,
         },
     }
 end
@@ -165,6 +211,9 @@ local function is_callable(obj)
 end
 
 setmetatable(adapter, {
+    ---@param _ table
+    ---@param opts neotest-scala.AdapterSetupOpts|nil
+    ---@return neotest.Adapter
     __call = function(_, opts)
         opts = opts or {}
 
@@ -197,7 +246,11 @@ setmetatable(adapter, {
         if opts.compile_on_save then
             if root then
                 build.setup_compile_on_save(root, function(r, p)
-                    return metals.get_build_target_info(r, p, cache_build_info)
+                    return metals.get_build_target_info({
+                        root_path = r,
+                        target_path = p,
+                        cache_enabled = cache_build_info,
+                    })
                 end)
             end
         end

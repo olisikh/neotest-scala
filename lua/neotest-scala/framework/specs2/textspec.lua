@@ -90,10 +90,15 @@ local function find_method_line(content, ref)
 end
 
 ---Build neotest positions tree for TextSpec tests
----@param path string Path to the file
----@param content string File content
+---@class neotest-scala.Specs2TextSpecDiscoverOpts
+---@field path string Path to the file
+---@field content string File content
+
+---@param opts neotest-scala.Specs2TextSpecDiscoverOpts
 ---@return neotest.Tree|nil
-function M.discover_positions(path, content)
+function M.discover_positions(opts)
+    local path = opts.path
+    local content = opts.content
     local tests = parse_textspec(content)
     local package_name = utils.get_package_name(path) or ""
 
@@ -133,6 +138,7 @@ function M.discover_positions(path, content)
                 path = path,
                 type = "test",
                 range = { line_num, 0, line_num, 0 },
+                ---@type neotest-scala.PositionExtra
                 extra = {
                     textspec_path = test.path,
                 },
@@ -197,22 +203,6 @@ function M.build_namespace(ns_node, report_prefix)
         end
     end
     return namespace
-end
-
----Match TextSpec test by checking if textspec_path contains JUnit test name
----@param junit_result table
----@param position neotest.Position
----@return boolean
-function M.match_test(junit_result, position)
-    if not (position.extra and position.extra.textspec_path) then
-        return false
-    end
-
-    -- TextSpec JUnit output has short names like "contain 11 characters"
-    -- textspec_path has full path like "The 'Hello world' string should::contain 11 characters"
-    -- Check if textspec_path contains the JUnit test name
-    local textspec_path = position.extra.textspec_path
-    return textspec_path:find(junit_result.name, 1, true) ~= nil
 end
 
 return M

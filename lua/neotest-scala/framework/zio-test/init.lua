@@ -5,23 +5,36 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "zio-test" }
 
----Detect if this is a ZIO Test spec file
+---@class neotest-scala.ZioTestDiscoverOpts
+---@field path string
+---@field content string
+
+---@class neotest-scala.ZioTestBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---@param content string
----@return string|nil
-function M.detect_style(content)
+---@return boolean
+local function is_spec_style(content)
     if content:match("extends%s+ZIOSpecDefault") or content:match("zio%.test") then
-        return "spec"
+        return true
     end
-    return nil
+    return false
 end
 
 ---Discover test positions in ZIO Test spec
----@param style string
----@param path string
----@param content string
----@param opts table
+---@param opts neotest-scala.ZioTestDiscoverOpts
 ---@return neotest.Tree|nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    if not is_spec_style(opts.content) then
+        return nil
+    end
+
+    local path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -44,17 +57,41 @@ function M.discover_positions(style, path, content, opts)
     })
 end
 
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
+---@param opts neotest-scala.ZioTestBuildCommandOpts
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
-    return build.command(root_path, project, tree, name, extra_args)
+function M.build_command(opts)
+    return build.command({
+        root_path = opts.root_path,
+        project = opts.project,
+        tree = opts.tree,
+        name = opts.name,
+        extra_args = opts.extra_args,
+        tool_override = opts.build_tool,
+    })
 end
 
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return boolean
+local function match_test(junit_test, position)
+    if not (position and position.id and junit_test and junit_test.name and junit_test.namespace) then
+        return true
+    end
+
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    return junit_test_id == test_id
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result|nil
 function M.build_test_result(junit_test, position)
+    if not match_test(junit_test, position) then
+        return nil
+    end
+
     local result = nil
     local error = {}
 
@@ -75,11 +112,7 @@ function M.build_test_result(junit_test, position)
 
         error.message = junit_test.error_message
     elseif junit_test.error_stacktrace then
-        local line_num = string.match(junit_test.error_stacktrace, "%(" .. file_name .. ":(%d+)%)")
-        if line_num then
-            error.line = tonumber(line_num) - 1
-        end
-
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         error.message = junit_test.error_stacktrace
     end
 
@@ -95,6 +128,24 @@ function M.build_test_result(junit_test, position)
     end
 
     return result
+end
+
+---@param opts { position: neotest.Position, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
+---@return neotest.Result|nil
+function M.build_position_result(opts)
+    local position = opts.position
+    local test_node = opts.test_node
+    local junit_results = opts.junit_results
+
+    for _, junit_test in ipairs(junit_results) do
+        local result = M.build_test_result(junit_test, position)
+        if result then
+            return result
+        end
+    end
+
+    local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
+    return { status = test_status }
 end
 
 function M.build_namespace(ns_node, report_prefix, node)
@@ -117,11 +168,134 @@ function M.build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
-function M.match_test(junit_test, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+
+    output = utils.string_remove_ansi(output)
+
+    -- Build position lookup by file name
+    local positions_by_file = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            local file_name = utils.get_file_name(data.path)
+            if not positions_by_file[file_name] then
+                positions_by_file[file_name] = {}
+            end
+            table.insert(positions_by_file[file_name], {
+                id = data.id,
+                range = data.range,
+            })
+        end
+    end
+
+    -- Find the most specific (narrowest) position containing a JVM line number
+    local function find_position_for_line(file_name, jvm_line_num)
+        local positions = positions_by_file[file_name]
+        if not positions then
+            return nil
+        end
+
+        local line_0idx = jvm_line_num - 1
+        local best_match = nil
+        local best_span = math.huge
+
+        for _, pos in ipairs(positions) do
+            if pos.range then
+                if pos.range[1] <= line_0idx and line_0idx <= pos.range[3] then
+                    local span = pos.range[3] - pos.range[1]
+                    if span < best_span then
+                        best_match = pos
+                        best_span = span
+                    end
+                end
+            end
+        end
+        return best_match
+    end
+
+    local lines = {}
+    for line in output:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    local failed_ids = {}
+
+    -- Detect compilation or bootstrapping failures
+    local global_failure = nil
+    if output:match("Failed to compile") then
+        global_failure = "Compilation failed"
+    elseif output:match("Test suite aborted") or output:match("Failed to initialize") then
+        global_failure = "Test suite aborted"
+    elseif output:match("SuiteSelector") or output:match("initializationError") then
+        global_failure = "Suite initialization failed"
+    end
+
+    for i, line in ipairs(lines) do
+        -- Pattern 1: "at /full/path/File.scala:22" (assertion failures)
+        local full_path, line_num_str = line:match("at ([^:]+%.scala):(%d+)%s*$")
+
+        -- Pattern 2: "at pkg.Class(File.scala:33)" (stack traces)
+        if not full_path then
+            full_path, line_num_str = line:match("%(([^:]+%.scala):(%d+)%)")
+        end
+
+        if full_path and line_num_str then
+            local file_name = utils.get_file_name(full_path)
+            local line_num = tonumber(line_num_str)
+            local pos = find_position_for_line(file_name, line_num)
+
+            if pos and not failed_ids[pos.id] then
+                -- Look backwards for error message
+                local err_msg = "Test failed"
+                for j = i - 1, math.max(1, i - 10), -1 do
+                    local prev = lines[j]
+                    -- Assertion message: "✗ message"
+                    local msg = prev:match("^%s*✗ (.+)$")
+                    if msg then
+                        err_msg = msg
+                        break
+                    end
+                    -- Exception message: "...Exception: message"
+                    local exc = prev:match("Exception[^:]*:%s*(.+)$")
+                    if exc then
+                        err_msg = exc
+                        break
+                    end
+                end
+
+                results[pos.id] = {
+                    status = TEST_FAILED,
+                    errors = { { message = err_msg, line = line_num - 1 } }, -- 0-indexed for neotest
+                }
+                failed_ids[pos.id] = true
+            end
+        end
+    end
+
+    local default_status = TEST_PASSED
+    local default_error = nil
+    if global_failure then
+        default_status = TEST_FAILED
+        default_error = { message = global_failure }
+    end
+
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" and not results[data.id] then
+            if default_error then
+                results[data.id] = { status = default_status, errors = { default_error } }
+            else
+                results[data.id] = { status = default_status }
+            end
+        end
+    end
+
+    return results
 end
 
 ---@return neotest-scala.Framework

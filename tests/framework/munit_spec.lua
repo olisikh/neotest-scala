@@ -64,9 +64,9 @@ describe("munit", function()
       end
       return parts[#parts]
     end)
-    H.mock_fn("neotest-scala.build", "command_with_path", function(root_path, project, test_path, extra_args)
-      captured_test_path = test_path
-      return { "sbt", project .. "/testOnly", test_path }
+    H.mock_fn("neotest-scala.build", "command_with_path", function(opts)
+      captured_test_path = opts.test_path
+      return { "sbt", opts.project .. "/testOnly", opts.test_path }
     end)
   end)
 
@@ -89,7 +89,13 @@ describe("munit", function()
           path = "/project/src/test/scala/com/example/MySpec.scala",
         }, namespace_tree)
 
-        munit.build_command("/project", "root", test_tree, "should pass", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = test_tree,
+          name = "should pass",
+          extra_args = {},
+        })
 
         assert.are.equal("com.example.MySpec.should pass", captured_test_path)
       end)
@@ -113,7 +119,13 @@ describe("munit", function()
           path = "/project/src/test/scala/com/example/NestedSpec.scala",
         }, parent_test_tree)
 
-        munit.build_command("/project", "root", nested_test_tree, "child test", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = nested_test_tree,
+          name = "child test",
+          extra_args = {},
+        })
 
         assert.are.equal("com.example.NestedSpec.parent test.child test", captured_test_path)
       end)
@@ -127,7 +139,13 @@ describe("munit", function()
           path = "/project/src/test/scala/com/example/MySpec.scala",
         })
 
-        munit.build_command("/project", "root", namespace_tree, "MySpec", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = namespace_tree,
+          name = "MySpec",
+          extra_args = {},
+        })
 
         assert.are.equal("com.example.MySpec.*", captured_test_path)
       end)
@@ -143,7 +161,13 @@ describe("munit", function()
           path = "/project/src/test/scala/NoPackageSpec.scala",
         })
 
-        munit.build_command("/project", "root", namespace_tree, "NoPackageSpec", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = namespace_tree,
+          name = "NoPackageSpec",
+          extra_args = {},
+        })
 
         assert.is_nil(captured_test_path)
       end)
@@ -163,7 +187,13 @@ describe("munit", function()
           path = "/project/src/test/scala/com/example/FileSpec.scala",
         }, nil, { namespace_child })
 
-        munit.build_command("/project", "root", file_tree, "FileSpec.scala", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = file_tree,
+          name = "FileSpec.scala",
+          extra_args = {},
+        })
 
         assert.are.equal("com.example.*", captured_test_path)
       end)
@@ -177,7 +207,13 @@ describe("munit", function()
           path = "/project/src/test/scala",
         })
 
-        munit.build_command("/project", "root", dir_tree, "scala", {})
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = dir_tree,
+          name = "scala",
+          extra_args = {},
+        })
 
         assert.are.equal("*", captured_test_path)
       end)

@@ -91,8 +91,8 @@ local build = require("neotest-scala.build")
 ```
 
 ### Naming
-- Files: `camelCase.lua` (e.g., `textspec.lua`)
-- Functions: `snake_case` for module exports, `camelCase` for local helpers
+- Files: `kebab-case.lua` (e.g., `zio-test.lua`)
+- Functions: `snake_case`
 - Constants: `UPPER_SNAKE_CASE` (e.g., `TEST_PASSED`)
 
 ### Type Annotations
@@ -103,11 +103,24 @@ function adapter.is_test_file(file_path)
 
 ---@class neotest-scala.Framework
 ---@field name string
----@field build_command fun(root_path: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
----@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
----@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table
----@field discover_positions nil|fun(style: string, path: string, content: string, opts: table): neotest.Tree
----@field detect_style nil|fun(content: string): string|nil
+---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
+---@field build_position_result fun(opts: { position: neotest.Position|neotest-scala.PositionWithExtra, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[], namespace: table }): neotest.Result|nil
+---@field build_namespace fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
+---@field discover_positions fun(opts: { path: string, content: string }): neotest.Tree|nil
+---@field parse_stdout_results fun(output: string, tree: neotest.Tree): table<string, neotest.Result>
+
+---@class neotest-scala.PositionExtra
+---@field textspec_path? string
+
+---@class neotest-scala.PositionWithExtra: neotest.Position
+---@field extra? neotest-scala.PositionExtra
+
+---@class neotest-scala.JUnitTest
+---@field name string
+---@field namespace string
+---@field error_message? string
+---@field error_stacktrace? string
+---@field error_type? string
 ```
 
 ### Error Handling
@@ -128,26 +141,46 @@ Each framework module in `lua/neotest-scala/framework/<name>/init.lua` must impl
 ```lua
 local M = { name = "framework-name" }
 
--- Required: Detect style from file content
-function M.detect_style(content) -> string|nil
-
 -- Required: Discover test positions
-function M.discover_positions(style, path, content, opts) -> neotest.Tree
+function M.discover_positions(opts) -> neotest.Tree
+-- opts.path: scala source file path
+-- opts.content: full file content
+-- NOTE: style detection is framework-private and handled inside discover_positions
 
 -- Required: Build sbt/bloop command
-function M.build_command(root_path, project, tree, name, extra_args) -> string[]
+function M.build_command(opts) -> string[]
+-- opts.root_path: workspace root containing build.sbt
+-- opts.project: sbt project id (without -test suffix)
+-- opts.tree: neotest tree node being run
+-- opts.name: test/namespace/file display name (or nil)
+-- opts.extra_args: nil|string|string[] additional runner args
+-- opts.build_tool: "bloop"|"sbt"|nil pinned tool for this run
 
--- Optional: Match JUnit result to position (default: ID comparison)
-function M.match_test(junit_test, position) -> boolean
+-- Required: Build final result for one neotest position
+function M.build_position_result(opts) -> neotest.Result|nil
+-- opts.position: current neotest position being resolved
+-- opts.test_node: neotest.Tree node for nested-test fallback checks
+-- opts.junit_results: all JUnit rows loaded for the namespace
+-- opts.namespace: namespace metadata used for current report file
 
--- Optional: Build result with errors (default: generic parsing)
-function M.build_test_result(junit_test, position) -> table
+-- Internal helper pattern (optional):
+-- local function build_test_result(junit_test, position) -> neotest.Result|nil
+-- return nil when junit_test does not belong to this position
+-- position can be neotest.Position or neotest-scala.PositionWithExtra
+-- use neotest-scala.PositionWithExtra when accessing position.extra.*
+-- junit_test.name: test name from JUnit report
+-- junit_test.namespace: suite/namespace id matched against neotest position ids
+-- junit_test.error_message / junit_test.error_stacktrace may be absent for passing tests
 
--- Optional: Build namespace for JUnit lookup
+-- Required: Build namespace for JUnit lookup
 function M.build_namespace(ns_node, report_prefix, node) -> table
 
 return M
 ```
+
+### Options-Table Convention
+- For adapter/framework APIs with multiple inputs, use a single `opts` table instead of positional args.
+- Keep key names stable across call sites (`root_path`, `project`, `tree`, `name`, `extra_args`, `build_tool`).
 
 ### Adding a New Framework
 1. Create `lua/neotest-scala/framework/mylib/init.lua` with interface above
@@ -163,7 +196,7 @@ return M
 ### Delegation Pattern
 Core modules delegate framework-specific logic to framework modules:
 - `init.lua` → `framework.discover_positions()`, `framework.build_command()`
-- `results.lua` → `framework.build_namespace()`, `framework.match_test()`
+- `results.lua` → `framework.build_namespace()`, `framework.build_position_result()`
 
 **Never import framework-specific code directly in core files.**
 

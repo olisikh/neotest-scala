@@ -117,9 +117,9 @@ describe('utils', function()
       H.assert_eq(utils.string_remove_ansi('[1;32mgreen bold[0m'), 'green bold')
     end)
 
-    it('preserves ESC character (implementation only removes bracket sequences)', function()
+    it('removes ESC characters along with bracket sequences', function()
       local result = utils.string_remove_ansi(ESC .. '[31mred text' .. ESC .. '[0m')
-      H.assert_eq(result, ESC .. 'red text' .. ESC)
+      H.assert_eq(result, 'red text')
     end)
   end)
 
@@ -244,7 +244,11 @@ describe('utils', function()
   end)
 
   describe('find_node', function()
-    local function make_mock_node(node_type, name, parent, children)
+    local function make_mock_node(opts)
+      local node_type = opts.node_type
+      local name = opts.name
+      local parent = opts.parent
+      local children = opts.children
       local node = {
         _type = node_type,
         _name = name,
@@ -280,33 +284,33 @@ describe('utils', function()
     end
 
     it('returns self when type matches', function()
-      local node = make_mock_node('namespace', 'MySpec')
+      local node = make_mock_node({ node_type = 'namespace', name = 'MySpec' })
       local result = utils.find_node(node, 'namespace', false)
       H.assert_eq(result, node)
     end)
 
     it('finds parent node when searching up', function()
-      local parent = make_mock_node('file', 'MySpec.scala')
-      local child = make_mock_node('namespace', 'MySpec', parent)
+      local parent = make_mock_node({ node_type = 'file', name = 'MySpec.scala' })
+      local child = make_mock_node({ node_type = 'namespace', name = 'MySpec', parent = parent })
       local result = utils.find_node(child, 'file', false)
       H.assert_eq(result, parent)
     end)
 
     it('returns nil when parent not found', function()
-      local node = make_mock_node('test', 'test case')
+      local node = make_mock_node({ node_type = 'test', name = 'test case' })
       local result = utils.find_node(node, 'file', false)
       H.assert_eq(result, nil)
     end)
 
     it('finds child node when searching down', function()
-      local child = make_mock_node('namespace', 'MySpec')
-      local parent = make_mock_node('file', 'MySpec.scala', nil, { child })
+      local child = make_mock_node({ node_type = 'namespace', name = 'MySpec' })
+      local parent = make_mock_node({ node_type = 'file', name = 'MySpec.scala', children = { child } })
       local result = utils.find_node(parent, 'namespace', true)
       H.assert_eq(result, child)
     end)
 
     it('returns nil when child not found', function()
-      local node = make_mock_node('file', 'MySpec.scala', nil, {})
+      local node = make_mock_node({ node_type = 'file', name = 'MySpec.scala', children = {} })
       local result = utils.find_node(node, 'namespace', true)
       H.assert_eq(result, nil)
     end)

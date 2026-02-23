@@ -169,266 +169,36 @@ describe("metals get_frameworks", function()
   end)
 end)
 
-describe("scalatest detect_style", function()
+describe("framework style detection visibility", function()
   local scalatest = require("neotest-scala.framework.scalatest")
-
-  it("detects funsuite style", function()
-    local content = [[
-package com.example
-
-class MySpec extends AnyFunSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = scalatest.detect_style(content)
-    assert.are.equal("funsuite", style)
-  end)
-
-  it("detects funsuite with munit prefix", function()
-    local content = [[
-package com.example
-
-class MySpec extends munit.FunSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = scalatest.detect_style(content)
-    assert.are.equal("funsuite", style)
-  end)
-
-  it("detects freespec style", function()
-    local content = [[
-package com.example
-
-class MySpec extends AnyFreeSpec {
-  "A condition" - {
-    "should pass" in {
-      assert(true)
-    }
-  }
-}
-]]
-    local style = scalatest.detect_style(content)
-    assert.are.equal("freespec", style)
-  end)
-
-  it("detects freespec with prefix", function()
-    local content = [[
-package com.example
-
-class MySpec extends org.scalatest.freespec.AnyFreeSpec {
-  "A condition" - {
-    "should pass" in {
-      assert(true)
-    }
-  }
-}
-]]
-    local style = scalatest.detect_style(content)
-    assert.are.equal("freespec", style)
-  end)
-
-  it("returns nil for non-scalatest content", function()
-    local content = [[
-package com.example
-
-class MySpec {
-  def test(): Unit = {}
-}
-]]
-    local style = scalatest.detect_style(content)
-    assert.is_nil(style)
-  end)
-end)
-
-describe("munit detect_style", function()
   local munit = require("neotest-scala.framework.munit")
-
-  it("detects funsuite style", function()
-    local content = [[
-package com.example
-
-class MySpec extends FunSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = munit.detect_style(content)
-    assert.are.equal("funsuite", style)
-  end)
-
-  it("detects funsuite with munit prefix", function()
-    local content = [[
-package com.example
-
-class MySpec extends munit.FunSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = munit.detect_style(content)
-    assert.are.equal("funsuite", style)
-  end)
-
-  it("returns nil for non-munit content", function()
-    local content = [[
-package com.example
-
-class MySpec {
-  def test(): Unit = {}
-}
-]]
-    local style = munit.detect_style(content)
-    assert.is_nil(style)
-  end)
-end)
-
-describe("specs2 detect_style", function()
   local specs2 = require("neotest-scala.framework.specs2")
-
-  it("detects text style", function()
-    local content = [[
-package com.example
-
-class MySpec extends Specification {
-  s2"""A test scenario""" should {
-    "pass" in ok
-  }
-}
-]]
-    local style = specs2.detect_style(content)
-    assert.are.equal("text", style)
-  end)
-
-  it("detects mutable style", function()
-    local content = [[
-package com.example
-
-class MySpec extends Specification {
-  "A test" >> {
-    ok
-  }
-}
-]]
-    local style = specs2.detect_style(content)
-    assert.are.equal("mutable", style)
-  end)
-
-  it("returns nil for non-specs2 content", function()
-    local content = [[
-package com.example
-
-class MySpec {
-  def test(): Unit = {}
-}
-]]
-    local style = specs2.detect_style(content)
-    assert.is_nil(style)
-  end)
-end)
-
-describe("utest detect_style", function()
   local utest = require("neotest-scala.framework.utest")
-
-  it("detects suite style", function()
-    local content = [[
-package com.example
-
-object MySpec extends TestSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = utest.detect_style(content)
-    assert.are.equal("suite", style)
-  end)
-
-  it("detects suite with utest reference", function()
-    local content = [[
-package com.example
-
-import utest._
-
-object MySpec extends TestSuite {
-  test("should pass") {
-    assert(true)
-  }
-}
-]]
-    local style = utest.detect_style(content)
-    assert.are.equal("suite", style)
-  end)
-
-  it("returns nil for non-utest content", function()
-    local content = [[
-package com.example
-
-class MySpec {
-  def test(): Unit = {}
-}
-]]
-    local style = utest.detect_style(content)
-    assert.is_nil(style)
-  end)
-end)
-
-describe("zio-test detect_style", function()
   local zio_test = require("neotest-scala.framework.zio-test")
 
-  it("detects spec style", function()
-    local content = [[
-package com.example
-
-import zio.test._
-
-object MySpec extends ZIOSpecDefault {
-  test("should pass") {
-    assertTrue(true)
-  }
-}
-]]
-    local style = zio_test.detect_style(content)
-    assert.are.equal("spec", style)
+  it("keeps style detection private in scalatest", function()
+    assert.is_nil(scalatest.detect_style)
   end)
 
-  it("detects spec with zio.test prefix", function()
-    local content = [[
-package com.example
-
-class MySpec extends ZIOSpecDefault {
-  test("should pass") {
-    assertTrue(true)
-  }
-}
-]]
-    local style = zio_test.detect_style(content)
-    assert.are.equal("spec", style)
+  it("keeps style detection private in munit", function()
+    assert.is_nil(munit.detect_style)
   end)
 
-  it("returns nil for non-zio-test content", function()
-    local content = [[
-package com.example
+  it("keeps style detection private in specs2", function()
+    assert.is_nil(specs2.detect_style)
+  end)
 
-class MySpec {
-  def test(): Unit = {}
-}
-]]
-    local style = zio_test.detect_style(content)
-    assert.is_nil(style)
+  it("keeps style detection private in utest", function()
+    assert.is_nil(utest.detect_style)
+  end)
+
+  it("keeps style detection private in zio-test", function()
+    assert.is_nil(zio_test.detect_style)
   end)
 end)
 
 describe("multi-framework scenarios", function()
   local metals = require("neotest-scala.metals")
-  local scalatest = require("neotest-scala.framework.scalatest")
-  local munit = require("neotest-scala.framework.munit")
 
   local original_get_build_target_info
 
@@ -484,13 +254,4 @@ describe("multi-framework scenarios", function()
     assert.are.same({ "scalatest" }, frameworks)
   end)
 
-  it("detect_style returns nil for empty content", function()
-    local style = scalatest.detect_style("")
-    assert.is_nil(style)
-  end)
-
-  it("detect_style returns nil for whitespace-only content", function()
-    local style = munit.detect_style("   \n\t  ")
-    assert.is_nil(style)
-  end)
 end)

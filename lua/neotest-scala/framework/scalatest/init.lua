@@ -5,10 +5,21 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "scalatest" }
 
----Detect ScalaTest style from file content
+---@class neotest-scala.ScalaTestDiscoverOpts
+---@field path string
+---@field content string
+
+---@class neotest-scala.ScalaTestBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---@param content string
----@return "funsuite" | "freespec" | nil
-function M.detect_style(content)
+---@return "funsuite"|"freespec"|nil
+local function detect_style(content)
     if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
         return "funsuite"
     elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
@@ -18,13 +29,17 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for ScalaTest
----@param style "funsuite" | "freespec"
----@param path string
----@param content string
----@param opts table
+---@param opts neotest-scala.ScalaTestDiscoverOpts
 ---@return neotest.Tree | nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    local style = detect_style(opts.content)
+    if not style then
+        return nil
+    end
+
+    local path = opts.path
     local query
+
     if style == "funsuite" then
         query = [[
       (object_definition
@@ -98,15 +113,15 @@ local function build_freespec_test_path(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
+---@param opts neotest-scala.ScalaTestBuildCommandOpts
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
-    -- For individual tests, build the full test path (needed for FreeSpec)
-    -- Check if tree is a proper tree object (has :data() method) or a plain table
+function M.build_command(opts)
+    local root_path = opts.root_path
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
+    local build_tool = opts.build_tool
     local tree_type = nil
     if type(tree.data) == "function" then
         tree_type = tree:data().type
@@ -114,18 +129,48 @@ function M.build_command(root_path, project, tree, name, extra_args)
         tree_type = tree.data.type
     end
 
-    if tree_type == "test" then
-        local full_test_name = build_freespec_test_path(tree, name)
-        return build.command(root_path, project, tree, full_test_name, extra_args)
+    local junit_args = {}
+    if build.resolve_tool(root_path, build_tool) == "bloop" then
+        junit_args = {
+            "--args",
+            "-u",
+            "--args",
+            root_path .. "/" .. project .. "/target/test-reports",
+        }
     end
 
-    return build.command(root_path, project, tree, name, extra_args)
+    local merged_args = build.merge_args(junit_args, extra_args)
+
+    if tree_type == "test" then
+        local full_test_name = build_freespec_test_path(tree, name)
+        return build.command({
+            root_path = root_path,
+            project = project,
+            tree = tree,
+            name = full_test_name,
+            extra_args = merged_args,
+            tool_override = build_tool,
+        })
+    end
+
+    return build.command({
+        root_path = root_path,
+        project = project,
+        tree = tree,
+        name = name,
+        extra_args = merged_args,
+        tool_override = build_tool,
+    })
 end
 
----@param junit_test table<string, string>
+---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
-function M.match_test(junit_test, position)
+local function match_test(junit_test, position)
+    if not (position and position.id and junit_test and junit_test.name and junit_test.namespace) then
+        return true
+    end
+
     local package_name = utils.get_package_name(position.path)
     -- JUnit test names have leading/trailing spaces that need to be trimmed
     local junit_name = vim.trim(junit_test.name)
@@ -161,31 +206,15 @@ function M.match_test(junit_test, position)
     return junit_no_dots == position_no_dots
 end
 
----Extract the highest line number for the given file from stacktrace
----ScalaTest stacktraces have multiple file references (class def, test method, etc.)
----We want the highest line number which corresponds to the actual test assertion
----@param stacktrace string
----@param file_name string
----@return number|nil
-local function extract_line_number(stacktrace, file_name)
-    local max_line_num = nil
-    local pattern = "%(" .. file_name .. ":(%d+)%)"
-
-    for line_num_str in string.gmatch(stacktrace, pattern) do
-        local line_num = tonumber(line_num_str)
-        if not max_line_num or line_num > max_line_num then
-            max_line_num = line_num
-        end
+---Build test result with diagnostic message for failed tests
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result|nil
+function M.build_test_result(junit_test, position)
+    if not match_test(junit_test, position) then
+        return nil
     end
 
-    return max_line_num and (max_line_num - 1) or nil
-end
-
----Build test result with diagnostic message for failed tests
----@param junit_test table<string, string>
----@param position neotest.Position
----@return table
-function M.build_test_result(junit_test, position)
     local result = {}
     local error = {}
 
@@ -195,13 +224,11 @@ function M.build_test_result(junit_test, position)
         error.message = junit_test.error_message
 
         if junit_test.error_stacktrace then
-            error.line = extract_line_number(junit_test.error_stacktrace, file_name)
+            error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         end
     elseif junit_test.error_stacktrace then
-        local lines = vim.split(junit_test.error_stacktrace, "\n")
-        error.message = lines[1]
-
-        error.line = extract_line_number(junit_test.error_stacktrace, file_name)
+        error.message = junit_test.error_stacktrace:match("^[^\r\n]+") or junit_test.error_stacktrace
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
     end
 
     if error.message then
@@ -216,6 +243,24 @@ function M.build_test_result(junit_test, position)
     end
 
     return result
+end
+
+---@param opts { position: neotest.Position, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
+---@return neotest.Result|nil
+function M.build_position_result(opts)
+    local position = opts.position
+    local test_node = opts.test_node
+    local junit_results = opts.junit_results
+
+    for _, junit_test in ipairs(junit_results) do
+        local result = M.build_test_result(junit_test, position)
+        if result then
+            return result
+        end
+    end
+
+    local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
+    return { status = test_status }
 end
 
 function M.build_namespace(ns_node, report_prefix, node)

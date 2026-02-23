@@ -17,8 +17,8 @@ describe("scalatest", function()
 
     it("delegates to build.command with all arguments", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return { "mocked", "command" }
       end)
 
@@ -28,14 +28,20 @@ describe("scalatest", function()
       local name = "MyTestClass"
       local extra_args = { "--verbose" }
 
-      local result = scalatest.build_command(root_path, project, tree, name, extra_args)
+      local result = scalatest.build_command({
+        root_path = root_path,
+        project = project,
+        tree = tree,
+        name = name,
+        extra_args = extra_args,
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.are.equal(root_path, called_with[1])
-      assert.are.equal(project, called_with[2])
-      assert.are.same(tree, called_with[3])
-      assert.are.equal(name, called_with[4])
-      assert.are.same(extra_args, called_with[5])
+      assert.are.equal(root_path, called_with.root_path)
+      assert.are.equal(project, called_with.project)
+      assert.are.same(tree, called_with.tree)
+      assert.are.equal(name, called_with.name)
+      assert.are.same(extra_args, called_with.extra_args)
       assert.are.same({ "mocked", "command" }, result)
     end)
 
@@ -45,28 +51,40 @@ describe("scalatest", function()
         return expected_command
       end)
 
-      local result = scalatest.build_command("/root", "myproject", {}, "TestSpec", {})
+      local result = scalatest.build_command({
+        root_path = "/root",
+        project = "myproject",
+        tree = {},
+        name = "TestSpec",
+        extra_args = {},
+      })
 
       assert.are.same(expected_command, result)
     end)
 
     it("handles nil extra_args", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return {}
       end)
 
-      scalatest.build_command("/root", "project", {}, "Test", nil)
+      scalatest.build_command({
+        root_path = "/root",
+        project = "project",
+        tree = {},
+        name = "Test",
+        extra_args = nil,
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.is_nil(called_with[5])
+      assert.is_nil(called_with.extra_args)
     end)
 
     it("builds full test path for FreeSpec-style tests with parent contexts", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return {}
       end)
 
@@ -82,16 +100,22 @@ describe("scalatest", function()
         parent = function() return parent_mock end,
       }
 
-      scalatest.build_command("/root", "project", tree_mock, "Hello, ScalaTest!", {})
+      scalatest.build_command({
+        root_path = "/root",
+        project = "project",
+        tree = tree_mock,
+        name = "Hello, ScalaTest!",
+        extra_args = {},
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.are.equal("FreeSpec Hello, ScalaTest!", called_with[4])
+      assert.are.equal("FreeSpec Hello, ScalaTest!", called_with.name)
     end)
 
     it("builds nested test path for deeply nested FreeSpec tests", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return {}
       end)
 
@@ -112,16 +136,22 @@ describe("scalatest", function()
         parent = function() return parent_mock end,
       }
 
-      scalatest.build_command("/root", "project", tree_mock, "nested", {})
+      scalatest.build_command({
+        root_path = "/root",
+        project = "project",
+        tree = tree_mock,
+        name = "nested",
+        extra_args = {},
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.are.equal("FreeSpec deeply nested", called_with[4])
+      assert.are.equal("FreeSpec deeply nested", called_with.name)
     end)
 
     it("passes name unchanged for non-test types", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return {}
       end)
 
@@ -130,14 +160,20 @@ describe("scalatest", function()
         data = function() return tree_data end,
       }
 
-      scalatest.build_command("/root", "project", tree_mock, "MySpec", {})
+      scalatest.build_command({
+        root_path = "/root",
+        project = "project",
+        tree = tree_mock,
+        name = "MySpec",
+        extra_args = {},
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.are.equal("MySpec", called_with[4])
+      assert.are.equal("MySpec", called_with.name)
     end)
   end)
 
-  describe("match_test", function()
+  describe("build_test_result matching", function()
     before_each(function()
       H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
         return "com.example."
@@ -159,9 +195,9 @@ describe("scalatest", function()
         id = "com.example.MySpec.shoulddosomethingcool",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles exact matches correctly", function()
@@ -175,9 +211,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testMethod",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("returns false for non-matching test names", function()
@@ -191,9 +227,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testSubtraction",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("handles test names with multiple spaces", function()
@@ -207,9 +243,9 @@ describe("scalatest", function()
         id = "com.example.ValidatorSpec.shouldreturntruewheninputisvalid",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles test names without spaces", function()
@@ -223,9 +259,9 @@ describe("scalatest", function()
         id = "com.example.SimpleSpec.simpleTestName",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles different namespaces", function()
@@ -239,9 +275,9 @@ describe("scalatest", function()
         id = "com.example.MySpec.myTest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("handles empty package name", function()
@@ -259,9 +295,9 @@ describe("scalatest", function()
         id = "MySpec.myTest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles FreeSpec test names with parent context", function()
@@ -275,9 +311,9 @@ describe("scalatest", function()
         id = "com.example.MySpecSpec.HelloWorldSpecfailingtest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("matches FreeSpec JUnit names with dots in position.id", function()
@@ -293,9 +329,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("matches nested FreeSpec tests with multiple parent contexts", function()
@@ -309,9 +345,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.deeply.nested",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("returns false for FreeSpec tests with different parent contexts", function()
@@ -325,9 +361,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("still matches regular tests without parent contexts", function()
@@ -341,9 +377,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testMethod",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
   end)
 

@@ -10,8 +10,8 @@ describe("zio-test", function()
 
     it("delegates to utils.build_command with all arguments", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return { "mocked", "command" }
       end)
 
@@ -21,14 +21,20 @@ describe("zio-test", function()
       local name = "MyTestClass"
       local extra_args = { "--verbose" }
 
-      local result = zio_test.build_command(root_path, project, tree, name, extra_args)
+      local result = zio_test.build_command({
+        root_path = root_path,
+        project = project,
+        tree = tree,
+        name = name,
+        extra_args = extra_args,
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.are.equal(root_path, called_with[1])
-      assert.are.equal(project, called_with[2])
-      assert.are.same(tree, called_with[3])
-      assert.are.equal(name, called_with[4])
-      assert.are.same(extra_args, called_with[5])
+      assert.are.equal(root_path, called_with.root_path)
+      assert.are.equal(project, called_with.project)
+      assert.are.same(tree, called_with.tree)
+      assert.are.equal(name, called_with.name)
+      assert.are.same(extra_args, called_with.extra_args)
       assert.are.same({ "mocked", "command" }, result)
     end)
 
@@ -39,23 +45,35 @@ describe("zio-test", function()
       end)
 
       local mock_tree = { _data = { type = "namespace", path = "/test/path.scala" }, data = function(self) return self._data end }
-      local result = zio_test.build_command("/root", "myproject", mock_tree, "TestSpec", {})
+      local result = zio_test.build_command({
+        root_path = "/root",
+        project = "myproject",
+        tree = mock_tree,
+        name = "TestSpec",
+        extra_args = {},
+      })
 
       assert.are.same(expected_command, result)
     end)
 
     it("handles nil extra_args", function()
       local called_with = nil
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
-        called_with = { root_path, project, tree, name, extra_args }
+      H.mock_fn("neotest-scala.build", "command", function(opts)
+        called_with = opts
         return {}
       end)
 
       local mock_tree = { _data = { type = "test", path = "/test/path.scala" }, data = function(self) return self._data end }
-      zio_test.build_command("/root", "project", mock_tree, "Test", nil)
+      zio_test.build_command({
+        root_path = "/root",
+        project = "project",
+        tree = mock_tree,
+        name = "Test",
+        extra_args = nil,
+      })
 
       assert(called_with, "build_command should have been called")
-      assert.is_nil(called_with[5])
+      assert.is_nil(called_with.extra_args)
     end)
   end)
 

@@ -7,8 +7,15 @@ local cache_timestamp = {}
 local in_flight = {}
 local running_tasks = {}
 local handler_registered = false
+local previous_build_target_handler = nil
 
 local CACHE_TTL = 60
+
+---@class neotest-scala.MetalsBuildTargetInfoOpts
+---@field root_path string
+---@field target_path string
+---@field cache_enabled boolean
+---@field timeout_ms? integer
 
 local function parse_build_target_info(text)
     local result = {}
@@ -104,7 +111,13 @@ local function do_get_build_target_info(root_path, target_path, timeout_ms)
     return nil
 end
 
-function M.get_build_target_info(root_path, target_path, cache_enabled, timeout_ms)
+---@param opts neotest-scala.MetalsBuildTargetInfoOpts
+---@return table<string, string[]>|nil
+function M.get_build_target_info(opts)
+    local root_path = opts.root_path
+    local target_path = opts.target_path
+    local cache_enabled = opts.cache_enabled
+    local timeout_ms = opts.timeout_ms
     local key = get_cache_key(root_path, target_path)
 
     if cache_enabled and is_cache_valid(key) and cache[key] ~= nil then
@@ -187,7 +200,11 @@ local FRAMEWORK_PATTERNS = {
 }
 
 function M.get_frameworks(root_path, target_path, cache_enabled)
-    local build_info = M.get_build_target_info(root_path, target_path, cache_enabled)
+    local build_info = M.get_build_target_info({
+        root_path = root_path,
+        target_path = target_path,
+        cache_enabled = cache_enabled,
+    })
     if not build_info then
         return {}
     end
@@ -254,7 +271,8 @@ function M.cleanup()
     cache_timestamp = {}
 
     if handler_registered then
-        vim.lsp.handlers["metals/buildTargetChanged"] = nil
+        vim.lsp.handlers["metals/buildTargetChanged"] = previous_build_target_handler
+        previous_build_target_handler = nil
         handler_registered = false
     end
 end
@@ -265,12 +283,18 @@ local function register_lsp_handler()
     end
 
     pcall(function()
+        previous_build_target_handler = vim.lsp.handlers["metals/buildTargetChanged"]
+
         vim.lsp.handlers["metals/buildTargetChanged"] = function(_, result, ctx)
-            if not result then
-                return
+            if previous_build_target_handler then
+                pcall(previous_build_target_handler, nil, result, ctx)
             end
 
             vim.schedule(function()
+                if not ctx or not ctx.client_id then
+                    return
+                end
+
                 local client = vim.lsp.get_client_by_id(ctx.client_id)
                 if client then
                     local root_path = client.config.root_dir

@@ -5,23 +5,36 @@ local build = require("neotest-scala.build")
 ---@class neotest-scala.Framework
 local M = { name = "munit" }
 
----Detect munit style from file content
+---@class neotest-scala.MUnitDiscoverOpts
+---@field path string
+---@field content string
+
+---@class neotest-scala.MUnitBuildCommandOpts
+---@field root_path string
+---@field project string
+---@field tree neotest.Tree
+---@field name string|nil
+---@field extra_args nil|string|string[]
+---@field build_tool? "bloop"|"sbt"
+
 ---@param content string
----@return "funsuite" | nil
-function M.detect_style(content)
+---@return boolean
+local function is_funsuite_style(content)
     if content:match("extends%s+FunSuite") or content:match("extends%s+munit%.FunSuite") then
-        return "funsuite"
+        return true
     end
-    return nil
+    return false
 end
 
 ---Discover test positions for munit
----@param style "funsuite"
----@param path string
----@param content string
----@param opts table
+---@param opts neotest-scala.MUnitDiscoverOpts
 ---@return neotest.Tree | nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    if not is_funsuite_style(opts.content) then
+        return nil
+    end
+
+    local path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -81,20 +94,37 @@ local function build_test_path(tree, name)
     return nil
 end
 
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return boolean
+local function match_test(junit_test, position)
+    if not (position and position.id and junit_test and junit_test.name and junit_test.namespace) then
+        return true
+    end
+
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    return junit_test_id == test_id
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result|nil
 function M.build_test_result(junit_test, position)
+    if not match_test(junit_test, position) then
+        return nil
+    end
+
     local result = nil
     local error = {}
 
     local file_name = utils.get_file_name(position.path)
-    local raw_message = junit_test.error_stacktrace or junit_test.error_message
+    local message = junit_test.error_stacktrace or junit_test.error_message
 
-    if raw_message then
-        error.message = raw_message:gsub("/.*/" .. file_name .. ":%d+ ", "")
-
-        local line_num = string.match(raw_message, "%(" .. file_name .. ":(%d+)%)")
-        if line_num then
-            error.line = tonumber(line_num) - 1
-        end
+    if message then
+        error.message = message:gsub("/.*/" .. file_name .. ":%d+ ", "")
+        error.line = utils.extract_line_number(message, file_name)
     end
 
     if vim.tbl_isempty(error) then
@@ -106,15 +136,41 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
+---@param opts { position: neotest.Position, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
+---@return neotest.Result|nil
+function M.build_position_result(opts)
+    local position = opts.position
+    local test_node = opts.test_node
+    local junit_results = opts.junit_results
+
+    for _, junit_test in ipairs(junit_results) do
+        local result = M.build_test_result(junit_test, position)
+        if result then
+            return result
+        end
+    end
+
+    local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
+    return { status = test_status }
+end
+
+---@param opts neotest-scala.MUnitBuildCommandOpts
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args)
+function M.build_command(opts)
+    local root_path = opts.root_path
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
+    local build_tool = opts.build_tool
     local test_path = build_test_path(tree, name)
-    return build.command_with_path(root_path, project, test_path, extra_args)
+    return build.command_with_path({
+        root_path = root_path,
+        project = project,
+        test_path = test_path,
+        extra_args = extra_args,
+        tool_override = build_tool,
+    })
 end
 
 function M.build_namespace(ns_node, report_prefix, node)
@@ -137,11 +193,105 @@ function M.build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
-function M.match_test(junit_test, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
+--- Parse bloop stdout output for test results
+---@param output string The raw stdout from bloop test
+---@param tree neotest.Tree The test tree for matching
+---@return table<string, neotest.Result> Test results indexed by position.id
+function M.parse_stdout_results(output, tree)
+    local results = {}
+
+    output = utils.string_remove_ansi(output)
+
+    local positions = {}
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            positions[data.id] = data
+        end
+    end
+
+    local lines = {}
+    for line in output:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    local function find_line_in_trace(start_idx, file_pattern)
+        -- TODO: arbitrary +15 looks hacky
+        for j = start_idx, math.min(start_idx + 15, #lines) do
+            local trace_line = lines[j] or ""
+            local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
+
+            if line_num and trace_line:find(file_pattern, 1, true) then
+                return tonumber(line_num)
+            end
+        end
+        return nil
+    end
+
+    for i, line in ipairs(lines) do
+        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$")
+        if pass_name then
+            for pos_id, pos in pairs(positions) do
+                local pos_name = utils.get_position_name(pos) or pos.name
+                if pos_name and pass_name:find(pos_name, 1, true) then
+                    results[pos_id] = { status = TEST_PASSED }
+                end
+            end
+        end
+
+        local fail_line = line:match("^==> X (.+)$")
+        if fail_line then
+            local test_path = fail_line:match("^(.+)  %d+%.%d+s")
+            if test_path then
+                for pos_id, pos in pairs(positions) do
+                    local pos_name = utils.get_position_name(pos) or pos.name
+                    local matched_file = utils.get_file_name(pos.path)
+                    if pos_name and test_path:find(pos_name, 1, true) then
+                        local line_num, msg = fail_line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
+                        if line_num and msg then
+                            results[pos_id] = {
+                                status = TEST_FAILED,
+                                errors = { { message = msg, line = tonumber(line_num) - 1 } },
+                            }
+                        else
+                            local exc = fail_line:match("%s+([%w%.$]+: .+)$")
+                            if exc then
+                                local trace_line = find_line_in_trace(i + 1, matched_file or "")
+                                results[pos_id] = {
+                                    status = TEST_FAILED,
+                                    errors = { { message = exc, line = trace_line } },
+                                }
+                            else
+                                results[pos_id] = { status = TEST_FAILED, errors = {} }
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    local global_failure = nil
+    if output:match("Failed to compile") then
+        global_failure = "Compilation failed"
+    elseif output:match("Test suite aborted") or output:match("Failed to initialize") then
+        global_failure = "Test suite aborted"
+    elseif output:match("initializationError") then
+        global_failure = "Suite initialization failed"
+    end
+
+    for pos_id in pairs(positions) do
+        if not results[pos_id] then
+            if global_failure then
+                results[pos_id] = { status = TEST_FAILED, errors = { { message = global_failure } } }
+            else
+                results[pos_id] = { status = TEST_PASSED }
+            end
+        end
+    end
+
+    return results
 end
 
 ---@return neotest-scala.Framework
