@@ -70,8 +70,26 @@ end
 
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
----@return table
+---@return boolean
+local function match_test(junit_test, position)
+    if not (position and position.id and junit_test and junit_test.name and junit_test.namespace) then
+        return true
+    end
+
+    local package_name = utils.get_package_name(position.path)
+    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
+    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    return junit_test_id == test_id
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result|nil
 function M.build_test_result(junit_test, position)
+    if not match_test(junit_test, position) then
+        return nil
+    end
+
     local result = nil
     local error = {}
 
@@ -110,6 +128,24 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
+---@param opts { position: neotest.Position, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
+---@return neotest.Result|nil
+function M.build_position_result(opts)
+    local position = opts.position
+    local test_node = opts.test_node
+    local junit_results = opts.junit_results
+
+    for _, junit_test in ipairs(junit_results) do
+        local result = M.build_test_result(junit_test, position)
+        if result then
+            return result
+        end
+    end
+
+    local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
+    return { status = test_status }
+end
+
 function M.build_namespace(ns_node, report_prefix, node)
     local data = ns_node:data()
     local path = data.path
@@ -128,16 +164,6 @@ function M.build_namespace(ns_node, report_prefix, node)
     end
 
     return namespace
-end
-
----@param junit_test neotest-scala.JUnitTest
----@param position neotest.Position
----@return boolean
-function M.match_test(junit_test, position)
-    local package_name = utils.get_package_name(position.path)
-    local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
 end
 
 --- Parse bloop stdout output for test results

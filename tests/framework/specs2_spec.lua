@@ -63,7 +63,7 @@ describe("specs2", function()
     end)
   end)
 
-  describe("match_test", function()
+  describe("build_test_result matching", function()
     after_each(function()
       H.restore_mocks()
     end)
@@ -83,8 +83,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
 
     it("handles 'must::' prefix correctly", function()
@@ -102,8 +102,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
 
     it("handles '::' separator (converts to '.')", function()
@@ -121,8 +121,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
 
     it("uses prefix/suffix matching", function()
@@ -140,8 +140,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
 
     it("returns false when prefix does not match", function()
@@ -159,8 +159,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_false(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_nil(result)
     end)
 
     it("returns false when suffix does not match", function()
@@ -178,8 +178,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_false(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_nil(result)
     end)
 
     it("handles combined should:: and :: separators", function()
@@ -197,8 +197,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
 
     it("handles combined must:: and :: separators", function()
@@ -216,8 +216,8 @@ describe("specs2", function()
         path = "/path/to/MySpec.scala",
       }
 
-      local result = specs2.match_test(junit_test, position)
-      assert.is_true(result)
+      local result = specs2.build_test_result(junit_test, position)
+      assert.is_not_nil(result)
     end)
   end)
 end)

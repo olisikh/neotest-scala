@@ -78,8 +78,8 @@ function adapter.discover_positions(path)
     local trees = {}
     for _, fw_name in ipairs(frameworks) do
         local framework = fw.get_framework_class(fw_name)
-        if framework and framework.discover_positions then
-            local style = framework.detect_style and framework.detect_style(content) or nil
+        if framework then
+            local style = framework.detect_style(content)
             if style then
                 local tree = framework.discover_positions({
                     style = style,

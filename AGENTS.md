@@ -104,10 +104,18 @@ function adapter.is_test_file(file_path)
 ---@class neotest-scala.Framework
 ---@field name string
 ---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
----@field match_test nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): boolean
----@field build_test_result nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): table
----@field discover_positions nil|fun(opts: { style: string, path: string, content: string }): neotest.Tree
----@field detect_style nil|fun(content: string): string|nil
+---@field build_test_result fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position|neotest-scala.PositionWithExtra): neotest.Result|nil
+---@field build_position_result fun(opts: { position: neotest.Position|neotest-scala.PositionWithExtra, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[], namespace: table }): neotest.Result|nil
+---@field build_namespace fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
+---@field discover_positions fun(opts: { style: string, path: string, content: string }): neotest.Tree
+---@field detect_style fun(content: string): string|nil
+---@field parse_stdout_results fun(output: string, tree: neotest.Tree): table<string, neotest.Result>
+
+---@class neotest-scala.PositionExtra
+---@field textspec_path? string
+
+---@class neotest-scala.PositionWithExtra: neotest.Position
+---@field extra? neotest-scala.PositionExtra
 
 ---@class neotest-scala.JUnitTest
 ---@field name string
@@ -153,16 +161,23 @@ function M.build_command(opts) -> string[]
 -- opts.extra_args: nil|string|string[] additional runner args
 -- opts.build_tool: "bloop"|"sbt"|nil pinned tool for this run
 
--- Optional: Match JUnit result to position (default: ID comparison)
-function M.match_test(junit_test, position) -> boolean
+-- Required: Build result for a single JUnit row and perform match check
+function M.build_test_result(junit_test, position) -> table
+-- return nil when junit_test does not belong to this position
+-- position can be neotest.Position or neotest-scala.PositionWithExtra
+-- use neotest-scala.PositionWithExtra when accessing position.extra.*
 -- junit_test.name: test name from JUnit report
 -- junit_test.namespace: suite/namespace id matched against neotest position ids
-
--- Optional: Build result with errors (default: generic parsing)
-function M.build_test_result(junit_test, position) -> table
 -- junit_test.error_message / junit_test.error_stacktrace may be absent for passing tests
 
--- Optional: Build namespace for JUnit lookup
+-- Required: Build final result for one neotest position
+function M.build_position_result(opts) -> neotest.Result|nil
+-- opts.position: current neotest position being resolved
+-- opts.test_node: neotest.Tree node for nested-test fallback checks
+-- opts.junit_results: all JUnit rows loaded for the namespace
+-- opts.namespace: namespace metadata used for current report file
+
+-- Required: Build namespace for JUnit lookup
 function M.build_namespace(ns_node, report_prefix, node) -> table
 
 return M
@@ -186,7 +201,7 @@ return M
 ### Delegation Pattern
 Core modules delegate framework-specific logic to framework modules:
 - `init.lua` → `framework.discover_positions()`, `framework.build_command()`
-- `results.lua` → `framework.build_namespace()`, `framework.match_test()`
+- `results.lua` → `framework.build_namespace()`, `framework.build_position_result()`
 
 **Never import framework-specific code directly in core files.**
 

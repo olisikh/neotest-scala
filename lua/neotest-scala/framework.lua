@@ -6,15 +6,21 @@ M.TEST_FAILED = "failed"
 _G.TEST_PASSED = M.TEST_PASSED
 _G.TEST_FAILED = M.TEST_FAILED
 
+---@class neotest-scala.PositionExtra
+---@field textspec_path? string
+
+---@class neotest-scala.PositionWithExtra: neotest.Position
+---@field extra? neotest-scala.PositionExtra
+
 ---@class neotest-scala.Framework
 ---@field name string
 ---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
----@field match_test nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): boolean
----@field build_test_result nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): table<string, any>
----@field build_namespace nil|fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
----@field discover_positions nil|fun(opts: { style: string, path: string, content: string }): neotest.Tree
----@field detect_style nil|fun(content: string): string|nil
----@field parse_stdout_results nil|fun(output: string, tree: neotest.Tree): table<string, neotest.Result>
+---@field build_test_result fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position|neotest-scala.PositionWithExtra): neotest.Result|nil
+---@field build_position_result fun(opts: { position: neotest.Position|neotest-scala.PositionWithExtra, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[], namespace: table }): neotest.Result|nil
+---@field build_namespace fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
+---@field discover_positions fun(opts: { style: string, path: string, content: string }): neotest.Tree
+---@field detect_style fun(content: string): string|nil
+---@field parse_stdout_results fun(output: string, tree: neotest.Tree): table<string, neotest.Result>
 
 ---@param framework string
 ---@return neotest-scala.Framework|nil

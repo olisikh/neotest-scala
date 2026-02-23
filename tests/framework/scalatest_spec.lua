@@ -173,7 +173,7 @@ describe("scalatest", function()
     end)
   end)
 
-  describe("match_test", function()
+  describe("build_test_result matching", function()
     before_each(function()
       H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
         return "com.example."
@@ -195,9 +195,9 @@ describe("scalatest", function()
         id = "com.example.MySpec.shoulddosomethingcool",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles exact matches correctly", function()
@@ -211,9 +211,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testMethod",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("returns false for non-matching test names", function()
@@ -227,9 +227,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testSubtraction",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("handles test names with multiple spaces", function()
@@ -243,9 +243,9 @@ describe("scalatest", function()
         id = "com.example.ValidatorSpec.shouldreturntruewheninputisvalid",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles test names without spaces", function()
@@ -259,9 +259,9 @@ describe("scalatest", function()
         id = "com.example.SimpleSpec.simpleTestName",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles different namespaces", function()
@@ -275,9 +275,9 @@ describe("scalatest", function()
         id = "com.example.MySpec.myTest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("handles empty package name", function()
@@ -295,9 +295,9 @@ describe("scalatest", function()
         id = "MySpec.myTest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("handles FreeSpec test names with parent context", function()
@@ -311,9 +311,9 @@ describe("scalatest", function()
         id = "com.example.MySpecSpec.HelloWorldSpecfailingtest",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("matches FreeSpec JUnit names with dots in position.id", function()
@@ -329,9 +329,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("matches nested FreeSpec tests with multiple parent contexts", function()
@@ -345,9 +345,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.deeply.nested",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
 
     it("returns false for FreeSpec tests with different parent contexts", function()
@@ -361,9 +361,9 @@ describe("scalatest", function()
         id = "com.example.FreeSpec.FreeSpec.Hello, ScalaTest!",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_false(result)
+      assert.is_nil(result)
     end)
 
     it("still matches regular tests without parent contexts", function()
@@ -377,9 +377,9 @@ describe("scalatest", function()
         id = "com.example.CalculatorSpec.testMethod",
       }
 
-      local result = scalatest.match_test(junit_test, position)
+      local result = scalatest.build_test_result(junit_test, position)
 
-      assert.is_true(result)
+      assert.is_not_nil(result)
     end)
   end)
 

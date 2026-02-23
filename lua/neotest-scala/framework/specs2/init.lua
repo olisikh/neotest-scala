@@ -110,11 +110,15 @@ function M.build_command(opts)
 end
 
 ---@param junit_test neotest-scala.JUnitTest
----@param position neotest.Position
+---@param position neotest-scala.PositionWithExtra
 ---@return boolean
-function M.match_test(junit_test, position)
+local function match_test(junit_test, position)
+    if not (position and position.id and junit_test and junit_test.name and junit_test.namespace) then
+        return true
+    end
+
     if position.extra and position.extra.textspec_path then
-        return textspec.match_test(junit_test, position)
+        return position.extra.textspec_path:find(junit_test.name, 1, true) ~= nil
     end
 
     local package_name = utils.get_package_name(position.path)
@@ -122,6 +126,50 @@ function M.match_test(junit_test, position)
     local test_prefix = package_name .. junit_test.namespace
     local test_postfix = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
     return vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix)
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest-scala.PositionWithExtra
+---@return neotest.Result|nil
+function M.build_test_result(junit_test, position)
+    if not match_test(junit_test, position) then
+        return nil
+    end
+
+    local error_message = junit_test.error_message or junit_test.error_stacktrace
+    if error_message then
+        local error = { message = error_message }
+        local file_name = utils.get_file_name(position.path)
+
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+
+        return {
+            errors = { error },
+            status = TEST_FAILED,
+        }
+    end
+
+    return {
+        status = TEST_PASSED,
+    }
+end
+
+---@param opts { position: neotest-scala.PositionWithExtra, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
+---@return neotest.Result|nil
+function M.build_position_result(opts)
+    local position = opts.position
+    local test_node = opts.test_node
+    local junit_results = opts.junit_results
+
+    for _, junit_test in ipairs(junit_results) do
+        local result = M.build_test_result(junit_test, position)
+        if result then
+            return result
+        end
+    end
+
+    local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
+    return { status = test_status }
 end
 
 --- Parse bloop stdout output for test results
