@@ -11,7 +11,7 @@ local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
-local function get_args(_, _, _, _)
+local function get_args(_)
     return {}
 end
 
@@ -67,7 +67,12 @@ function adapter.discover_positions(path)
         if framework and framework.discover_positions then
             local style = framework.detect_style and framework.detect_style(content) or nil
             if style then
-                local tree = framework.discover_positions(style, path, content, {})
+                local tree = framework.discover_positions({
+                    style = style,
+                    path = path,
+                    content = content,
+                    opts = {},
+                })
                 if tree then
                     table.insert(trees, tree)
                 end
@@ -101,7 +106,11 @@ function adapter.build_spec(args)
     local root_path = adapter.root(position.path)
     assert(root_path, "[neotest-scala]: Can't resolve root project folder")
 
-    local build_target_info = metals.get_build_target_info(root_path, position.path, cache_build_info)
+    local build_target_info = metals.get_build_target_info({
+        root_path = root_path,
+        target_path = position.path,
+        cache_enabled = cache_build_info,
+    })
     if not build_target_info then
         vim.print("[neotest-scala]: Metals returned no build information, try again later")
         return {}
@@ -137,8 +146,20 @@ function adapter.build_spec(args)
     )
 
     local test_name = utils.get_position_name(position)
-    local command = framework_class.build_command(root_path, project_name, args.tree, test_name, extra_args, build_tool)
-    local strategy_config = strategy.get_config(args.strategy, args.tree, project_name, root_path)
+    local command = framework_class.build_command({
+        root_path = root_path,
+        project = project_name,
+        tree = args.tree,
+        name = test_name,
+        extra_args = extra_args,
+        build_tool = build_tool,
+    })
+    local strategy_config = strategy.get_config({
+        strategy = args.strategy,
+        tree = args.tree,
+        project = project_name,
+        root = root_path,
+    })
 
     return {
         command = command,
@@ -200,7 +221,11 @@ setmetatable(adapter, {
         if opts.compile_on_save then
             if root then
                 build.setup_compile_on_save(root, function(r, p)
-                    return metals.get_build_target_info(r, p, cache_build_info)
+                    return metals.get_build_target_info({
+                        root_path = r,
+                        target_path = p,
+                        cache_enabled = cache_build_info,
+                    })
                 end)
             end
         end

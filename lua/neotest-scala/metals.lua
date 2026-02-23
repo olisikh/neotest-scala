@@ -105,7 +105,11 @@ local function do_get_build_target_info(root_path, target_path, timeout_ms)
     return nil
 end
 
-function M.get_build_target_info(root_path, target_path, cache_enabled, timeout_ms)
+function M.get_build_target_info(opts)
+    local root_path = opts.root_path
+    local target_path = opts.target_path
+    local cache_enabled = opts.cache_enabled
+    local timeout_ms = opts.timeout_ms
     local key = get_cache_key(root_path, target_path)
 
     if cache_enabled and is_cache_valid(key) and cache[key] ~= nil then
@@ -188,7 +192,11 @@ local FRAMEWORK_PATTERNS = {
 }
 
 function M.get_frameworks(root_path, target_path, cache_enabled)
-    local build_info = M.get_build_target_info(root_path, target_path, cache_enabled)
+    local build_info = M.get_build_target_info({
+        root_path = root_path,
+        target_path = target_path,
+        cache_enabled = cache_enabled,
+    })
     if not build_info then
         return {}
     end

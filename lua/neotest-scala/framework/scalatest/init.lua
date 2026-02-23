@@ -18,12 +18,11 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for ScalaTest
----@param style "funsuite" | "freespec"
----@param path string
----@param content string
 ---@param opts table
 ---@return neotest.Tree | nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    local style = opts.style
+    path = opts.path
     local query
     if style == "funsuite" then
         query = [[
@@ -98,14 +97,15 @@ local function build_freespec_test_path(tree, name)
 end
 
 --- Builds a command for running tests for the framework.
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
----@param build_tool string|nil
+---@param opts table
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args, build_tool)
+function M.build_command(opts)
+    local root_path = opts.root_path
+    project = opts.project
+    tree = opts.tree
+    name = opts.name
+    extra_args = opts.extra_args
+    build_tool = opts.build_tool
     local tree_type = nil
     if type(tree.data) == "function" then
         tree_type = tree:data().type
@@ -127,24 +127,24 @@ function M.build_command(root_path, project, tree, name, extra_args, build_tool)
 
     if tree_type == "test" then
         local full_test_name = build_freespec_test_path(tree, name)
-        return build.command(
-            root_path,
-            project,
-            tree,
-            full_test_name,
-            merged_args,
-            build_tool
-        )
+        return build.command({
+            root_path = root_path,
+            project = project,
+            tree = tree,
+            name = full_test_name,
+            extra_args = merged_args,
+            tool_override = build_tool,
+        })
     end
 
-    return build.command(
-        root_path,
-        project,
-        tree,
-        name,
-        merged_args,
-        build_tool
-    )
+    return build.command({
+        root_path = root_path,
+        project = project,
+        tree = tree,
+        name = name,
+        extra_args = merged_args,
+        tool_override = build_tool,
+    })
 end
 
 ---@param junit_test table<string, string>

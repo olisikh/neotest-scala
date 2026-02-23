@@ -11,20 +11,26 @@ describe("specs2", function()
       local called = false
       local captured_args = {}
 
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(opts)
         called = true
         captured_args = {
-          root_path = root_path,
-          project = project,
-          tree = tree,
-          name = name,
-          extra_args = extra_args,
+          root_path = opts.root_path,
+          project = opts.project,
+          tree = opts.tree,
+          name = opts.name,
+          extra_args = opts.extra_args,
         }
         return { "sbt", "test" }
       end)
 
       local tree = { _data = { type = "test", path = "/test/path.scala" }, data = function(self) return self._data end }
-      local result = specs2.build_command("/root", "myproject", tree, "testName", { "-v" })
+      local result = specs2.build_command({
+        root_path = "/root",
+        project = "myproject",
+        tree = tree,
+        name = "testName",
+        extra_args = { "-v" },
+      })
 
       assert.is_true(called)
       assert.are.equal("/root", captured_args.root_path)
@@ -38,13 +44,19 @@ describe("specs2", function()
     it("delegates to build.command", function()
       local called = false
 
-      H.mock_fn("neotest-scala.build", "command", function(root_path, project, tree, name, extra_args)
+      H.mock_fn("neotest-scala.build", "command", function(_)
         called = true
         return { "sbt", "test" }
       end)
 
       local tree = { _data = { type = "dir", path = "/test/path.scala" }, data = function(self) return self._data end }
-      local result = specs2.build_command("/root", "myproject", tree, nil, {})
+      local result = specs2.build_command({
+        root_path = "/root",
+        project = "myproject",
+        tree = tree,
+        name = nil,
+        extra_args = {},
+      })
 
       assert.is_true(called)
       assert.are.same({ "sbt", "test" }, result)

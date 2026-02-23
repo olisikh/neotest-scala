@@ -154,12 +154,13 @@ local function build_test_namespace(tree)
 end
 
 --- Build command using sbt
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
+---@param opts table
 ---@return string[]
-local function build_sbt_command(project, tree, name, extra_args)
+local function build_sbt_command(opts)
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
     local test_namespace = build_test_namespace(tree)
 
     if not test_namespace then
@@ -176,12 +177,13 @@ local function build_sbt_command(project, tree, name, extra_args)
 end
 
 --- Build command using bloop
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
+---@param opts table
 ---@return string[]
-local function build_bloop_command(project, tree, name, extra_args)
+local function build_bloop_command(opts)
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
     local test_namespace = build_test_namespace(tree)
     local bloop_project = project .. "-test"
 
@@ -201,31 +203,43 @@ local function build_bloop_command(project, tree, name, extra_args)
 end
 
 --- Builds a command for running tests
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
----@param tool_override string|nil
+---@param opts table
 ---@return string[]
-function M.command(root_path, project, tree, name, extra_args, tool_override)
+function M.command(opts)
+    local root_path = opts.root_path
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
+    local tool_override = opts.tool_override
     local build_tool = M.resolve_tool(root_path, tool_override)
 
     if build_tool == "bloop" then
-        return build_bloop_command(project, tree, name, extra_args)
+        return build_bloop_command({
+            project = project,
+            tree = tree,
+            name = name,
+            extra_args = extra_args,
+        })
     else
-        return build_sbt_command(project, tree, name, extra_args)
+        return build_sbt_command({
+            project = project,
+            tree = tree,
+            name = name,
+            extra_args = extra_args,
+        })
     end
 end
 
 --- Build command with explicit test path (used by munit/utest)
----@param root_path string Project root path
----@param project string
----@param test_path string|nil
----@param extra_args table|string
----@param tool_override string|nil
+---@param opts table
 ---@return string[]
-function M.command_with_path(root_path, project, test_path, extra_args, tool_override)
+function M.command_with_path(opts)
+    local root_path = opts.root_path
+    local project = opts.project
+    local test_path = opts.test_path
+    local extra_args = opts.extra_args
+    local tool_override = opts.tool_override
     local build_tool = M.resolve_tool(root_path, tool_override)
     local bloop_project = project .. "-test"
 

@@ -121,8 +121,8 @@ describe("build tool switch behavior", function()
 
       H.mock_fn("neotest-scala.framework", "get_framework_class", function()
         return {
-          build_command = function(_, _, _, _, _, build_tool)
-            captured_tool = build_tool
+          build_command = function(opts)
+            captured_tool = opts.build_tool
             return { "echo", "ok" }
           end,
         }

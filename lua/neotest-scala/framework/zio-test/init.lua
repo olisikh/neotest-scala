@@ -16,12 +16,10 @@ function M.detect_style(content)
 end
 
 ---Discover test positions in ZIO Test spec
----@param style string
----@param path string
----@param content string
 ---@param opts table
 ---@return neotest.Tree|nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -44,15 +42,17 @@ function M.discover_positions(style, path, content, opts)
     })
 end
 
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
----@param build_tool string|nil
+---@param opts table
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args, build_tool)
-    return build.command(root_path, project, tree, name, extra_args, build_tool)
+function M.build_command(opts)
+    return build.command({
+        root_path = opts.root_path,
+        project = opts.project,
+        tree = opts.tree,
+        name = opts.name,
+        extra_args = opts.extra_args,
+        tool_override = opts.build_tool,
+    })
 end
 
 function M.build_test_result(junit_test, position)

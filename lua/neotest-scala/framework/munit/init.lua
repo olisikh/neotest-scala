@@ -16,12 +16,10 @@ function M.detect_style(content)
 end
 
 ---Discover test positions for munit
----@param style "funsuite"
----@param path string
----@param content string
 ---@param opts table
 ---@return neotest.Tree | nil
-function M.discover_positions(style, path, content, opts)
+function M.discover_positions(opts)
+    path = opts.path
     local query = [[
       (object_definition
         name: (identifier) @namespace.name
@@ -102,16 +100,23 @@ function M.build_test_result(junit_test, position)
     return result
 end
 
----@param root_path string Project root path
----@param project string
----@param tree neotest.Tree
----@param name string
----@param extra_args table|string
----@param build_tool string|nil
+---@param opts table
 ---@return string[]
-function M.build_command(root_path, project, tree, name, extra_args, build_tool)
+function M.build_command(opts)
+    local root_path = opts.root_path
+    project = opts.project
+    tree = opts.tree
+    name = opts.name
+    extra_args = opts.extra_args
+    build_tool = opts.build_tool
     local test_path = build_test_path(tree, name)
-    return build.command_with_path(root_path, project, test_path, extra_args, build_tool)
+    return build.command_with_path({
+        root_path = root_path,
+        project = project,
+        test_path = test_path,
+        extra_args = extra_args,
+        tool_override = build_tool,
+    })
 end
 
 function M.build_namespace(ns_node, report_prefix, node)

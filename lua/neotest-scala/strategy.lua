@@ -2,12 +2,13 @@ local utils = require("neotest-scala.utils")
 
 local M = {}
 
----@param strategy string
----@param tree neotest.Tree
----@param project string
----@param root string
+---@param opts table
 ---@return table|nil
-function M.get_config(strategy, tree, project, root)
+function M.get_config(opts)
+    local strategy = opts.strategy
+    local tree = opts.tree
+    local project = opts.project
+    local root = opts.root
     local position = tree:data()
     if strategy == "integrated" then
         return nil

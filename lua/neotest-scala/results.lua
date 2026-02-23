@@ -65,7 +65,12 @@ local function collect_namespaces(framework, node, report_prefix)
     return namespaces
 end
 
-local function find_test_result(framework, junit_results, position, ns)
+local function find_test_result(opts)
+    local framework = opts.framework
+    local junit_results = opts.junit_results
+    local position = opts.position
+    local ns = opts.ns
+
     for _, junit_result in ipairs(junit_results) do
         -- Scalatest bypasses namespace check; frameworks handle their own matching
         local skip_namespace_check = framework.name == "scalatest"
@@ -145,7 +150,12 @@ function M.collect(spec, result, node)
 
         for _, test in ipairs(ns.tests) do
             local position = test:data()
-            local test_result = find_test_result(framework, junit_results, position, ns)
+            local test_result = find_test_result({
+                framework = framework,
+                junit_results = junit_results,
+                position = position,
+                ns = ns,
+            })
 
             if test_result then
                 test_results[position.id] = test_result
