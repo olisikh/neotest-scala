@@ -6,7 +6,6 @@ local build = require("neotest-scala.build")
 local M = { name = "zio-test" }
 
 ---@class neotest-scala.ZioTestDiscoverOpts
----@field style "spec"
 ---@field path string
 ---@field content string
 
@@ -18,20 +17,23 @@ local M = { name = "zio-test" }
 ---@field extra_args nil|string|string[]
 ---@field build_tool? "bloop"|"sbt"
 
----Detect if this is a ZIO Test spec file
 ---@param content string
----@return string|nil
-function M.detect_style(content)
+---@return boolean
+local function is_spec_style(content)
     if content:match("extends%s+ZIOSpecDefault") or content:match("zio%.test") then
-        return "spec"
+        return true
     end
-    return nil
+    return false
 end
 
 ---Discover test positions in ZIO Test spec
 ---@param opts neotest-scala.ZioTestDiscoverOpts
 ---@return neotest.Tree|nil
 function M.discover_positions(opts)
+    if not is_spec_style(opts.content) then
+        return nil
+    end
+
     local path = opts.path
     local query = [[
       (object_definition

@@ -7,7 +7,6 @@ local textspec = require("neotest-scala.framework.specs2.textspec")
 local M = { name = "specs2" }
 
 ---@class neotest-scala.Specs2DiscoverOpts
----@field style "mutable"|"text"
 ---@field path string
 ---@field content string
 
@@ -21,7 +20,7 @@ local M = { name = "specs2" }
 
 ---@param content string
 ---@return "mutable" | "text" | nil
-function M.detect_style(content)
+local function detect_style(content)
     if content:match('s2"""') then
         return "text"
     elseif content:match("extends%s+Specification") then
@@ -33,7 +32,11 @@ end
 ---@param opts neotest-scala.Specs2DiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
-    local style = opts.style
+    local style = detect_style(opts.content)
+    if not style then
+        return nil
+    end
+
     local path = opts.path
     local content = opts.content
 

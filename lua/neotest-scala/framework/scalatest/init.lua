@@ -6,7 +6,6 @@ local build = require("neotest-scala.build")
 local M = { name = "scalatest" }
 
 ---@class neotest-scala.ScalaTestDiscoverOpts
----@field style "funsuite"|"freespec"
 ---@field path string
 ---@field content string
 
@@ -18,10 +17,9 @@ local M = { name = "scalatest" }
 ---@field extra_args nil|string|string[]
 ---@field build_tool? "bloop"|"sbt"
 
----Detect ScalaTest style from file content
 ---@param content string
----@return "funsuite" | "freespec" | nil
-function M.detect_style(content)
+---@return "funsuite"|"freespec"|nil
+local function detect_style(content)
     if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
         return "funsuite"
     elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
@@ -34,7 +32,11 @@ end
 ---@param opts neotest-scala.ScalaTestDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
-    local style = opts.style
+    local style = detect_style(opts.content)
+    if not style then
+        return nil
+    end
+
     local path = opts.path
     local query
 

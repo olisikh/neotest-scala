@@ -6,7 +6,6 @@ local build = require("neotest-scala.build")
 local M = { name = "munit" }
 
 ---@class neotest-scala.MUnitDiscoverOpts
----@field style "funsuite"
 ---@field path string
 ---@field content string
 
@@ -18,20 +17,23 @@ local M = { name = "munit" }
 ---@field extra_args nil|string|string[]
 ---@field build_tool? "bloop"|"sbt"
 
----Detect munit style from file content
 ---@param content string
----@return "funsuite" | nil
-function M.detect_style(content)
+---@return boolean
+local function is_funsuite_style(content)
     if content:match("extends%s+FunSuite") or content:match("extends%s+munit%.FunSuite") then
-        return "funsuite"
+        return true
     end
-    return nil
+    return false
 end
 
 ---Discover test positions for munit
 ---@param opts neotest-scala.MUnitDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
+    if not is_funsuite_style(opts.content) then
+        return nil
+    end
+
     local path = opts.path
     local query = [[
       (object_definition

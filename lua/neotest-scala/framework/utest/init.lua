@@ -6,7 +6,6 @@ local build = require("neotest-scala.build")
 local M = { name = "utest" }
 
 ---@class neotest-scala.UTestDiscoverOpts
----@field style "suite"
 ---@field path string
 ---@field content string
 
@@ -18,20 +17,23 @@ local M = { name = "utest" }
 ---@field extra_args nil|string|string[]
 ---@field build_tool? "bloop"|"sbt"
 
----Detect utest style from file content
 ---@param content string
----@return "suite" | nil
-function M.detect_style(content)
+---@return boolean
+local function is_suite_style(content)
     if content:match("extends%s+TestSuite") or content:match("utest") then
-        return "suite"
+        return true
     end
-    return nil
+    return false
 end
 
 ---Discover test positions for utest
 ---@param opts neotest-scala.UTestDiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
+    if not is_suite_style(opts.content) then
+        return nil
+    end
+
     local path = opts.path
     local query = [[
       (object_definition

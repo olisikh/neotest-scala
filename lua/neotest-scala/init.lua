@@ -79,16 +79,12 @@ function adapter.discover_positions(path)
     for _, fw_name in ipairs(frameworks) do
         local framework = fw.get_framework_class(fw_name)
         if framework then
-            local style = framework.detect_style(content)
-            if style then
-                local tree = framework.discover_positions({
-                    style = style,
-                    path = path,
-                    content = content
-                })
-                if tree then
-                    table.insert(trees, tree)
-                end
+            local tree = framework.discover_positions({
+                path = path,
+                content = content,
+            })
+            if tree then
+                table.insert(trees, tree)
             end
         end
     end
