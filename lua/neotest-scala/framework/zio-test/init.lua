@@ -9,7 +9,6 @@ local M = { name = "zio-test" }
 ---@field style "spec"
 ---@field path string
 ---@field content string
----@field opts? table
 
 ---@class neotest-scala.ZioTestBuildCommandOpts
 ---@field root_path string

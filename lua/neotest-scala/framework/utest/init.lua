@@ -9,7 +9,6 @@ local M = { name = "utest" }
 ---@field style "suite"
 ---@field path string
 ---@field content string
----@field opts? table
 
 ---@class neotest-scala.UTestBuildCommandOpts
 ---@field root_path string

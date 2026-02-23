@@ -10,7 +10,6 @@ local M = { name = "specs2" }
 ---@field style "mutable"|"text"
 ---@field path string
 ---@field content string
----@field opts? table
 
 ---@class neotest-scala.Specs2BuildCommandOpts
 ---@field root_path string
@@ -39,7 +38,10 @@ function M.discover_positions(opts)
     local content = opts.content
 
     if style == "text" then
-        return textspec.discover_positions(path, content)
+        return textspec.discover_positions({
+            path = path,
+            content = content,
+        })
     end
 
     local query = [[

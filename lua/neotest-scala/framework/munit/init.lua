@@ -9,7 +9,6 @@ local M = { name = "munit" }
 ---@field style "funsuite"
 ---@field path string
 ---@field content string
----@field opts? table
 
 ---@class neotest-scala.MUnitBuildCommandOpts
 ---@field root_path string
@@ -118,11 +117,11 @@ end
 ---@return string[]
 function M.build_command(opts)
     local root_path = opts.root_path
-    project = opts.project
-    tree = opts.tree
-    name = opts.name
-    extra_args = opts.extra_args
-    build_tool = opts.build_tool
+    local project = opts.project
+    local tree = opts.tree
+    local name = opts.name
+    local extra_args = opts.extra_args
+    local build_tool = opts.build_tool
     local test_path = build_test_path(tree, name)
     return build.command_with_path({
         root_path = root_path,

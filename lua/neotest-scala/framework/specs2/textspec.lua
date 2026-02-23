@@ -90,10 +90,15 @@ local function find_method_line(content, ref)
 end
 
 ---Build neotest positions tree for TextSpec tests
----@param path string Path to the file
----@param content string File content
+---@class neotest-scala.Specs2TextSpecDiscoverOpts
+---@field path string Path to the file
+---@field content string File content
+
+---@param opts neotest-scala.Specs2TextSpecDiscoverOpts
 ---@return neotest.Tree|nil
-function M.discover_positions(path, content)
+function M.discover_positions(opts)
+    local path = opts.path
+    local content = opts.content
     local tests = parse_textspec(content)
     local package_name = utils.get_package_name(path) or ""
 

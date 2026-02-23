@@ -103,10 +103,10 @@ function adapter.is_test_file(file_path)
 
 ---@class neotest-scala.Framework
 ---@field name string
----@field build_command fun(root_path: string, project: string, tree: neotest.Tree, name: string, extra_args: table|string): string[]
+---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
 ---@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
 ---@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table
----@field discover_positions nil|fun(style: string, path: string, content: string, opts: table): neotest.Tree
+---@field discover_positions nil|fun(opts: { style: string, path: string, content: string }): neotest.Tree
 ---@field detect_style nil|fun(content: string): string|nil
 ```
 
@@ -132,10 +132,19 @@ local M = { name = "framework-name" }
 function M.detect_style(content) -> string|nil
 
 -- Required: Discover test positions
-function M.discover_positions(style, path, content) -> neotest.Tree
+function M.discover_positions(opts) -> neotest.Tree
+-- opts.style: detected style from M.detect_style
+-- opts.path: scala source file path
+-- opts.content: full file content
 
 -- Required: Build sbt/bloop command
-function M.build_command(root_path, project, tree, name, extra_args) -> string[]
+function M.build_command(opts) -> string[]
+-- opts.root_path: workspace root containing build.sbt
+-- opts.project: sbt project id (without -test suffix)
+-- opts.tree: neotest tree node being run
+-- opts.name: test/namespace/file display name (or nil)
+-- opts.extra_args: nil|string|string[] additional runner args
+-- opts.build_tool: "bloop"|"sbt"|nil pinned tool for this run
 
 -- Optional: Match JUnit result to position (default: ID comparison)
 function M.match_test(junit_test, position) -> boolean
@@ -148,6 +157,10 @@ function M.build_namespace(ns_node, report_prefix, node) -> table
 
 return M
 ```
+
+### Options-Table Convention
+- For adapter/framework APIs with multiple inputs, use a single `opts` table instead of positional args.
+- Keep key names stable across call sites (`root_path`, `project`, `tree`, `name`, `extra_args`, `build_tool`).
 
 ### Adding a New Framework
 1. Create `lua/neotest-scala/framework/mylib/init.lua` with interface above
