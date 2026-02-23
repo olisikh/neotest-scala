@@ -30,6 +30,28 @@ end
 
 local cache_build_info = true
 
+local REMOVED_FRAMEWORK_OPTIONS = {
+    "frameworks",
+    "enabled_frameworks",
+    "disabled_frameworks",
+    "libraries",
+    "enabled_libraries",
+    "disabled_libraries",
+}
+
+---@param opts table
+---@return table
+local function sanitize_setup_opts(opts)
+    for _, option_name in ipairs(REMOVED_FRAMEWORK_OPTIONS) do
+        if opts[option_name] ~= nil then
+            opts[option_name] = nil
+            vim.print("[neotest-scala]: Option '" .. option_name .. "' is not supported; framework selection is automatic")
+        end
+    end
+
+    return opts
+end
+
 
 ---@async
 ---@param file_path string
@@ -74,36 +96,16 @@ function adapter.discover_positions(path)
         return {}
     end
 
-    local trees = {}
-    for _, fw_name in ipairs(frameworks) do
-        local framework = fw.get_framework_class(fw_name)
-        if framework then
-            local tree = framework.discover_positions({
-                path = path,
-                content = content,
-            })
-            if tree then
-                table.insert(trees, tree)
-            end
-        end
+    local tree = fw.select_framework_tree({
+        frameworks = frameworks,
+        path = path,
+        content = content,
+    })
+    if not tree then
+        return {}
     end
 
-    if #trees == 0 then
-        return {}
-    elseif #trees == 1 then
-        return trees[1]
-    else
-        local result = trees[1]
-        for i = 2, #trees do
-            local other = trees[i]
-            if other._children then
-                for _, child in ipairs(other._children) do
-                    table.insert(result._children, child)
-                end
-            end
-        end
-        return result
-    end
+    return tree
 end
 
 ---@async
@@ -143,7 +145,26 @@ function adapter.build_spec(args)
         return {}
     end
 
-    local framework = metals.get_framework(build_target_info)
+    local framework = nil
+    if position.extra and position.extra.framework then
+        framework = position.extra.framework
+    else
+        if lib.files and type(lib.files.read) == "function" then
+            local ok, source_content = pcall(lib.files.read, position.path)
+            if ok and source_content then
+                local frameworks = metals.get_frameworks(root_path, position.path, cache_build_info)
+                local _, selected_framework = fw.select_framework_tree({
+                    frameworks = frameworks or {},
+                    path = position.path,
+                    content = source_content,
+                })
+                framework = selected_framework
+            end
+        end
+
+        framework = framework or metals.get_framework(build_target_info)
+    end
+
     if not framework then
         vim.print("[neotest-scala]: Failed to detect testing library based on classpath")
         return {}
@@ -214,7 +235,7 @@ setmetatable(adapter, {
     ---@param opts neotest-scala.AdapterSetupOpts|nil
     ---@return neotest.Adapter
     __call = function(_, opts)
-        opts = opts or {}
+        opts = sanitize_setup_opts(opts or {})
 
         cache_build_info = opts.cache_build_info ~= false
 

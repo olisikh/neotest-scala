@@ -68,6 +68,8 @@ require("neotest").setup({
 })
 ```
 
+Test library selection is automatic per file. Manual enable/disable framework options are intentionally not supported.
+
 ### Build Tool Selection
 
 By default (`build_tool = "auto"`), the plugin follows build tool information from Metals build target metadata to stay in sync with your editor session.
