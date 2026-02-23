@@ -105,6 +105,19 @@ describe("build", function()
       assert.are.equal("bloop", tool)
     end)
 
+    it("prefers sbt when Scala Classpath is present even if bloop paths are also present", function()
+      local tool = build.get_tool_from_build_target_info({
+        ["Scala Classpath"] = {
+          "/Users/me/project/target/scala-3.8.1/test-classes",
+        },
+        ["Classpath"] = {
+          "/Users/me/project/.bloop/zio-test/bloop-bsp-clients-classes/test-classes-Metals-abc/",
+        },
+      })
+
+      assert.are.equal("sbt", tool)
+    end)
+
     it("returns sbt when metadata contains sbt markers", function()
       local tool = build.get_tool_from_build_target_info({
         ["Build server"] = { "sbt" },

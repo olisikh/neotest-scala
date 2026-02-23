@@ -120,6 +120,19 @@ function adapter.build_spec(args)
         target_path = position.path,
         cache_enabled = cache_build_info,
     })
+
+    if build.is_auto_mode() and cache_build_info then
+        local fresh_build_target_info = metals.get_build_target_info({
+            root_path = root_path,
+            target_path = position.path,
+            cache_enabled = false,
+        })
+
+        if fresh_build_target_info then
+            build_target_info = fresh_build_target_info
+        end
+    end
+
     if not build_target_info then
         vim.print("[neotest-scala]: Metals returned no build information, try again later")
         return {}

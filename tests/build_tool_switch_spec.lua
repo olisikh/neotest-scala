@@ -154,6 +154,77 @@ describe("build tool switch behavior", function()
       assert.are.same({ "munit-test" }, captured_build_info["Target"])
       assert.are.same({ "echo", "ok" }, spec.command)
     end)
+
+    it("refreshes build target info in auto mode to pick up tool switches", function()
+      local adapter = require("neotest-scala")
+
+      local captured_build_info
+      local call_idx = 0
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function(_)
+        call_idx = call_idx + 1
+        if call_idx == 1 then
+          return {
+            ["Target"] = { "munit-test" },
+            ["Build server"] = { "sbt" },
+            ["Base Directory"] = { "file:/tmp/project/" },
+          }
+        end
+
+        return {
+          ["Target"] = { "munit-test" },
+          ["Build server"] = { "bloop" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "is_auto_mode", function()
+        return true
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function(_, build_target_info)
+        captured_build_info = build_target_info
+        return "bloop"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return { strategy = "integrated" }
+      end)
+
+      adapter({ cache_build_info = true })
+
+      adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        extra_args = {},
+      })
+
+      assert.are.equal(2, call_idx)
+      assert.are.same({ "bloop" }, captured_build_info["Build server"])
+    end)
   end)
 
   describe("metals buildTargetChanged handler", function()

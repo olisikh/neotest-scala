@@ -55,6 +55,11 @@ function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 end
 
+---@return boolean
+function M.is_auto_mode()
+    return config.build_tool == "auto"
+end
+
 --- Check if Bloop is available in the project
 ---@param root_path string Project root path
 ---@return boolean
@@ -91,16 +96,16 @@ function M.get_tool_from_build_target_info(build_target_info)
         return false
     end
 
-    if has_bloop_path(build_target_info["Classes Directory"])
-        or has_bloop_path(build_target_info["Classpath"]) then
-        return "bloop"
-    end
-
     local scala_classpath = build_target_info["Scala Classpath"]
     local scala_classes_directory = build_target_info["Scala Classes Directory"]
     if (type(scala_classpath) == "table" and #scala_classpath > 0)
         or (type(scala_classes_directory) == "table" and #scala_classes_directory > 0) then
         return "sbt"
+    end
+
+    if has_bloop_path(build_target_info["Classes Directory"])
+        or has_bloop_path(build_target_info["Classpath"]) then
+        return "bloop"
     end
 
     local has_sbt = false
