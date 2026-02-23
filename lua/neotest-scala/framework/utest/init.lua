@@ -145,6 +145,9 @@ function M.build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return boolean
 function M.match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")

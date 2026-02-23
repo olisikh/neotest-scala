@@ -109,7 +109,7 @@ function M.build_command(opts)
     })
 end
 
----@param junit_test table<string, string>
+---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
 function M.match_test(junit_test, position)

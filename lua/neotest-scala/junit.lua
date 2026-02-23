@@ -4,6 +4,17 @@ local utils = require("neotest-scala.utils")
 
 local M = {}
 
+---@class neotest-scala.JUnitTest
+---@field name string
+---@field namespace string
+---@field error_message? string
+---@field error_stacktrace? string
+---@field error_type? string
+
+---@class neotest-scala.JunitNamespace
+---@field report_path string
+---@field namespace string
+
 --query
 local query = [[
 (element 
@@ -35,6 +46,8 @@ local query = [[
 
 local junit_query = ts.query.parse("xml", query)
 
+---@param ns neotest-scala.JunitNamespace
+---@return neotest-scala.JUnitTest[]
 M.collect_results = function(ns)
     local results = {}
 

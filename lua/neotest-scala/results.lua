@@ -7,10 +7,13 @@ local M = {}
 
 ---@class neotest-scala.FindTestResultOpts
 ---@field framework neotest-scala.Framework
----@field junit_results table[]
+---@field junit_results neotest-scala.JUnitTest[]
 ---@field position neotest.Position
 ---@field ns table
 
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result
 local function build_test_result(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
@@ -30,6 +33,10 @@ local function build_test_result(junit_test, position)
     }
 end
 
+---@param framework neotest-scala.Framework
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result
 local function collect_result(framework, junit_test, position)
     local test_result = nil
 

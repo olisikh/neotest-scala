@@ -161,7 +161,7 @@ function M.build_command(opts)
     })
 end
 
----@param junit_test table<string, string>
+---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
 function M.match_test(junit_test, position)
@@ -201,7 +201,7 @@ function M.match_test(junit_test, position)
 end
 
 ---Build test result with diagnostic message for failed tests
----@param junit_test table<string, string>
+---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return table
 function M.build_test_result(junit_test, position)

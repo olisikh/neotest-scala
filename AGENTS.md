@@ -91,8 +91,8 @@ local build = require("neotest-scala.build")
 ```
 
 ### Naming
-- Files: `camelCase.lua` (e.g., `textspec.lua`)
-- Functions: `snake_case` for module exports, `camelCase` for local helpers
+- Files: `kebab-case.lua` (e.g., `zio-test.lua`)
+- Functions: `snake_case`
 - Constants: `UPPER_SNAKE_CASE` (e.g., `TEST_PASSED`)
 
 ### Type Annotations
@@ -104,10 +104,17 @@ function adapter.is_test_file(file_path)
 ---@class neotest-scala.Framework
 ---@field name string
 ---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
----@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
----@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table
+---@field match_test nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): boolean
+---@field build_test_result nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): table
 ---@field discover_positions nil|fun(opts: { style: string, path: string, content: string }): neotest.Tree
 ---@field detect_style nil|fun(content: string): string|nil
+
+---@class neotest-scala.JUnitTest
+---@field name string
+---@field namespace string
+---@field error_message? string
+---@field error_stacktrace? string
+---@field error_type? string
 ```
 
 ### Error Handling
@@ -148,9 +155,12 @@ function M.build_command(opts) -> string[]
 
 -- Optional: Match JUnit result to position (default: ID comparison)
 function M.match_test(junit_test, position) -> boolean
+-- junit_test.name: test name from JUnit report
+-- junit_test.namespace: suite/namespace id matched against neotest position ids
 
 -- Optional: Build result with errors (default: generic parsing)
 function M.build_test_result(junit_test, position) -> table
+-- junit_test.error_message / junit_test.error_stacktrace may be absent for passing tests
 
 -- Optional: Build namespace for JUnit lookup
 function M.build_namespace(ns_node, report_prefix, node) -> table

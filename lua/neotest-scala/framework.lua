@@ -9,8 +9,8 @@ _G.TEST_FAILED = M.TEST_FAILED
 ---@class neotest-scala.Framework
 ---@field name string
 ---@field build_command fun(opts: { root_path: string, project: string, tree: neotest.Tree, name: string|nil, extra_args: nil|string|string[], build_tool: "bloop"|"sbt"|nil }): string[]
----@field match_test nil|fun(junit_test: table<string, string>, position: neotest.Position): boolean
----@field build_test_result nil|fun(junit_test: table<string, string>, position: neotest.Position): table<string, any>
+---@field match_test nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): boolean
+---@field build_test_result nil|fun(junit_test: neotest-scala.JUnitTest, position: neotest.Position): table<string, any>
 ---@field build_namespace nil|fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
 ---@field discover_positions nil|fun(opts: { style: string, path: string, content: string }): neotest.Tree
 ---@field detect_style nil|fun(content: string): string|nil

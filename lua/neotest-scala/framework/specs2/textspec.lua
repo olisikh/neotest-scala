@@ -205,7 +205,7 @@ function M.build_namespace(ns_node, report_prefix)
 end
 
 ---Match TextSpec test by checking if textspec_path contains JUnit test name
----@param junit_result table
+---@param junit_result neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
 function M.match_test(junit_result, position)
