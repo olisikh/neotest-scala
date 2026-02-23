@@ -94,20 +94,6 @@ require("neotest").setup({
 - It caches compilations incrementally
 - It's already running if you use Metals
 
-### Background Compilation
-
-Enable background compilation on file save for even faster test runs:
-
-```lua
-require("neotest").setup({
-  adapters = {
-    require("neotest-scala")({
-      compile_on_save = true,  -- Compile in background when saving Scala files
-    })
-  }
-})
-```
-
 ### Additional Arguments
 
 You may override some arguments that are passed into the build tool when you are running tests:

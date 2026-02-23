@@ -6,7 +6,6 @@ local M = {}
 
 ---@class neotest-scala.BuildSetupOpts
 ---@field build_tool? "auto"|neotest-scala.BuildTool
----@field compile_on_save? boolean
 
 ---@class neotest-scala.BuildCommandPayload
 ---@field project string
@@ -31,7 +30,6 @@ local M = {}
 -- Configuration
 local config = {
     build_tool = "auto",
-    compile_on_save = false,
 }
 
 -- Flatten a table
@@ -366,68 +364,6 @@ function M.command_with_path(opts)
         end
         return flatten({ "sbt", extra_args, project .. "/testOnly -- " .. '"' .. test_path .. '"' })
     end
-end
-
---- Compile the project using bloop (background)
----@param root_path string Project root path
----@param project string Project name
----@param build_target_info neotest-scala.BuildTargetInfo|nil
----@param callback function|nil Optional callback when done
-function M.compile(root_path, project, build_target_info, callback)
-    local build_tool = M.get_tool(root_path, build_target_info)
-
-    if build_tool ~= "bloop" then
-        return
-    end
-
-    local bloop_project = project .. "-test"
-
-    vim.notify("[neotest-scala] Compiling " .. bloop_project .. "...", vim.log.levels.INFO)
-
-    vim.loop.spawn("bloop", {
-        args = { "compile", bloop_project },
-        cwd = root_path,
-    }, function(code, _)
-        vim.schedule(function()
-            if code == 0 then
-                vim.notify("[neotest-scala] Compilation successful", vim.log.levels.INFO)
-            else
-                vim.notify("[neotest-scala] Compilation failed", vim.log.levels.WARN)
-            end
-            if callback then
-                callback(code)
-            end
-        end)
-    end)
-end
-
---- Setup autocommands for background compilation on save
----@param root_path string Project root path
----@param get_build_info function Function to get build target info
-function M.setup_compile_on_save(root_path, get_build_info)
-    if not config.compile_on_save then
-        return
-    end
-
-    vim.api.nvim_create_autocmd("BufWritePost", {
-        pattern = "*.scala",
-        callback = function(event)
-            local buf_path = event.match
-            local buf_root = lib.files.match_root_pattern("build.sbt")(buf_path)
-
-            if buf_root == root_path then
-                local build_target_info = get_build_info(root_path, buf_path)
-                if build_target_info then
-                    local metals = require("neotest-scala.metals")
-                    local project_name = metals.get_project_name(build_target_info)
-                    if project_name then
-                        M.compile(root_path, project_name, build_target_info)
-                    end
-                end
-            end
-        end,
-        group = vim.api.nvim_create_augroup("neotest-scala-compile", { clear = true }),
-    })
 end
 
 return M

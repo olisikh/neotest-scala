@@ -15,7 +15,6 @@ local results = require("neotest-scala.results")
 ---@class neotest-scala.AdapterSetupOpts
 ---@field cache_build_info? boolean
 ---@field build_tool? "auto"|"bloop"|"sbt"
----@field compile_on_save? boolean
 ---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
 
 ---@type neotest.Adapter
@@ -223,7 +222,6 @@ setmetatable(adapter, {
 
         build.setup({
             build_tool = opts.build_tool,
-            compile_on_save = opts.compile_on_save,
         })
 
         local root = adapter.root(vim.fn.getcwd())
@@ -241,18 +239,6 @@ setmetatable(adapter, {
                 end,
                 group = vim.api.nvim_create_augroup("neotest-scala-prefetch", { clear = true }),
             })
-        end
-
-        if opts.compile_on_save then
-            if root then
-                build.setup_compile_on_save(root, function(r, p)
-                    return metals.get_build_target_info({
-                        root_path = r,
-                        target_path = p,
-                        cache_enabled = cache_build_info,
-                    })
-                end)
-            end
         end
 
         if is_callable(opts.args) then
