@@ -57,9 +57,10 @@ function M.collect(spec, result, node)
     -- Branch on build tool
     local root_path = spec.env.root_path
     local build_tool = spec.env.build_tool
+    local build_target_info = spec.env.build_target_info
 
     if not build_tool and root_path then
-        build_tool = build.get_tool(root_path)
+        build_tool = build.get_tool(root_path, build_target_info)
     end
 
     if build_tool == "bloop" then
@@ -104,7 +105,6 @@ function M.collect(spec, result, node)
                 test_result = { status = TEST_FAILED }
             end
 
-            test_result.test_id = position.id
             test_results[position.id] = test_result
         end
     end

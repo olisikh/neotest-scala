@@ -25,6 +25,9 @@ local M = {}
 ---@field extra_args nil|string|string[]
 ---@field tool_override? neotest-scala.BuildTool
 
+---@class neotest-scala.BuildTargetInfo
+---@field [string] string[]
+
 -- Configuration
 local config = {
     build_tool = "auto",
@@ -64,18 +67,97 @@ function M.is_bloop_available(root_path)
     return vim.fn.executable("bloop") == 1
 end
 
+---@param build_target_info neotest-scala.BuildTargetInfo|nil
+---@return neotest-scala.BuildTool|nil
+function M.get_tool_from_build_target_info(build_target_info)
+    if not build_target_info then
+        return nil
+    end
+
+    local function has_bloop_path(values)
+        if type(values) ~= "table" then
+            return false
+        end
+
+        for _, value in ipairs(values) do
+            local value_l = string.lower(tostring(value))
+            if value_l:find("/.bloop/", 1, true)
+                or value_l:find("\\.bloop\\", 1, true)
+                or value_l:find("bloop%-bsp%-clients%-classes") then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    if has_bloop_path(build_target_info["Classes Directory"])
+        or has_bloop_path(build_target_info["Classpath"]) then
+        return "bloop"
+    end
+
+    local scala_classpath = build_target_info["Scala Classpath"]
+    local scala_classes_directory = build_target_info["Scala Classes Directory"]
+    if (type(scala_classpath) == "table" and #scala_classpath > 0)
+        or (type(scala_classes_directory) == "table" and #scala_classes_directory > 0) then
+        return "sbt"
+    end
+
+    local has_sbt = false
+    local has_bloop = false
+
+    for key, values in pairs(build_target_info) do
+        local key_l = string.lower(tostring(key))
+        if key_l:find("sbt", 1, true) then
+            has_sbt = true
+        end
+        if key_l:find("bloop", 1, true) then
+            has_bloop = true
+        end
+
+        if type(values) == "table" then
+            for _, value in ipairs(values) do
+                local value_l = string.lower(tostring(value))
+                if value_l:find("sbt", 1, true) then
+                    has_sbt = true
+                end
+                if value_l:find("bloop", 1, true) then
+                    has_bloop = true
+                end
+            end
+        end
+    end
+
+    if has_sbt then
+        return "sbt"
+    end
+
+    if has_bloop then
+        return "bloop"
+    end
+
+    return nil
+end
+
 --- Determine which build tool to use
 ---@param root_path string Project root path
+---@param build_target_info neotest-scala.BuildTargetInfo|nil
 ---@return string "bloop" or "sbt"
-function M.get_tool(root_path)
+function M.get_tool(root_path, build_target_info)
     if config.build_tool == "bloop" then
         return "bloop"
     elseif config.build_tool == "sbt" then
         return "sbt"
     else
+        local tool_from_metals = M.get_tool_from_build_target_info(build_target_info)
+        if tool_from_metals then
+            return tool_from_metals
+        end
+
         if M.is_bloop_available(root_path) then
             return "bloop"
         end
+
         return "sbt"
     end
 end
@@ -83,13 +165,14 @@ end
 --- Resolve which build tool to use, optionally honoring a per-run override.
 ---@param root_path string Project root path
 ---@param tool_override string|nil
+---@param build_target_info neotest-scala.BuildTargetInfo|nil
 ---@return string "bloop" or "sbt"
-function M.resolve_tool(root_path, tool_override)
+function M.resolve_tool(root_path, tool_override, build_target_info)
     if tool_override == "bloop" or tool_override == "sbt" then
         return tool_override
     end
 
-    return M.get_tool(root_path)
+    return M.get_tool(root_path, build_target_info)
 end
 
 --- Merge two argument values (nil|string|string[]), preserving caller-friendly behavior.
@@ -283,9 +366,10 @@ end
 --- Compile the project using bloop (background)
 ---@param root_path string Project root path
 ---@param project string Project name
+---@param build_target_info neotest-scala.BuildTargetInfo|nil
 ---@param callback function|nil Optional callback when done
-function M.compile(root_path, project, callback)
-    local build_tool = M.get_tool(root_path)
+function M.compile(root_path, project, build_target_info, callback)
+    local build_tool = M.get_tool(root_path, build_target_info)
 
     if build_tool ~= "bloop" then
         return
@@ -332,7 +416,7 @@ function M.setup_compile_on_save(root_path, get_build_info)
                     local metals = require("neotest-scala.metals")
                     local project_name = metals.get_project_name(build_target_info)
                     if project_name then
-                        M.compile(root_path, project_name)
+                        M.compile(root_path, project_name, build_target_info)
                     end
                 end
             end

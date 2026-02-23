@@ -99,6 +99,7 @@ describe("build tool switch behavior", function()
       local adapter = require("neotest-scala")
 
       local captured_tool
+      local captured_build_info
 
       H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
         return {
@@ -115,7 +116,8 @@ describe("build tool switch behavior", function()
         return "munit"
       end)
 
-      H.mock_fn("neotest-scala.build", "get_tool", function()
+      H.mock_fn("neotest-scala.build", "get_tool", function(_, build_target_info)
+        captured_build_info = build_target_info
         return "bloop"
       end)
 
@@ -149,6 +151,7 @@ describe("build tool switch behavior", function()
 
       assert.are.equal("bloop", captured_tool)
       assert.are.equal("bloop", spec.env.build_tool)
+      assert.are.same({ "munit-test" }, captured_build_info["Target"])
       assert.are.same({ "echo", "ok" }, spec.command)
     end)
   end)

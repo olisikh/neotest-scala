@@ -220,4 +220,85 @@ describe("specs2", function()
       assert.is_not_nil(result)
     end)
   end)
+
+  describe("parse_stdout_results", function()
+    it("marks crashing tests with '!' marker as failed", function()
+      local output = [[
+MutableSpec
+
+HelloWereld
+  + Hello, Specs2!
+  x failing test
+[E]    1 != 2 (MutableSpec.scala:12)
+  and
+    + a passing nested test
+    x a failing nested test
+[E]      hello is not the same as 'world' (MutableSpec.scala:19)
+    ! a crashing test
+[E]      java.lang.RuntimeException: babbahh (MutableSpec.scala:22)com.example.MutableSpec.$init$
+
+5 tests, 2 passed, 2 failed, 1 errors
+]]
+
+      local nodes = {
+        {
+          data = function()
+            return {
+              id = "com.example.MutableSpec.HelloWereld.Hello.Specs2!",
+              type = "test",
+              name = "\"Hello, Specs2!\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.MutableSpec.HelloWereld.failing.test",
+              type = "test",
+              name = "\"failing test\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.MutableSpec.HelloWereld.and.a.passing.nested.test",
+              type = "test",
+              name = "\"a passing nested test\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.MutableSpec.HelloWereld.and.a.failing.nested.test",
+              type = "test",
+              name = "\"a failing nested test\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.MutableSpec.HelloWereld.and.a.crashing.test",
+              type = "test",
+              name = "\"a crashing test\"",
+            }
+          end,
+        },
+      }
+
+      local tree = {
+        iter_nodes = function()
+          return ipairs(nodes)
+        end,
+      }
+
+      local results = specs2.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_FAILED, results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].status)
+      assert.are.equal(21, results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].line)
+      assert.is_truthy(results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].message:find("RuntimeException", 1, true))
+    end)
+  end)
 end)

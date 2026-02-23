@@ -142,7 +142,7 @@ function adapter.build_spec(args)
         return {}
     end
 
-    local build_tool = build.get_tool(root_path)
+    local build_tool = build.get_tool(root_path, build_target_info)
 
     local extra_args = vim.list_extend(
         get_args({

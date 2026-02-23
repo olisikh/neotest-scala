@@ -181,6 +181,7 @@ end
 ---@return table<string, neotest.Result> Test results indexed by position.id
 function M.parse_stdout_results(output, tree)
     local results = {}
+    local current_failed_ids = nil
 
     output = utils.string_remove_ansi(output)
 
@@ -205,24 +206,45 @@ function M.parse_stdout_results(output, tree)
             end
         end
 
-        -- Fail: "x name"
-        local fail_name = line:match("^%s*x%s*(.+)$")
+        -- Fail/Error: "x name" or "! name"
+        local fail_name = line:match("^%s*[x!]%s*(.+)$")
         if fail_name then
-            pending_failure_name = fail_name
+            local matched_ids = {}
             for pos_id, pos in pairs(positions) do
                 local pos_name = utils.get_position_name(pos) or pos.name
                 if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
                     results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    table.insert(matched_ids, pos_id)
                 end
             end
+
+            current_failed_ids = #matched_ids > 0 and matched_ids or nil
         end
 
         -- Error: "[E] message (file:line)"
-        local error_msg, file, line_num = line:match("^%[E%]%s*(.+)%s*%(([^:]+):(%d+)%)$")
+        local error_msg, file, line_num = line:match("^%[E%]%s*(.+)%s*%(([^:]+):(%d+)%)")
         if error_msg and file and line_num then
-            for pos_id, result in pairs(results) do
-                if result.status == TEST_FAILED and result.errors and #result.errors == 0 then
-                    table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+            local attached = false
+
+            if current_failed_ids then
+                for _, pos_id in ipairs(current_failed_ids) do
+                    local result = results[pos_id]
+                    if result and result.status == TEST_FAILED then
+                        result.errors = result.errors or {}
+                        if #result.errors == 0 then
+                            table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                            attached = true
+                        end
+                    end
+                end
+            end
+
+            if not attached then
+                for pos_id, result in pairs(results) do
+                    if result.status == TEST_FAILED and result.errors and #result.errors == 0 then
+                        table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                        break
+                    end
                 end
             end
         end

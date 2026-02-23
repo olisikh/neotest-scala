@@ -49,7 +49,12 @@ require("neotest").setup({
 
 ### Build Tool Selection
 
-By default, the plugin auto-detects whether to use Bloop or sbt. If a `.bloop/` directory exists, Bloop is used for faster test execution.
+By default (`build_tool = "auto"`), the plugin follows build tool information from Metals build target metadata to stay in sync with your editor session.
+
+Selection priority in auto mode:
+- If Metals metadata clearly indicates `sbt`, use `sbt` (recommended default for stability)
+- If Metals metadata clearly indicates `bloop`, use `bloop`
+- If metadata is ambiguous, fall back to local detection (`.bloop/` + `bloop` executable), otherwise `sbt`
 
 You can explicitly configure the build tool:
 
