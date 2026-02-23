@@ -35,6 +35,8 @@ class FreeSpec extends AnyFreeSpec with Matchers {
       throw Babbah
     }
   }
+
+  // throw Babbah
 }
 
 object Babbah extends NoStackTrace {

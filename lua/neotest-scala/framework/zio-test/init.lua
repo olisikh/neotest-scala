@@ -122,8 +122,20 @@ end
 
 ---@param message string
 ---@return string
+local function strip_first_line_location(message)
+    local first_line, rest = message:match("^([^\r\n]*)\r?\n(.*)$")
+    if not first_line then
+        return (message:gsub("%s*%([^:%)]+%.scala:%d+%)%s*$", ""))
+    end
+
+    local cleaned_first_line = first_line:gsub("%s*%([^:%)]+%.scala:%d+%)%s*$", "")
+    return cleaned_first_line .. "\n" .. rest
+end
+
+---@param message string
+---@return string
 local function sanitize_error_message(message)
-    return trim_line_indentation(strip_test_header_line(message))
+    return strip_first_line_location(trim_line_indentation(strip_test_header_line(message)))
 end
 
 ---@param junit_test neotest-scala.JUnitTest

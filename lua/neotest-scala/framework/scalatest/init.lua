@@ -18,12 +18,14 @@ local M = { name = "scalatest" }
 ---@field build_tool? "bloop"|"sbt"
 
 ---@param content string
----@return "funsuite"|"freespec"|nil
+---@return "funsuite"|"freespec"|"flatspec"|nil
 local function detect_style(content)
     if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
         return "funsuite"
     elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
         return "freespec"
+    elseif content:match("extends%s+AnyFlatSpec") or content:match("extends%s+.*FlatSpec") then
+        return "flatspec"
     end
     return nil
 end
@@ -56,7 +58,7 @@ function M.discover_positions(opts)
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
-    else
+        elseif style == "freespec" then
         -- FreeSpec: "name" - { } and "name" in { }
         query = [[
       (object_definition
@@ -73,6 +75,37 @@ function M.discover_positions(opts)
         right: (_)
       ) @test.definition
     ]]
+        else
+                -- FlatSpec:
+                -- "A Stack" should "pop values" in { }
+                -- it should "throw..." in { }
+                query = [[
+            (object_definition
+                name: (identifier) @namespace.name
+            ) @namespace.definition
+
+            (class_definition
+                name: (identifier) @namespace.name
+            ) @namespace.definition
+
+            (infix_expression
+                left: (infix_expression
+                    left: (string)
+                    operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
+                    right: (string) @test.name)
+                operator: (_) @spec_in (#eq? @spec_in "in")
+                right: (_)
+            ) @test.definition
+
+            (infix_expression
+                left: (infix_expression
+                    left: (identifier) @it_name (#eq? @it_name "it")
+                    operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
+                    right: (string) @test.name)
+                operator: (_) @spec_in (#eq? @spec_in "in")
+                right: (_)
+            ) @test.definition
+        ]]
     end
 
     return lib.treesitter.parse_positions(path, query, {
@@ -172,38 +205,73 @@ local function match_test(junit_test, position)
     end
 
     local package_name = utils.get_package_name(position.path)
+    local position_id = position.id
+
     -- JUnit test names have leading/trailing spaces that need to be trimmed
     local junit_name = vim.trim(junit_test.name)
-    local position_id = position.id
+    local junit_name_variants = { junit_name }
+
+    local flat_should = junit_name:match("^.-%s+[Ss]hould%s+(.+)$")
+    local flat_must = junit_name:match("^.-%s+[Mm]ust%s+(.+)$")
+    local flat_can = junit_name:match("^.-%s+[Cc]an%s+(.+)$")
+
+    if flat_should then
+        table.insert(junit_name_variants, flat_should)
+    end
+    if flat_must then
+        table.insert(junit_name_variants, flat_must)
+    end
+    if flat_can then
+        table.insert(junit_name_variants, flat_can)
+    end
 
     -- Normalize: remove dashes and spaces for comparison
     local normalized_position = position_id:gsub("-", "."):gsub(" ", "")
 
-    -- Try 1: Standard matching with package prefix (for regular tests)
-    local junit_with_package = (package_name .. junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
-    if junit_with_package == normalized_position then
-        return true
-    end
-
-    -- Try 2: Without package prefix (for FreeSpec where JUnit namespace is just class name)
-    local junit_test_id = (junit_test.namespace .. "." .. junit_name):gsub("-", "."):gsub(" ", "")
-    if junit_test_id == normalized_position then
-        return true
-    end
-
-    -- Try 3: For FreeSpec, check if JUnit test ID matches the END of position (after removing package)
-    -- FreeSpec JUnit: namespace="FreeSpec", name="Hello, ScalaTest!" -> "FreeSpec.Hello,ScalaTest!"
-    -- Position: "com.example.FreeSpec.FreeSpec.Hello,ScalaTest!" -> "FreeSpec.FreeSpec.Hello,ScalaTest!"
     local escaped_package = package_name:gsub("%.", "%%.")
     local position_no_package = normalized_position:gsub("^" .. escaped_package, "")
-    if position_no_package:find(junit_test_id .. "$") then
-        return true
+
+    for _, variant in ipairs(junit_name_variants) do
+        -- Try 1: Standard matching with package prefix (for regular tests)
+        local junit_with_package = (package_name .. junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
+        if junit_with_package == normalized_position then
+            return true
+        end
+
+        -- Try 2: Without package prefix (for FreeSpec where JUnit namespace is just class name)
+        local junit_test_id = (junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
+        if junit_test_id == normalized_position then
+            return true
+        end
+
+        -- Try 3: For FreeSpec, check if JUnit test ID matches the END of position (after removing package)
+        -- FreeSpec JUnit: namespace="FreeSpec", name="Hello, ScalaTest!" -> "FreeSpec.Hello,ScalaTest!"
+        -- Position: "com.example.FreeSpec.FreeSpec.Hello,ScalaTest!" -> "FreeSpec.FreeSpec.Hello,ScalaTest!"
+        if position_no_package:find(junit_test_id .. "$") then
+            return true
+        end
+
+        -- Try 4: Remove all dots and compare (fallback for edge cases)
+        local junit_no_dots = junit_test_id:gsub("%.", "")
+        local position_no_dots = position_no_package:gsub("%.", "")
+        if junit_no_dots == position_no_dots then
+            return true
+        end
     end
 
-    -- Try 4: Remove all dots and compare (fallback for edge cases)
-    local junit_no_dots = junit_test_id:gsub("%.", "")
-    local position_no_dots = position_no_package:gsub("%.", "")
-    return junit_no_dots == position_no_dots
+    return false
+end
+
+---@param message string
+---@return string
+local function strip_first_line_location(message)
+    local first_line, rest = message:match("^([^\r\n]*)\r?\n(.*)$")
+    if not first_line then
+        return (message:gsub("%s*%([^:%)]+%.scala:%d+%)%s*$", ""))
+    end
+
+    local cleaned_first_line = first_line:gsub("%s*%([^:%)]+%.scala:%d+%)%s*$", "")
+    return cleaned_first_line .. "\n" .. rest
 end
 
 ---Build test result with diagnostic message for failed tests
@@ -221,13 +289,14 @@ function M.build_test_result(junit_test, position)
     local file_name = utils.get_file_name(position.path)
 
     if junit_test.error_message then
-        error.message = junit_test.error_message
+        error.message = strip_first_line_location(junit_test.error_message)
 
         if junit_test.error_stacktrace then
             error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
         end
     elseif junit_test.error_stacktrace then
         error.message = junit_test.error_stacktrace:match("^[^\r\n]+") or junit_test.error_stacktrace
+        error.message = strip_first_line_location(error.message)
         error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
     end
 
@@ -281,6 +350,180 @@ function M.build_namespace(ns_node, report_prefix, node)
     end
 
     return namespace
+end
+
+---@param value string
+---@return string
+local function normalize_for_match(value)
+    return value:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+end
+
+---@param tree neotest.Tree
+---@return table<string, { id: string, name: string, normalized_name: string, normalized_id: string, file_name: string }[]>
+local function collect_test_positions(tree)
+    local positions_by_name = {}
+
+    for _, node in tree:iter_nodes() do
+        local data = node:data()
+        if data.type == "test" then
+            local position_name = utils.get_position_name(data) or data.name
+            local normalized_name = normalize_for_match(position_name)
+            local position = {
+                id = data.id,
+                name = position_name,
+                normalized_name = normalized_name,
+                normalized_id = normalize_for_match(data.id),
+                file_name = utils.get_file_name(data.path),
+            }
+
+            positions_by_name[normalized_name] = positions_by_name[normalized_name] or {}
+            table.insert(positions_by_name[normalized_name], position)
+        end
+    end
+
+    return positions_by_name
+end
+
+---@param positions_by_name table<string, { id: string, name: string, normalized_name: string, normalized_id: string, file_name: string }[]>
+---@param test_name string
+---@return { id: string, name: string, normalized_name: string, normalized_id: string, file_name: string }[]
+local function find_matching_positions(positions_by_name, test_name)
+    local variants = { test_name }
+    local lowered = test_name:lower()
+    if lowered:match("^should%s+") then
+        table.insert(variants, (test_name:gsub("^[Ss]hould%s+", "")))
+    elseif lowered:match("^must%s+") then
+        table.insert(variants, (test_name:gsub("^[Mm]ust%s+", "")))
+    elseif lowered:match("^can%s+") then
+        table.insert(variants, (test_name:gsub("^[Cc]an%s+", "")))
+    end
+
+    for _, variant in ipairs(variants) do
+        local normalized_test_name = normalize_for_match(variant)
+        local exact = positions_by_name[normalized_test_name]
+        if exact and #exact > 0 then
+            return exact
+        end
+
+        local matches = {}
+        for _, positions in pairs(positions_by_name) do
+            for _, pos in ipairs(positions) do
+                if pos.normalized_id:find(normalized_test_name, 1, true) then
+                    table.insert(matches, pos)
+                end
+            end
+        end
+
+        if #matches > 0 then
+            return matches
+        end
+    end
+
+    return {}
+end
+
+--- Parse bloop stdout output for ScalaTest results
+---@param output string
+---@param tree neotest.Tree
+---@return table<string, neotest.Result>
+function M.parse_stdout_results(output, tree)
+    local results = {}
+    local fallback_messages = {}
+    local failed_file_names = {}
+    local current_failed_positions = nil
+    local current_failure_indent = nil
+    local current_failure_name = nil
+
+    output = utils.string_remove_ansi(output)
+    local positions_by_name = collect_test_positions(tree)
+
+    for line in output:gmatch("[^\r\n]+") do
+        local fail_indent, fail_name = line:match("^(%s*)%-%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
+        local pass_name = line:match("^%s*%-%s*(.-)%s*$")
+
+        if fail_name then
+            local failed_positions = find_matching_positions(positions_by_name, fail_name)
+            local failed_ids = {}
+
+            for _, pos in ipairs(failed_positions) do
+                results[pos.id] = {
+                    status = TEST_FAILED,
+                    errors = { { message = "", line = nil } },
+                }
+                fallback_messages[pos.id] = fail_name
+                failed_file_names[pos.id] = pos.file_name
+                table.insert(failed_ids, pos.id)
+            end
+
+            current_failed_positions = failed_ids
+            current_failure_indent = #fail_indent
+            current_failure_name = fail_name
+        else
+            if pass_name and not line:match("%*%*%* FAILED %*%*%*") then
+                local passed_positions = find_matching_positions(positions_by_name, pass_name)
+                for _, pos in ipairs(passed_positions) do
+                    if not results[pos.id] then
+                        results[pos.id] = { status = TEST_PASSED }
+                    end
+                end
+            end
+
+            local is_summary_line = line:match("^Execution took")
+                or line:match("^%d+ tests?,")
+                or line:match("^Run completed")
+
+            if is_summary_line then
+                current_failed_positions = nil
+                current_failure_indent = nil
+                current_failure_name = nil
+            elseif current_failed_positions and #current_failed_positions > 0 and current_failure_indent then
+                local line_indent = #(line:match("^(%s*)") or "")
+
+                if line_indent <= current_failure_indent then
+                    current_failed_positions = nil
+                    current_failure_indent = nil
+                    current_failure_name = nil
+                else
+                    local detail = utils.string_trim(line)
+                    if detail ~= "" and not detail:match("^%-%s+") then
+                        local trace_file, line_num_str = detail:match("%(([^:]+%.scala):(%d+)%)")
+                        local trace_file_name = trace_file and utils.get_file_name(trace_file) or nil
+                        local line_num = tonumber(line_num_str)
+
+                        for _, failed_id in ipairs(current_failed_positions) do
+                            local err = results[failed_id].errors[1]
+
+                            if err.message == "" then
+                                err.message = detail
+                            else
+                                err.message = err.message .. "\n" .. detail
+                            end
+
+                            if line_num then
+                                if trace_file_name and trace_file_name == failed_file_names[failed_id] then
+                                    err.line = line_num - 1
+                                elseif not err.line then
+                                    err.line = line_num - 1
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    for id, result in pairs(results) do
+        if result.errors and result.errors[1] then
+            if result.errors[1].message == "" then
+                result.errors[1].message = fallback_messages[id] or "ScalaTest failure"
+            end
+
+            result.errors[1].message = strip_first_line_location(result.errors[1].message)
+        end
+    end
+
+    return results
 end
 
 ---@return neotest-scala.Framework

@@ -11,6 +11,7 @@ class FlatSpec extends AnyFlatSpec with Matchers {
 
   val emptyStack = new Stack[Int]
 
+  // behavior of "A Stack" - is an alternative to "XYZ" should
   "A Stack" should "pop values in last-in-first-out order" in {
     val stack = new Stack[Int]
     stack.push(1)
@@ -26,21 +27,11 @@ class FlatSpec extends AnyFlatSpec with Matchers {
     }
   }
 
-  behavior of "A Stack"
-
-  it should "pop values in last-in-first-out order" in {
-    val stack = new Stack[Int]
-    stack.push(1)
-    stack.push(2)
-    assert(stack.pop() === 2)
-    assert(stack.pop() === 1)
+  it should "fail" in {
+    1 shouldEqual 2
   }
 
-  it should "throw NoSuchElementException if an empty stack is popped" in {
-    val emptyStack = new Stack[String]
-    intercept[NoSuchElementException] {
-      emptyStack.pop()
-    }
+  it should "crash" in {
+    throw new RuntimeException("boom")
   }
-
 }
