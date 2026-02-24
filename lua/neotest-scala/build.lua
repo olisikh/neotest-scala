@@ -37,6 +37,27 @@ local BLOOP_UNSUPPORTED_FRAMEWORKS = {
     ["zio-test"] = true,
 }
 
+---@param extra_args nil|string|string[]
+---@return string[]
+local function with_sbt_batch(extra_args)
+    local args = {}
+
+    if type(extra_args) == "string" then
+        args = { extra_args }
+    elseif type(extra_args) == "table" then
+        args = vim.deepcopy(extra_args)
+    end
+
+    for _, arg in ipairs(args) do
+        if arg == "--batch" then
+            return args
+        end
+    end
+
+    table.insert(args, 1, "--batch")
+    return args
+end
+
 -- Flatten a table
 local function flatten(tbl)
     local result = {}
@@ -286,7 +307,7 @@ local function build_sbt_command(opts)
     local project = opts.project
     local tree = opts.tree
     local name = opts.name
-    local extra_args = opts.extra_args
+    local extra_args = with_sbt_batch(opts.extra_args)
     local test_namespace = build_test_namespace(tree)
 
     if not test_namespace then
@@ -364,7 +385,7 @@ function M.command_with_path(opts)
     local root_path = opts.root_path
     local project = opts.project
     local test_path = opts.test_path
-    local extra_args = opts.extra_args
+    local extra_args = with_sbt_batch(opts.extra_args)
     local tool_override = opts.tool_override
     local build_tool = M.resolve_tool(root_path, tool_override)
     local bloop_project = project .. "-test"

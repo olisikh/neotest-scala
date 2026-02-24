@@ -422,6 +422,46 @@ local function find_matching_positions(positions_by_name, test_name)
     return {}
 end
 
+---@param detail string
+---@return string|nil, number|nil
+local function extract_scala_frame(detail)
+    local frame_path, frame_line = detail:match("%(([^:]+%.scala):(%d+)%)")
+    if frame_path and frame_line then
+        return utils.get_file_name(frame_path), tonumber(frame_line)
+    end
+
+    local plain_path, plain_line = detail:match("at%s+([^:]+%.scala):(%d+)%s*$")
+    if plain_path and plain_line then
+        return utils.get_file_name(plain_path), tonumber(plain_line)
+    end
+
+    return nil, nil
+end
+
+---@param details string[]
+---@param preferred_file_name string|nil
+---@return number|nil
+local function pick_first_matching_line(details, preferred_file_name)
+    local fallback_line = nil
+
+    for _, detail in ipairs(details) do
+        local frame_file_name, frame_line = extract_scala_frame(detail)
+        if frame_line then
+            local zero_indexed = frame_line - 1
+
+            if frame_file_name and preferred_file_name and frame_file_name == preferred_file_name then
+                return zero_indexed
+            end
+
+            if not fallback_line then
+                fallback_line = zero_indexed
+            end
+        end
+    end
+
+    return fallback_line
+end
+
 --- Parse bloop stdout output for ScalaTest results
 ---@param output string
 ---@param tree neotest.Tree
@@ -432,16 +472,31 @@ function M.parse_stdout_results(output, tree)
     local failed_file_names = {}
     local current_failed_positions = nil
     local current_failure_indent = nil
-    local current_failure_name = nil
+    local current_failure_details = nil
 
     output = utils.string_remove_ansi(output)
     local positions_by_name = collect_test_positions(tree)
+
+    local function finalize_current_failure()
+        if not current_failed_positions or not current_failure_details then
+            return
+        end
+
+        for _, failed_id in ipairs(current_failed_positions) do
+            local err = results[failed_id] and results[failed_id].errors and results[failed_id].errors[1]
+            if err then
+                err.line = pick_first_matching_line(current_failure_details, failed_file_names[failed_id])
+            end
+        end
+    end
 
     for line in output:gmatch("[^\r\n]+") do
         local fail_indent, fail_name = line:match("^(%s*)%-%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
         local pass_name = line:match("^%s*%-%s*(.-)%s*$")
 
         if fail_name then
+            finalize_current_failure()
+
             local failed_positions = find_matching_positions(positions_by_name, fail_name)
             local failed_ids = {}
 
@@ -457,7 +512,7 @@ function M.parse_stdout_results(output, tree)
 
             current_failed_positions = failed_ids
             current_failure_indent = #fail_indent
-            current_failure_name = fail_name
+            current_failure_details = {}
         else
             if pass_name and not line:match("%*%*%* FAILED %*%*%*") then
                 local passed_positions = find_matching_positions(positions_by_name, pass_name)
@@ -473,22 +528,22 @@ function M.parse_stdout_results(output, tree)
                 or line:match("^Run completed")
 
             if is_summary_line then
+                finalize_current_failure()
                 current_failed_positions = nil
                 current_failure_indent = nil
-                current_failure_name = nil
+                current_failure_details = nil
             elseif current_failed_positions and #current_failed_positions > 0 and current_failure_indent then
                 local line_indent = #(line:match("^(%s*)") or "")
 
                 if line_indent <= current_failure_indent then
+                    finalize_current_failure()
                     current_failed_positions = nil
                     current_failure_indent = nil
-                    current_failure_name = nil
+                    current_failure_details = nil
                 else
                     local detail = utils.string_trim(line)
                     if detail ~= "" and not detail:match("^%-%s+") then
-                        local trace_file, line_num_str = detail:match("%(([^:]+%.scala):(%d+)%)")
-                        local trace_file_name = trace_file and utils.get_file_name(trace_file) or nil
-                        local line_num = tonumber(line_num_str)
+                        table.insert(current_failure_details, detail)
 
                         for _, failed_id in ipairs(current_failed_positions) do
                             local err = results[failed_id].errors[1]
@@ -498,20 +553,14 @@ function M.parse_stdout_results(output, tree)
                             else
                                 err.message = err.message .. "\n" .. detail
                             end
-
-                            if line_num then
-                                if trace_file_name and trace_file_name == failed_file_names[failed_id] then
-                                    err.line = line_num - 1
-                                elseif not err.line then
-                                    err.line = line_num - 1
-                                end
-                            end
                         end
                     end
                 end
             end
         end
     end
+
+    finalize_current_failure()
 
     for id, result in pairs(results) do
         if result.errors and result.errors[1] then

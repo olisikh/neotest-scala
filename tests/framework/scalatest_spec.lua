@@ -693,7 +693,7 @@ Execution took 1ms
       assert.are.equal("1 did not equal 2", results["com.example.FunSuiteSpec.failing test"].errors[1].message)
 
       assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.crashing test"].status)
-      assert.are.equal(16, results["com.example.FunSuiteSpec.crashing test"].errors[1].line)
+      assert.are.equal(17, results["com.example.FunSuiteSpec.crashing test"].errors[1].line)
       assert.is_not_nil(results["com.example.FunSuiteSpec.crashing test"].errors[1].message:match("RuntimeException: kaboom"))
 
       assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.crashing with custom exception"].status)
@@ -738,17 +738,17 @@ A Stack
   1 did not equal 2 (FlatSpec.scala:31)
 - should crash *** FAILED ***
   java.lang.RuntimeException: boom
+  at com.example.FlatSpec.testFun$proxy4$1(FlatSpec.scala:35)
   at com.example.FlatSpec.$init$$$anonfun$4(FlatSpec.scala:34)
   at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
   at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
   at org.scalatest.OutcomeOf.outcomeOf$(OutcomeOf.scala:31)
   at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:22)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
   at org.scalatest.flatspec.AnyFlatSpecLike$$anon$5.apply(AnyFlatSpecLike.scala:1717)
   at org.scalatest.TestSuite.withFixture(TestSuite.scala:196)
   ...
-  at org.scalatest.Transformer.apply(Transformer.scala:22)
-  at org.scalatest.Transformer.apply(Transformer.scala:21)
-  at com.example.FlatSpec.testFun$proxy4$1(FlatSpec.scala:35)
 Execution took 18ms
 4 tests, 2 passed, 2 failed
 ]]
@@ -790,6 +790,42 @@ Execution took 1ms
       assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.failing test"].status)
       assert.are.equal(14, results["com.example.FunSuiteSpec.failing test"].errors[1].line)
       assert.are.equal("1 did not equal 2", results["com.example.FunSuiteSpec.failing test"].errors[1].message)
+    end)
+
+    it("picks the first stack frame for the current test file", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FlatSpec.crash",
+          name = '"crash"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+      })
+
+      local output = [[
+FlatSpec:
+- should crash *** FAILED ***
+  java.lang.RuntimeException: boom
+  at com.example.FlatSpec.testFun$proxy4$1(FlatSpec.scala:35)
+  at com.example.FlatSpec.$init$$$anonfun$4(FlatSpec.scala:34)
+  at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+  at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
+  at org.scalatest.OutcomeOf.outcomeOf$(OutcomeOf.scala:31)
+  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:22)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
+  at org.scalatest.flatspec.AnyFlatSpecLike$$anon$5.apply(AnyFlatSpecLike.scala:1717)
+  at org.scalatest.TestSuite.withFixture(TestSuite.scala:196)
+  ...
+Execution took 18ms
+1 test, 0 passed, 1 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FlatSpec.crash"].status)
+      assert.are.equal(34, results["com.example.FlatSpec.crash"].errors[1].line)
+      assert.is_not_nil(results["com.example.FlatSpec.crash"].errors[1].message:match("RuntimeException: boom"))
     end)
   end)
 end)
