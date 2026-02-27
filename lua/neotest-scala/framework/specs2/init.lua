@@ -221,45 +221,76 @@ function M.parse_stdout_results(output, tree)
         end
     end
 
+    ---@param test_name string|nil
+    ---@return string[]
+    local function get_matching_position_ids(test_name)
+        local matched_ids = {}
+        if not test_name then
+            return matched_ids
+        end
+
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local normalized_name = pos_name and pos_name:gsub("['\"]", "")
+            local pos_matches = normalized_name and test_name:find(normalized_name, 1, true)
+            local interpolated_match = normalized_name
+                and utils.matches_with_interpolation(test_name, normalized_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matched_ids, pos_id)
+            end
+        end
+
+        return matched_ids
+    end
+
+    ---@param pos_id string
+    ---@return neotest.Result
+    local function ensure_failed_result(pos_id)
+        local result = results[pos_id]
+        if not result or result.status ~= TEST_FAILED then
+            result = { status = TEST_FAILED, errors = {} }
+            results[pos_id] = result
+        elseif not result.errors then
+            result.errors = {}
+        end
+        return result
+    end
+
     for line in output:gmatch("[^\r\n]+") do
         -- Pass: "+ name"
         local pass_name = line:match("^%s*%+%s*(.+)$")
         if pass_name then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                local normalized_name = pos_name and pos_name:gsub("['\"]", "")
-                local pos_matches = normalized_name and pass_name:find(normalized_name, 1, true)
-                local interpolated_match = normalized_name
-                    and utils.matches_with_interpolation(pass_name, normalized_name, {
-                        anchor_start = false,
-                        anchor_end = true,
-                    })
-                if pos_matches or interpolated_match then
-                    results[pos_id] = { status = TEST_PASSED }
-                end
+            local matched_ids = get_matching_position_ids(pass_name)
+            for _, pos_id in ipairs(matched_ids) do
+                results[pos_id] = { status = TEST_PASSED }
             end
         end
 
         -- Fail/Error: "x name" or "! name"
         local fail_name = line:match("^%s*[x!]%s*(.+)$")
         if fail_name then
-            local matched_ids = {}
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                local normalized_name = pos_name and pos_name:gsub("['\"]", "")
-                local pos_matches = normalized_name and fail_name:find(normalized_name, 1, true)
-                local interpolated_match = normalized_name
-                    and utils.matches_with_interpolation(fail_name, normalized_name, {
-                        anchor_start = false,
-                        anchor_end = true,
-                    })
-                if pos_matches or interpolated_match then
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    table.insert(matched_ids, pos_id)
-                end
+            local matched_ids = get_matching_position_ids(fail_name)
+            for _, pos_id in ipairs(matched_ids) do
+                ensure_failed_result(pos_id)
             end
 
             current_failed_ids = #matched_ids > 0 and matched_ids or nil
+        end
+
+        -- Error with no line data: "[E] ! name"
+        local named_error = line:match("^%[E%]%s*(.+)$")
+        if named_error and not line:find("%([^:]+:%d+%)") then
+            local normalized_name = named_error:gsub("^%s*[!x]%s*", "")
+            local matched_ids = get_matching_position_ids(normalized_name)
+            if #matched_ids > 0 then
+                current_failed_ids = matched_ids
+                for _, pos_id in ipairs(matched_ids) do
+                    ensure_failed_result(pos_id)
+                end
+            end
         end
 
         -- Error: "[E] message (file:line)"
@@ -269,13 +300,22 @@ function M.parse_stdout_results(output, tree)
 
             if current_failed_ids then
                 for _, pos_id in ipairs(current_failed_ids) do
-                    local result = results[pos_id]
-                    if result and result.status == TEST_FAILED then
-                        result.errors = result.errors or {}
-                        if #result.errors == 0 then
-                            table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
-                            attached = true
-                        end
+                    local result = ensure_failed_result(pos_id)
+                    if #result.errors == 0 then
+                        table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                        attached = true
+                    end
+                end
+            end
+
+            if not attached then
+                local normalized_name = error_msg:gsub("^%s*[!x]%s*", "")
+                local matched_ids = get_matching_position_ids(normalized_name)
+                for _, pos_id in ipairs(matched_ids) do
+                    local result = ensure_failed_result(pos_id)
+                    if #result.errors == 0 then
+                        table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                        attached = true
                     end
                 end
             end

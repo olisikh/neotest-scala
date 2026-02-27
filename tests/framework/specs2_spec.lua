@@ -413,5 +413,62 @@ HelloWereld
       assert.are.equal(21, results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].line)
       assert.is_truthy(results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].message:find("RuntimeException", 1, true))
     end)
+
+    it("maps fragment failures from [E] lines when status markers are collapsed", function()
+      local output = [[
+FragmentsSpecFragments spec+ fragment successx fragment failure
+[E]  fragment failure (FragmentsSpec.scala:14)
+[E] ! fragment crash
+[E]  java.lang.RuntimeException: fragment crash (FragmentsSpec.scala:15)com.example.FragmentsSpec.fragmentCrash(FragmentsSpec.scala:15)
+[E] com.example.FragmentsSpec.is$$anonfun$3$$anonfun$1(FragmentsSpec.scala:11)
+
+3 tests, 1 passed, 1 failed, 1 errors
+]]
+
+      local nodes = {
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.success",
+              type = "test",
+              name = "\"fragment success\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.failure",
+              type = "test",
+              name = "\"fragment failure\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.crash",
+              type = "test",
+              name = "\"fragment crash\"",
+            }
+          end,
+        },
+      }
+
+      local tree = {
+        iter_nodes = function()
+          return ipairs(nodes)
+        end,
+      }
+
+      local results = specs2.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FragmentsSpec.fragment.success"].status)
+      assert.are.equal(TEST_FAILED, results["com.example.FragmentsSpec.fragment.failure"].status)
+      assert.are.equal(13, results["com.example.FragmentsSpec.fragment.failure"].errors[1].line)
+      assert.are.equal(TEST_FAILED, results["com.example.FragmentsSpec.fragment.crash"].status)
+      assert.are.equal(14, results["com.example.FragmentsSpec.fragment.crash"].errors[1].line)
+      assert.is_truthy(results["com.example.FragmentsSpec.fragment.crash"].errors[1].message:find("RuntimeException", 1, true))
+    end)
   end)
 end)
