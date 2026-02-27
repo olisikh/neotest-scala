@@ -18,6 +18,11 @@ local FRAMEWORK_MARKERS = {
         "org%.scalameta%.munit",
         "munit%.FunSuite",
         "extends%s+FunSuite",
+        "extends%s+CatsEffectSuite",
+        "extends%s+ScalaCheckSuite",
+        "extends%s+DisciplineSuite",
+        "extends%s+ZSuite",
+        "extends%s+ZIOSuite",
     },
     specs2 = {
         "org%.specs2",

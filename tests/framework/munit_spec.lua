@@ -7,6 +7,13 @@ package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {
     end,
   },
 }
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 local fw = require("neotest-scala.framework")
 local munit = require("neotest-scala.framework.munit")
@@ -51,6 +58,7 @@ describe("munit", function()
 
   before_each(function()
     captured_test_path = nil
+    parse_positions_calls = {}
     H.mock_fn("neotest-scala.utils", "get_package_name", function(path)
       if path and path:match("%.scala$") then
         return "com.example."
@@ -72,6 +80,92 @@ describe("munit", function()
 
   after_each(function()
     H.restore_mocks()
+  end)
+
+  describe("discover_positions", function()
+    it("discovers tests for munit FunSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuite.scala",
+        content = [[
+          class FunSuiteSpec extends FunSuite {
+            test("works") { assert(1 == 1) }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+    end)
+
+    it("discovers tests for CatsEffectSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/CatsEffectSuite.scala",
+        content = [[
+          class CatsEffectSpec extends CatsEffectSuite {
+            test("works") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("discovers property tests for ScalaCheckSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ScalaCheckSuite.scala",
+        content = [[
+          class ScalaCheckSpec extends ScalaCheckSuite {
+            property("commutative") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"property"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for DisciplineSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/DisciplineSuite.scala",
+        content = [[
+          class DisciplineSpec extends DisciplineSuite {
+            test("works") { assert(true) }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+    end)
+
+    it("discovers testZ tests for ZIOSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ZioSuite.scala",
+        content = [[
+          class ZioSpec extends ZIOSuite {
+            testZ("zio test") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"testZ"', 1, true) ~= nil)
+    end)
+
+    it("returns nil for unsupported style", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/Nope.scala",
+        content = [[
+          class NoopSpec extends AnyFlatSpec {
+            "x" should "y" in {}
+          }
+        ]],
+      })
+
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
   end)
 
   describe("build_test_path", function()

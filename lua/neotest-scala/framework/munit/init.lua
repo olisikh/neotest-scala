@@ -20,9 +20,27 @@ local M = { name = "munit" }
 ---@param content string
 ---@return boolean
 local function is_funsuite_style(content)
-    if content:match("extends%s+FunSuite") or content:match("extends%s+munit%.FunSuite") then
-        return true
+    local supported_suite_patterns = {
+        "FunSuite",
+        "munit%.FunSuite",
+        "CatsEffectSuite",
+        "munit%.CatsEffectSuite",
+        "ScalaCheckSuite",
+        "munit%.ScalaCheckSuite",
+        "DisciplineSuite",
+        "munit%.DisciplineSuite",
+        "ZSuite",
+        "munit%.ZSuite",
+        "ZIOSuite",
+        "munit%.ZIOSuite",
+    }
+
+    for _, suite_pattern in ipairs(supported_suite_patterns) do
+        if content:match("extends%s+.-" .. suite_pattern .. "%f[%W]") then
+            return true
+        end
     end
+
     return false
 end
 
@@ -46,7 +64,7 @@ function M.discover_positions(opts)
 
       ((call_expression
         function: (call_expression
-        function: (identifier) @func_name (#eq? @func_name "test")
+        function: (identifier) @func_name (#any-of? @func_name "test" "property" "testZ")
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
