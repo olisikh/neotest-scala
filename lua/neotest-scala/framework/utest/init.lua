@@ -351,9 +351,15 @@ function M.parse_stdout_results(output, tree)
     -- Strip ANSI codes first
     output = utils.string_remove_ansi(output)
 
+    local lines = {}
+    for line in output:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
     -- Build position lookup for matching
     local positions = {}
     local positions_by_namespace = {}
+    local positions_by_file = {}
     local function add_namespace_position(namespace_key, position)
         if not namespace_key then
             return
@@ -366,6 +372,12 @@ function M.parse_stdout_results(output, tree)
         local data = node:data()
         if data.type == "test" then
             positions[data.id] = data
+            local file_name = utils.get_file_name(data.path)
+            positions_by_file[file_name] = positions_by_file[file_name] or {}
+            table.insert(positions_by_file[file_name], {
+                id = data.id,
+                range = data.range,
+            })
 
             local namespace_node = utils.find_node(node, "namespace", false)
             if namespace_node then
@@ -398,6 +410,43 @@ function M.parse_stdout_results(output, tree)
 
             return (left.id or "") < (right.id or "")
         end)
+    end
+
+    local function find_position_for_line(file_name, jvm_line_num)
+        local positions_for_file = positions_by_file[file_name]
+        if not positions_for_file then
+            return nil
+        end
+
+        local line_0idx = jvm_line_num - 1
+        local best_match = nil
+        local best_span = math.huge
+
+        for _, pos in ipairs(positions_for_file) do
+            if pos.range and pos.range[1] <= line_0idx and line_0idx <= pos.range[3] then
+                local span = pos.range[3] - pos.range[1]
+                if span < best_span then
+                    best_match = pos
+                    best_span = span
+                end
+            end
+        end
+
+        return best_match
+    end
+
+    ---@param line_idx integer
+    ---@return string|nil
+    local function find_nearby_throwable_message(line_idx)
+        for idx = line_idx - 1, math.max(1, line_idx - 4), -1 do
+            local nearby_line = lines[idx]
+            local throwable_type, throwable_message = nearby_line:match("^%s*([%w%._$]+):%s*(.*)$")
+            if throwable_type and (throwable_type:match("Exception$") or throwable_type:match("Error$")) then
+                return throwable_type .. (throwable_message ~= "" and ": " .. throwable_message or "")
+            end
+        end
+
+        return nil
     end
 
     local current_failure_ids = {}
@@ -454,7 +503,7 @@ function M.parse_stdout_results(output, tree)
         return {}
     end
 
-    for line in output:gmatch("[^\r\n]+") do
+    for line_idx, line in ipairs(lines) do
         -- Result: "+ path time" or "X path time"
         -- Path is like "com.example.UtestTestSuite.test name"
         local status_char, test_path = line:match("^([%+X])%s+(.+)%s+%d+ms")
@@ -475,31 +524,31 @@ function M.parse_stdout_results(output, tree)
 
         -- Stack frame: "Class.method(File.scala:line)"
         local file, line_num = line:match("%(([^:]+%.scala):(%d+)%)")
-        if file and line_num and #current_failure_ids > 0 then
-            local zero_indexed_line = tonumber(line_num) - 1
-            for _, pos_id in ipairs(current_failure_ids) do
-                local _, err = ensure_failure_error(pos_id, "Test failed")
-                if err then
+        if file and line_num then
+            local numeric_line = tonumber(line_num)
+            local mapped_position = find_position_for_line(utils.get_file_name(file), numeric_line)
+            local target_failure_ids = {}
+
+            if mapped_position then
+                target_failure_ids = { mapped_position.id }
+            else
+                target_failure_ids = current_failure_ids
+            end
+
+            local throwable_message = find_nearby_throwable_message(line_idx)
+            local zero_indexed_line = numeric_line - 1
+            for _, pos_id in ipairs(target_failure_ids) do
+                local result, err = ensure_failure_error(pos_id, throwable_message or "Test failed")
+                if result and err then
+                    result.status = TEST_FAILED
                     err.line = zero_indexed_line
+                    if throwable_message then
+                        err.message = throwable_message
+                    end
                 end
             end
         end
 
-        -- Exception/Error: "java.lang.Exception: message" or "java.lang.AssertionError: message"
-        local throwable_type, throwable_message = line:match("^%s*([%w%._$]+):%s*(.*)$")
-        if
-            throwable_type
-            and #current_failure_ids > 0
-            and (throwable_type:match("Exception$") or throwable_type:match("Error$"))
-        then
-            local message = throwable_type .. (throwable_message ~= "" and ": " .. throwable_message or "")
-            for _, pos_id in ipairs(current_failure_ids) do
-                local _, err = ensure_failure_error(pos_id, message)
-                if err then
-                    err.message = message
-                end
-            end
-        end
     end
 
     local global_failure = nil

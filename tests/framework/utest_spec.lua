@@ -731,5 +731,53 @@ describe("utest", function()
       assert.is_not_nil(results[crashing:data().id].errors[1].message:match("RuntimeException: Hello world"))
       assert.are.equal(16, results[crashing:data().id].errors[1].line)
     end)
+
+    it("maps interleaved failure details by stack line position", function()
+      H.mock_fn("neotest-scala.utils", "get_package_name", function()
+        return "com.example."
+      end)
+
+      local namespace = mock_tree({
+        id = "UTestSuite",
+        type = "namespace",
+        name = "UTestSuite",
+        path = "/path/to/UTestSuite.scala",
+      })
+
+      local failing = mock_tree({
+        id = "com.example.UTestSuite.failing test",
+        type = "test",
+        name = '"failing test"',
+        path = "/path/to/UTestSuite.scala",
+        range = { 12, 0, 12, 0 },
+      }, namespace)
+      local crashing = mock_tree({
+        id = "com.example.UTestSuite.crashing test",
+        type = "test",
+        name = '"crashing test"',
+        path = "/path/to/UTestSuite.scala",
+        range = { 16, 0, 16, 0 },
+      }, namespace)
+      namespace._children = { failing, crashing }
+
+      local output = table.concat({
+        "X com.example.UTestSuite.failing test 0ms",
+        "X com.example.UTestSuite.crashing test 0ms",
+        "  java.lang.RuntimeException: Hello world",
+        "    com.example.UTestSuite$.$init$$$anonfun$1$$anonfun$3(UTestSuite.scala:17)",
+        "  java.lang.AssertionError: assertion failed: ==> assertion failed: 1 != 2",
+        "    com.example.UTestSuite$.$init$$$anonfun$1$$anonfun$2(UTestSuite.scala:13)",
+      }, "\n")
+
+      local results = utest.parse_stdout_results(output, namespace)
+
+      assert.are.equal("failed", results[failing:data().id].status)
+      assert.are.equal(12, results[failing:data().id].errors[1].line)
+      assert.is_not_nil(results[failing:data().id].errors[1].message:match("AssertionError"))
+
+      assert.are.equal("failed", results[crashing:data().id].status)
+      assert.are.equal(16, results[crashing:data().id].errors[1].line)
+      assert.is_not_nil(results[crashing:data().id].errors[1].message:match("RuntimeException: Hello world"))
+    end)
   end)
 end)

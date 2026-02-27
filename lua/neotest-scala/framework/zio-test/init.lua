@@ -318,7 +318,7 @@ function M.parse_stdout_results(output, tree)
             if pos and not failed_ids[pos.id] then
                 -- Look backwards for error message
                 local err_msg = "Test failed"
-                for j = i - 1, math.max(1, i - 10), -1 do
+                for j = i - 1, math.max(1, i - 4), -1 do
                     local prev = lines[j]
                     -- Assertion message: "✗ message"
                     local msg = prev:match("^%s*✗ (.+)$")
@@ -326,10 +326,10 @@ function M.parse_stdout_results(output, tree)
                         err_msg = msg
                         break
                     end
-                    -- Exception message: "...Exception: message"
-                    local exc = prev:match("Exception[^:]*:%s*(.+)$")
-                    if exc then
-                        err_msg = exc
+
+                    local throwable_type, throwable_message = prev:match("^%s*([%w%._$]+):%s*(.*)$")
+                    if throwable_type and (throwable_type:match("Exception$") or throwable_type:match("Error$")) then
+                        err_msg = throwable_type .. (throwable_message ~= "" and ": " .. throwable_message or "")
                         break
                     end
                 end
