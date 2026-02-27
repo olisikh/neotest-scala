@@ -1029,6 +1029,69 @@ Execution took 18ms
       assert.is_not_nil(results["com.example.FlatSpec.crash"].errors[1].message:match("RuntimeException: boom"))
     end)
 
+    it("parses AnyFeatureSpec bloop output with Scenario prefixes", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.successful login",
+          name = '"successful login"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.failing credential check",
+          name = '"failing credential check"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.unexpected exception",
+          name = '"unexpected exception"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+      })
+
+      local output = [[
+FeatureSpec:
+Feature: Authentication
+  Scenario: successful login
+  Scenario: failing credential check *** FAILED ***
+  401 did not equal 200 (FeatureSpec.scala:14)
+  Scenario: unexpected exception *** FAILED ***
+  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
+  at com.example.FeatureSpec.fun$proxy1$1$$anonfun$3(FeatureSpec.scala:17)
+  java.lang.RuntimeException: featurespec crash
+  at com.example.FeatureSpec.testFun$proxy3$1(FeatureSpec.scala:18)
+Execution took 12ms
+3 tests, 1 passed, 2 failed
+
+================================================================================
+Total duration: 12ms
+1 failed
+
+Failed:
+- com.example.FeatureSpec:
+  * Feature: Authentication Scenario: failing credential check - 401 did not equal 200
+  * Feature: Authentication Scenario: unexpected exception - java.lang.RuntimeException: featurespec crash
+================================================================================
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FeatureSpec.Authentication.successful login"].status)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FeatureSpec.Authentication.failing credential check"].status)
+      assert.are.equal(13, results["com.example.FeatureSpec.Authentication.failing credential check"].errors[1].line)
+      assert.is_not_nil(results["com.example.FeatureSpec.Authentication.failing credential check"].errors[1].message:match("401 did not equal 200"))
+
+      assert.are.equal(TEST_FAILED, results["com.example.FeatureSpec.Authentication.unexpected exception"].status)
+      assert.are.equal(16, results["com.example.FeatureSpec.Authentication.unexpected exception"].errors[1].line)
+      assert.is_not_nil(
+        results["com.example.FeatureSpec.Authentication.unexpected exception"].errors[1].message:match("RuntimeException: featurespec crash")
+      )
+    end)
+
     it("strips first-line location suffix from stdout diagnostic messages", function()
       local tree = mk_tree({
         {

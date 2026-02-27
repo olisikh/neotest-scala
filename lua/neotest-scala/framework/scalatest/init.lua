@@ -607,7 +607,7 @@ end
 ---@param value string
 ---@return string
 local function normalize_for_match(value)
-    return value:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+    return value:gsub('"', ""):gsub("-", "."):gsub(":", ""):gsub("%s+", "")
 end
 
 ---@param tree neotest.Tree
@@ -648,6 +648,12 @@ local function find_matching_positions(positions_by_name, test_name)
         table.insert(variants, (test_name:gsub("^[Mm]ust%s+", "")))
     elseif lowered:match("^can%s+") then
         table.insert(variants, (test_name:gsub("^[Cc]an%s+", "")))
+    end
+
+    local feature_scenario = test_name:gsub("[Ff]eature:%s*", ""):gsub("[Ss]cenario:%s*", "")
+    feature_scenario = vim.trim(feature_scenario)
+    if feature_scenario ~= "" and feature_scenario ~= test_name then
+        table.insert(variants, feature_scenario)
     end
 
     for _, variant in ipairs(variants) do
@@ -754,7 +760,16 @@ function M.parse_stdout_results(output, tree)
 
     for line in output:gmatch("[^\r\n]+") do
         local fail_indent, fail_name = line:match("^(%s*)%-%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
+        if not fail_name then
+            fail_indent, fail_name = line:match("^(%s*)Scenario:%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
+        end
+
         local pass_name = line:match("^%s*%-%s*(.-)%s*$")
+        if not pass_name and not line:match("%*%*%* FAILED %*%*%*") then
+            pass_name = line:match("^%s*Scenario:%s*(.-)%s*$")
+        end
+
+        local summary_fail_name, summary_fail_message = line:match("^%s*%*%s*(.-)%s+%-%s+(.+)$")
 
         if fail_name then
             finalize_current_failure()
@@ -775,6 +790,19 @@ function M.parse_stdout_results(output, tree)
             current_failed_positions = failed_ids
             current_failure_indent = #fail_indent
             current_failure_details = {}
+        elseif summary_fail_name and summary_fail_message then
+            local failed_positions = find_matching_positions(positions_by_name, summary_fail_name)
+            for _, pos in ipairs(failed_positions) do
+                local err = results[pos.id] and results[pos.id].errors and results[pos.id].errors[1]
+                if not err then
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = summary_fail_message, line = nil } },
+                    }
+                elseif err.message == "" or err.message == fallback_messages[pos.id] then
+                    err.message = summary_fail_message
+                end
+            end
         else
             if pass_name and not line:match("%*%*%* FAILED %*%*%*") then
                 local passed_positions = find_matching_positions(positions_by_name, pass_name)
@@ -796,14 +824,19 @@ function M.parse_stdout_results(output, tree)
                 current_failure_details = nil
             elseif current_failed_positions and #current_failed_positions > 0 and current_failure_indent then
                 local line_indent = #(line:match("^(%s*)") or "")
+                local trimmed_line = utils.string_trim(line)
+                local starts_new_block = trimmed_line:match("^%-")
+                    or trimmed_line:match("^Scenario:")
+                    or trimmed_line:match("^Feature:")
+                    or trimmed_line:match("^%*")
 
-                if line_indent <= current_failure_indent then
+                if line_indent < current_failure_indent or (line_indent == current_failure_indent and starts_new_block) then
                     finalize_current_failure()
                     current_failed_positions = nil
                     current_failure_indent = nil
                     current_failure_details = nil
                 else
-                    local detail = utils.string_trim(line)
+                    local detail = trimmed_line
                     if detail ~= "" and not detail:match("^%-%s+") then
                         table.insert(current_failure_details, detail)
 
