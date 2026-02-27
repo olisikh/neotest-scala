@@ -31,15 +31,15 @@ Support levels below describe **test execution + result reporting** in neotest.
 |---------|-----------|------------|---------|-------|
 | ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec`, `RefSpec` (+ `Async*` / `Fixture*` variants where applicable) | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec`, `RefSpec` (+ `Async*` / `Fixture*` variants where applicable) | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
-| munit | `FunSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| munit | `FunSuite` | `bloop` | **Limited** | Uses stdout parsing; works for common output, but parser-based matching is inherently less stable than XML. |
+| munit | `FunSuite`, `CatsEffectSuite`, `ScalaCheckSuite`, `DisciplineSuite`, `ZSuite`, `ZIOSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
+| munit | `FunSuite`, `CatsEffectSuite`, `ScalaCheckSuite`, `DisciplineSuite`, `ZSuite`, `ZIOSuite` | `bloop` | **Limited** | Uses stdout parsing; single-test runs are executed at suite scope for reliability, and `No test suites were run` is reported as failure. |
 | specs2 | `Specification` (`>>`, `in`, basic `!` fragments) | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |
 | specs2 | `Specification` (`>>`, `in`, basic `!` fragments) | `bloop` | **Limited** | Uses stdout parsing; supports fail/crash markers, but matching remains best-effort. |
 | specs2 | text spec (`s2""" ... """`) | `sbt` | **Limited** | Execution works, but fine-grained single-test runs are limited. |
 | specs2 | text spec (`s2""" ... """`) | `bloop` | **Limited** | Same single-test limits plus stdout parsing constraints. |
 | zio-test | `ZIOSpecDefault` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | zio-test | `ZIOSpecDefault` | `bloop` | **Not supported** | Automatically forced to `sbt` (`bloop` execution is disabled for this framework). |
-| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; debug single-test remains constrained by uTest selector limitations. |
+| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; interpolated names may run at suite scope with numeric JUnit result mapping; debug single-test remains constrained by uTest selector limitations. |
 | uTest | `TestSuite` | `bloop` | **Not supported** | Known issue: uTest suites can't be discovered by bloop; tests will be run by sbt. |
 
 > Recommendation: prefer `sbt` for stability. Use `bloop` when speed matters and current framework limitations are acceptable.
