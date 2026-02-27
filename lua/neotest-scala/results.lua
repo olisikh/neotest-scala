@@ -4,6 +4,32 @@ local junit = require("neotest-scala.junit")
 local build = require("neotest-scala.build")
 
 local M = {}
+
+---@param strategy table|nil
+---@return boolean
+local function is_dap_run(strategy)
+    return type(strategy) == "table" and strategy.type == "scala" and strategy.request == "launch"
+end
+
+---@param node neotest.Tree
+---@return table<string, neotest.Result>
+local function build_no_suite_failure_results(node)
+    local message = "No test suites were run."
+    local failures = {}
+
+    for _, child in node:iter_nodes() do
+        local data = child:data()
+        if data.type == "test" then
+            failures[data.id] = {
+                status = TEST_FAILED,
+                errors = { { message = message } },
+            }
+        end
+    end
+
+    return failures
+end
+
 local function collect_namespaces(framework, node, report_prefix)
     local ns_data = node:data()
     local namespaces = {}
@@ -52,6 +78,17 @@ function M.collect(spec, result, node)
     if not framework then
         vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
         return {}
+    end
+
+    if is_dap_run(spec.strategy) then
+        if log:match("No test suites were run%.?") then
+            return build_no_suite_failure_results(node)
+        end
+
+        local parsed = framework.parse_stdout_results(log, node)
+        if type(parsed) == "table" and next(parsed) ~= nil then
+            return parsed
+        end
     end
 
     -- Branch on build tool
