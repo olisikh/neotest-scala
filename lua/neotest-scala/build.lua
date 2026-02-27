@@ -388,7 +388,7 @@ function M.command_with_path(opts)
     local root_path = opts.root_path
     local project = opts.project
     local test_path = opts.test_path
-    local extra_args = with_sbt_batch(opts.extra_args)
+    local extra_args = opts.extra_args
     local tool_override = opts.tool_override
     local build_tool = M.resolve_tool(root_path, tool_override)
     local bloop_project = project .. "-test"
@@ -400,10 +400,11 @@ function M.command_with_path(opts)
 
         return flatten({ "bloop", "test", bloop_project, "--only", test_path, extra_args })
     else
+        local sbt_extra_args = with_sbt_batch(extra_args)
         if not test_path then
-            return flatten({ "sbt", extra_args, project .. "/test" })
+            return flatten({ "sbt", sbt_extra_args, project .. "/test" })
         end
-        return flatten({ "sbt", extra_args, project .. "/testOnly -- " .. '"' .. test_path .. '"' })
+        return flatten({ "sbt", sbt_extra_args, project .. "/testOnly -- " .. '"' .. test_path .. '"' })
     end
 end
 

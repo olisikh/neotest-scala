@@ -268,5 +268,17 @@ describe("build", function()
 
       assert.are.same({ "sbt", "--batch", "-v", 'sample/testOnly -- "com.example.SampleSpec"' }, cmd)
     end)
+
+    it("does not inject --batch for bloop command_with_path", function()
+      local cmd = build.command_with_path({
+        root_path = "/tmp/project",
+        project = "sample",
+        test_path = "com.example.CatsEffectMUnitSuite",
+        extra_args = nil,
+        tool_override = "bloop",
+      })
+
+      assert.are.same({ "bloop", "test", "sample-test", "--only", "com.example.CatsEffectMUnitSuite" }, cmd)
+    end)
   end)
 end)
