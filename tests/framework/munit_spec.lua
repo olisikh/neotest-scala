@@ -552,17 +552,23 @@ values are not the same
       local output = [[
 + com.example.ScalaCheckMUnitSuite.reverse reverse is identity 0.02s
 ==> X com.example.ScalaCheckMUnitSuite.intentionally failing property 0.01s
+munit.FailException: /tmp/ScalaCheckMUnitSuite.scala:17
+16:    }
+17:  }
+18:
 Failing seed: Xq5QcHcxgqqNkBJvwuEN99CKcoc9_q9Lxlwq992-h0D=
 You can reproduce this failure by adding the following override to your suite:
 at com.example.ScalaCheckMUnitSuite.$anonfun$2(ScalaCheckMUnitSuite.scala:14)
 ]]
 
       local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].message
 
       assert.are.equal(fw.TEST_PASSED, results["com.example.ScalaCheckMUnitSuite.reverse reverse is identity"].status)
       assert.are.equal(fw.TEST_FAILED, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].status)
-      assert.are.equal(13, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].line)
-      assert.is_not_nil(results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].message:match("Failing seed:"))
+      assert.are.equal(16, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].line)
+      assert.is_not_nil(diagnostic:match("Failing seed:"))
+      assert.is_nil(diagnostic:match("^18:%s*$"))
     end)
 
     it("strips source snippet from bloop diagnostics", function()

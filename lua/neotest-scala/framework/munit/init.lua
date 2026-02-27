@@ -125,7 +125,7 @@ end
 ---@param line string
 ---@return boolean
 local function is_source_snippet_line(line)
-    return line:match("^%s*%d+:%s") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
+    return line:match("^%s*%d+:%s*") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
 end
 
 ---@param snippet_line string
