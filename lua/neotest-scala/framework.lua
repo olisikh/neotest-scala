@@ -57,6 +57,14 @@ local FRAMEWORK_MARKERS = {
     },
 }
 
+local DAP_TEST_SELECTOR_CAPABILITIES = {
+    scalatest = true,
+    munit = true,
+    specs2 = true,
+    ["zio-test"] = true,
+    utest = false,
+}
+
 ---@class neotest-scala.PositionExtra
 ---@field textspec_path? string
 ---@field framework? string
@@ -71,6 +79,13 @@ local FRAMEWORK_MARKERS = {
 ---@field build_namespace fun(ns_node: neotest.Tree, report_prefix: string, node: neotest.Tree): table
 ---@field discover_positions fun(opts: { path: string, content: string }): neotest.Tree|nil
 ---@field parse_stdout_results fun(output: string, tree: neotest.Tree): table<string, neotest.Result>
+---@field build_dap_test_selector? fun(opts: { tree: neotest.Tree, position: neotest.Position }): string|nil
+
+---@param framework string|nil
+---@return boolean
+function M.supports_dap_test_selector(framework)
+    return framework ~= nil and DAP_TEST_SELECTOR_CAPABILITIES[framework] == true
+end
 
 ---@param framework string
 ---@return neotest-scala.Framework|nil
