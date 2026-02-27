@@ -104,10 +104,10 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "NeotestScala",
+  name = "Run Test",
   metals = {
     runType = "testFile",
-    path = "/path/to/TestFile.scala",
+    path = "file:///path/to/TestFile.scala",
   },
 }
 ```
@@ -131,10 +131,10 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "NeotestScala",
+  name = "Run Test",
   metals = {
     runType = "testFile",
-    path = "/path/to/TestFile.scala",
+    path = "file:///path/to/TestFile.scala",
   },
 }
 ```

@@ -15,6 +15,20 @@ local function notify_test_fallback()
     vim.notify(TEST_FALLBACK_MESSAGE, vim.log.levels.INFO)
 end
 
+---@param file_path string
+---@return table
+local function build_test_file_config(file_path)
+    return {
+        type = "scala",
+        request = "launch",
+        name = "Run Test",
+        metals = {
+            runType = "testFile",
+            path = vim.uri_from_fname(file_path),
+        },
+    }
+end
+
 ---@class neotest-scala.StrategyGetConfigOpts
 ---@field strategy string|nil
 ---@field tree neotest.Tree
@@ -36,15 +50,7 @@ function M.get_config(opts)
     end
 
     if position.type == "file" then
-        return {
-            type = "scala",
-            request = "launch",
-            name = "NeotestScala",
-            metals = {
-                runType = "testFile",
-                path = position.path,
-            },
-        }
+        return build_test_file_config(position.path)
     end
 
     local metals_args = nil
@@ -59,15 +65,7 @@ function M.get_config(opts)
             did_notify_test_fallback = true
             notify_test_fallback()
         end
-        return {
-            type = "scala",
-            request = "launch",
-            name = "NeotestScala",
-            metals = {
-                runType = "testFile",
-                path = position.path,
-            },
-        }
+        return build_test_file_config(position.path)
     end
 
     if metals_args ~= nil then

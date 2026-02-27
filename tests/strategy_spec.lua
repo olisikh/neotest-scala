@@ -69,9 +69,12 @@ describe("strategy", function()
 
       assert.are.equal("scala", config.type)
       assert.are.equal("launch", config.request)
-      assert.are.equal("NeotestScala", config.name)
+      assert.are.equal("Run Test", config.name)
       assert.are.equal("testFile", config.metals.runType)
-      assert.are.equal("/tmp/project/src/test/scala/com/example/MySpec.scala", config.metals.path)
+      assert.are.equal(
+        vim.uri_from_fname("/tmp/project/src/test/scala/com/example/MySpec.scala"),
+        config.metals.path
+      )
     end)
 
     it("builds namespace config for dap namespace runs", function()
@@ -127,7 +130,10 @@ describe("strategy", function()
       })
 
       assert.are.equal("testFile", first_config.metals.runType)
-      assert.are.equal("/tmp/project/src/test/scala/com/example/MySpec.scala", first_config.metals.path)
+      assert.are.equal(
+        vim.uri_from_fname("/tmp/project/src/test/scala/com/example/MySpec.scala"),
+        first_config.metals.path
+      )
       assert.is_nil(first_config.metals.requestData)
       assert.are.equal("testFile", second_config.metals.runType)
       assert.are.equal(1, notify_calls)

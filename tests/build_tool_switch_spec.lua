@@ -386,7 +386,7 @@ describe("build tool switch behavior", function()
 
       assert.are.equal("scala", spec.strategy.type)
       assert.are.equal("testFile", spec.strategy.metals.runType)
-      assert.are.equal("/tmp/project/src/test/scala/ExampleSpec.scala", spec.strategy.metals.path)
+      assert.are.equal(vim.uri_from_fname("/tmp/project/src/test/scala/ExampleSpec.scala"), spec.strategy.metals.path)
       assert.is_nil(spec.strategy.metals.requestData)
     end)
 
