@@ -2,15 +2,11 @@
 
 ![Hero image](./img/hero.png)
 
-## !!! DISCLAIMER
-
-This is a fork of original [neotest-scala](https://github.com/stevanmilic/neotest-scala), huge thanks to [Stevan Milic](https://github.com/stevanmilic) for making and maintaining this plugin.
-
-Please use it at your own risk, any improvement proposals and contributions are welcome.
 
 ## About
 
-[Neotest](https://github.com/rcarriga/neotest) adapter for Scala.
+[Neotest](https://github.com/rcarriga/neotest) Scala adapter, supports running tests implemented using various popular Scala test libraries. \
+This project is a complete overhaul of [neotest-scala](https://github.com/stevanmilic/neotest-scala) adapter for [neotest](https://github.com/nvim-neotest/neotest) started by [Stevan Milic](https://github.com/stevanmilic).
 
 Supports the following Scala testing libraries:
 
@@ -20,7 +16,7 @@ Supports the following Scala testing libraries:
 - [specs2](https://etorreborre.github.io/specs2)
 - [zio-test](https://zio.dev/reference/test/https://zio.dev/reference/test)
 
-Runs tests with [sbt](https://www.scala-sbt.org) or [Bloop](https://scalacenter.github.io/bloop/) (faster!). \
+Runs tests with [sbt](https://www.scala-sbt.org) or [Bloop](https://scalacenter.github.io/bloop/) (faster, but support is experimental!). \
 Requires [nvim-metals](https://github.com/scalameta/nvim-metals) to get project metadata information
 
 ## Support Matrix (Current State)
@@ -135,7 +131,7 @@ require("neotest").setup({
 
 The plugin provides diagnostic information for failing tests directly in your editor:
 - Error messages from test failures
-- Stack trace line numbers  
+- Stack trace line numbers
 - Inline error indicators via Neotest
 
 Diagnostics are automatically displayed when tests fail, making it easy to identify and fix issues without leaving Neovim.
