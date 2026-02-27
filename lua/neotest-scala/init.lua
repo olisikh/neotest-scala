@@ -5,6 +5,7 @@ local metals = require("neotest-scala.metals")
 local build = require("neotest-scala.build")
 local strategy = require("neotest-scala.strategy")
 local results = require("neotest-scala.results")
+local logger = require("neotest-scala.logger")
 
 ---@class neotest-scala.AdapterArgsContext
 ---@field path string
@@ -16,7 +17,11 @@ local results = require("neotest-scala.results")
 ---@field cache_build_info? boolean
 ---@field build_tool? "auto"|"bloop"|"sbt"
 ---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
----@field log_run_spec? boolean
+---@field logging? neotest-scala.LoggingOpts
+
+---@class neotest-scala.LoggingOpts
+---@field enabled? boolean
+---@field level? "debug"|"info"|"warn"|"error"
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -34,25 +39,6 @@ local function get_args(_)
 end
 
 local cache_build_info = true
-local log_run_spec = false
-
----@param payload table
-local function emit_run_spec_log(payload)
-    if not log_run_spec then
-        return
-    end
-
-    local function log()
-        vim.print(payload)
-    end
-
-    if vim.in_fast_event and vim.in_fast_event() then
-        vim.schedule(log)
-        return
-    end
-
-    log()
-end
 
 ---@async
 ---@param file_path string
@@ -113,9 +99,20 @@ end
 ---@param args neotest.RunArgs
 ---@return neotest.RunSpec
 function adapter.build_spec(args)
+    local run_logger = logger.new("adapter")
     local position = args.tree:data()
     local root_path = adapter.root(position.path)
     assert(root_path, "[neotest-scala]: Can't resolve root project folder")
+    run_logger.debug({
+        event = "build_spec:start",
+        strategy = args.strategy,
+        position = {
+            id = position.id,
+            type = position.type,
+            path = position.path,
+            name = position.name,
+        },
+    }, { file = position.path })
 
     local build_target_info = metals.get_build_target_info({
         root_path = root_path,
@@ -137,12 +134,14 @@ function adapter.build_spec(args)
 
     if not build_target_info then
         vim.print("[neotest-scala]: Metals returned no build information, try again later")
+        run_logger.warn("Metals returned no build information, try again later", { file = position.path })
         return {}
     end
 
     local project_name = metals.get_project_name(build_target_info)
     if not project_name then
         vim.print("[neotest-scala]: Can't resolve project name")
+        run_logger.warn("Can't resolve project name", { file = position.path })
         return {}
     end
 
@@ -168,11 +167,13 @@ function adapter.build_spec(args)
 
     if not framework then
         vim.print("[neotest-scala]: Failed to detect testing library based on classpath")
+        run_logger.warn("Failed to detect testing library based on classpath", { file = position.path })
         return {}
     end
 
     local framework_class = fw.get_framework_class(framework)
     if not framework_class then
+        run_logger.warn("Test framework is not registered: " .. framework, { file = position.path })
         return {}
     end
 
@@ -207,7 +208,7 @@ function adapter.build_spec(args)
         build_tool = build_tool,
     })
 
-    emit_run_spec_log({
+    run_logger.info({
         source = "neotest-scala",
         event = "build_spec",
         command = command,
@@ -222,7 +223,7 @@ function adapter.build_spec(args)
             path = position.path,
             name = position.name,
         },
-    })
+    }, { file = position.path })
 
     return {
         command = command,
@@ -259,7 +260,7 @@ setmetatable(adapter, {
         opts = opts or {}
 
         cache_build_info = opts.cache_build_info ~= false
-        log_run_spec = opts.log_run_spec == true
+        logger.configure(opts)
 
         metals.setup()
 

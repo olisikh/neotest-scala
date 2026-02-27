@@ -127,6 +127,26 @@ require("neotest").setup({
 })
 ```
 
+### Logging
+
+neotest-scala writes logs to `/tmp/neotest-scala/log/<YYYY-MM-DD>.log`.
+Each line includes a logger name (for example `adapter`, `results`, `metals`) so you can see which module emitted it.
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      logging = {
+        enabled = true,   -- default: true
+        level = "info",   -- debug | info | warn | error
+      },
+    })
+  }
+})
+```
+
+`build_spec` payload logging uses `INFO` level.
+
 ## Diagnostics
 
 The plugin provides diagnostic information for failing tests directly in your editor:
