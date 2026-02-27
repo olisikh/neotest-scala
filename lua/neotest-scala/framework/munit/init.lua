@@ -96,7 +96,7 @@ local function build_test_path(tree, name)
         if not package then
             return nil
         end
-        return package .. name .. ".*"
+        return package .. name
     end
     if type == "file" then
         local test_suites = {}

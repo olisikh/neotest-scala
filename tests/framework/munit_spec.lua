@@ -241,7 +241,7 @@ describe("munit", function()
     end)
 
     describe("for namespace (type == 'namespace')", function()
-      it("builds path with package and spec name with wildcard", function()
+      it("builds path with package and spec name", function()
         local namespace_tree = mock_tree({
           type = "namespace",
           name = "MySpec",
@@ -256,7 +256,7 @@ describe("munit", function()
           extra_args = {},
         })
 
-        assert.are.equal("com.example.MySpec.*", captured_test_path)
+        assert.are.equal("com.example.MySpec", captured_test_path)
       end)
 
       it("returns nil when package cannot be determined", function()
