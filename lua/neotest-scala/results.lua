@@ -101,7 +101,13 @@ function M.collect(spec, result, node)
             })
 
             if not test_result then
-                vim.print("[neotest-scala] Framework '" .. framework.name .. "' returned no result for position '" .. position.id .. "'")
+                vim.print(
+                    "[neotest-scala] Framework '"
+                        .. framework.name
+                        .. "' returned no result for position '"
+                        .. position.id
+                        .. "'"
+                )
                 test_result = { status = TEST_FAILED }
             end
 

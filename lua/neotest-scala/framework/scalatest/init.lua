@@ -58,7 +58,7 @@ function M.discover_positions(opts)
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
-        elseif style == "freespec" then
+    elseif style == "freespec" then
         -- FreeSpec: "name" - { } and "name" in { }
         query = [[
       (object_definition
@@ -75,11 +75,11 @@ function M.discover_positions(opts)
         right: (_)
       ) @test.definition
     ]]
-        else
-                -- FlatSpec:
-                -- "A Stack" should "pop values" in { }
-                -- it should "throw..." in { }
-                query = [[
+    else
+        -- FlatSpec:
+        -- "A Stack" should "pop values" in { }
+        -- it should "throw..." in { }
+        query = [[
             (object_definition
                 name: (identifier) @namespace.name
             ) @namespace.definition

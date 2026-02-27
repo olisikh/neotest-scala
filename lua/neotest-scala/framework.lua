@@ -22,7 +22,7 @@ local FRAMEWORK_MARKERS = {
     specs2 = {
         "org%.specs2",
         "extends%s+Specification",
-        "s2\"\"\"",
+        's2"""',
     },
     utest = {
         "import%s+utest",
@@ -155,7 +155,11 @@ function M.select_framework_tree(opts)
                     local is_better = best_score == nil
                         or score > best_score
                         or (score == best_score and test_count > best_test_count)
-                        or (score == best_score and test_count == best_test_count and namespace_count > best_namespace_count)
+                        or (
+                            score == best_score
+                            and test_count == best_test_count
+                            and namespace_count > best_namespace_count
+                        )
 
                     if is_better then
                         best_score = score

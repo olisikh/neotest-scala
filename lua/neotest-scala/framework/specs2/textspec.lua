@@ -103,8 +103,7 @@ function M.discover_positions(opts)
     local package_name = utils.get_package_name(path) or ""
 
     -- Find the class/object name
-    local class_name = content:match("class%s+([%w_]+)%s*extends")
-        or content:match("object%s+([%w_]+)%s*extends")
+    local class_name = content:match("class%s+([%w_]+)%s*extends") or content:match("object%s+([%w_]+)%s*extends")
     if not class_name then
         class_name = "Unknown"
     end

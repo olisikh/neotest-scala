@@ -9,6 +9,10 @@
 ---     -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
 
 local root = vim.fn.getcwd()
+local state_home = root .. "/.nvim-test-state"
+
+vim.env.XDG_STATE_HOME = state_home
+vim.fn.mkdir(state_home, "p")
 
 -- Add the plugin itself to runtimepath
 vim.opt.runtimepath:prepend(root)

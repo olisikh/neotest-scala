@@ -30,7 +30,7 @@ Support levels below describe **test execution + result reporting** in neotest.
 | Library | Test type | Build tool | Support | Notes |
 |---------|-----------|------------|---------|-------|
 | ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec` | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec` | `bloop` | **Limited** | Can run, but report timing can lag (results may appear from previous run). |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec` | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
 | munit | `FunSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | munit | `FunSuite` | `bloop` | **Limited** | Uses stdout parsing; works for common output, but parser-based matching is inherently less stable than XML. |
 | specs2 | `mutable.Specification` | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |
@@ -38,9 +38,9 @@ Support levels below describe **test execution + result reporting** in neotest.
 | specs2 | text spec (`s2""" ... """`) | `sbt` | **Limited** | Execution works, but fine-grained single-test runs are limited. |
 | specs2 | text spec (`s2""" ... """`) | `bloop` | **Limited** | Same single-test limits plus stdout parsing constraints. |
 | zio-test | `ZIOSpecDefault` | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| zio-test | `ZIOSpecDefault` | `bloop` | **Limited** | Parallel suite output can interleave and break reliable parsing; `@@ TestAspect.sequential` is the practical workaround. |
+| zio-test | `ZIOSpecDefault` | `bloop` | **Not supported** | Automatically forced to `sbt` (`bloop` execution is disabled for this framework). |
 | uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; debug single-test remains constrained by uTest selector limitations. |
-| uTest | `TestSuite` | `bloop` | **Not supported** | Known issue: bloop may not discover/run uTest suites (`No test suites were run`). |
+| uTest | `TestSuite` | `bloop` | **Not supported** | Known issue: uTest suites can't be discovered by bloop; tests will be run by sbt. |
 
 > Recommendation: prefer `sbt` for stability. Use `bloop` when speed matters and current framework limitations are acceptable.
 

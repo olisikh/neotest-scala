@@ -20,7 +20,6 @@ function M.has_nested_tests(test)
     return #test:children() > 0
 end
 
-
 ---Extract the highest line number for the given file from stacktrace
 ---ScalaTest stacktraces have multiple file references (class def, test method, etc.)
 ---We want the highest line number which corresponds to the actual test assertion

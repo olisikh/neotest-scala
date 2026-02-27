@@ -340,6 +340,26 @@ describe("build tool switch behavior", function()
   end)
 
   describe("metals buildTargetChanged handler", function()
+    local original_get_client_by_id
+    local original_schedule
+    local original_handler
+
+    before_each(function()
+      original_get_client_by_id = vim.lsp.get_client_by_id
+      original_schedule = vim.schedule
+      original_handler = vim.lsp.handlers["metals/buildTargetChanged"]
+    end)
+
+    after_each(function()
+      vim.lsp.get_client_by_id = original_get_client_by_id
+      vim.schedule = original_schedule
+      vim.lsp.handlers["metals/buildTargetChanged"] = original_handler
+      local ok, metals = pcall(require, "neotest-scala.metals")
+      if ok and metals.cleanup then
+        metals.cleanup()
+      end
+    end)
+
     it("chains previous handler and invalidates cache for the metals root", function()
       local metals = require("neotest-scala.metals")
       metals.cleanup()
@@ -357,8 +377,6 @@ describe("build tool switch behavior", function()
         invalidated_root = root_path
       end)
 
-      local original_get_client_by_id = vim.lsp.get_client_by_id
-      local original_schedule = vim.schedule
       vim.lsp.get_client_by_id = function(_)
         return { config = { root_dir = "/tmp/project" } }
       end
@@ -381,9 +399,6 @@ describe("build tool switch behavior", function()
 
       metals.cleanup()
       assert.are.equal(previous, vim.lsp.handlers["metals/buildTargetChanged"])
-
-      vim.lsp.get_client_by_id = original_get_client_by_id
-      vim.schedule = original_schedule
     end)
   end)
 end)
