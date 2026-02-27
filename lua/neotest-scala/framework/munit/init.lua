@@ -65,7 +65,11 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#any-of? @func_name "test" "property" "testZ")
-        arguments: (arguments (string) @test.name))
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     return lib.treesitter.parse_positions(path, query, {

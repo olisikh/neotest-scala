@@ -1,3 +1,12 @@
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {}
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
+
 local utest = require("neotest-scala.framework.utest")
 local H = require("tests.helpers")
 
@@ -43,6 +52,34 @@ local function mock_tree(data, parent, children)
 end
 
 describe("utest", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    it("supports interpolated test names", function()
+      local tree = utest.discover_positions({
+        path = "/project/src/test/scala/com/example/UTestSuite.scala",
+        content = [[
+          import utest.*
+
+          object UTestSuite extends TestSuite {
+            val baseName = "utest"
+            val tests = Tests {
+              test(s"$baseName success") {
+                assert(1 == 1)
+              }
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()

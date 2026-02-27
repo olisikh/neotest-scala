@@ -39,6 +39,24 @@ describe("scalatest", function()
       assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
     end)
 
+    it("supports interpolated test names for AnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        content = [[
+          import org.scalatest.funsuite.AnyFunSuite
+
+          class FunSuiteSpec extends AnyFunSuite {
+            val baseName = "suite"
+            test(s"$baseName works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
     it("discovers tests for AsyncFlatSpec", function()
       local tree = scalatest.discover_positions({
         path = "/project/src/test/scala/com/example/AsyncFlatSpec.scala",

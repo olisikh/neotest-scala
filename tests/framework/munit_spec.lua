@@ -153,6 +153,21 @@ describe("munit", function()
       assert.is_true(parse_positions_calls[1].query:find('"testZ"', 1, true) ~= nil)
     end)
 
+    it("supports interpolated string names in testZ", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ZioSuite.scala",
+        content = [[
+          class ZioSpec extends ZIOSuite {
+            val baseName = "zio"
+            testZ(s"$baseName success2") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
     it("returns nil for unsupported style", function()
       local tree = munit.discover_positions({
         path = "/project/src/test/scala/com/example/Nope.scala",

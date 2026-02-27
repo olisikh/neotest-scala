@@ -1,8 +1,45 @@
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {}
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
+
 local zio_test = require("neotest-scala.framework.zio-test")
 require("neotest-scala.framework")
 local H = require("tests.helpers")
 
 describe("zio-test", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    it("supports interpolated suite/test names", function()
+      local tree = zio_test.discover_positions({
+        path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        content = [[
+          import zio.test.*
+
+          object ZioSpec extends ZIOSpecDefault {
+            val baseName = "zio"
+            def spec = suite(s"$baseName suite")(
+              test(s"$baseName success") {
+                assertTrue(1 + 1 == 2)
+              }
+            )
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()

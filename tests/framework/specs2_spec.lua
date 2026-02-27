@@ -35,6 +35,22 @@ describe("specs2", function()
       assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
     end)
 
+    it("supports interpolated mutable spec test names", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/MutableSpec.scala",
+        content = [[
+          class MutableSpec extends Specification {
+            val baseName = "ok"
+            s"$baseName spec" in { 1 must_== 1 }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
     it("uses textspec parser when references are present", function()
       H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
         return { source = "textspec" }

@@ -131,7 +131,11 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#eq? @func_name "test")
-        arguments: (arguments (string) @test.name))
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     elseif style == "propspec" then
@@ -147,7 +151,11 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#eq? @func_name "property")
-        arguments: (arguments (string) @test.name))
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     elseif style == "freespec" then
@@ -162,7 +170,10 @@ function M.discover_positions(opts)
       ) @namespace.definition
 
       (infix_expression
-        left: (string) @test.name
+        left: [
+          (string)
+          (interpolated_string_expression)
+        ] @test.name
         operator: (_) @spec_init (#any-of? @spec_init "-" "in")
         right: (_)
       ) @test.definition
@@ -179,7 +190,10 @@ function M.discover_positions(opts)
       ) @namespace.definition
 
       (infix_expression
-        left: (string) @test.name
+        left: [
+          (string)
+          (interpolated_string_expression)
+        ] @test.name
         operator: (_) @spec_in (#eq? @spec_in "in")
         right: (_)
       ) @test.definition
@@ -198,13 +212,21 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
           function: (identifier) @func_name (#any-of? @func_name "describe" "context")
-          arguments: (arguments (string) @test.name))
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
       )) @test.definition
 
       ((call_expression
         function: (call_expression
           function: (identifier) @func_name (#eq? @func_name "it")
-          arguments: (arguments (string) @test.name))
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
       )) @test.definition
     ]]
     elseif style == "featurespec" then
@@ -221,13 +243,21 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
           function: (identifier) @func_name (#eq? @func_name "Feature")
-          arguments: (arguments (string) @test.name))
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
       )) @test.definition
 
       ((call_expression
         function: (call_expression
           function: (identifier) @func_name (#eq? @func_name "Scenario")
-          arguments: (arguments (string) @test.name))
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
       )) @test.definition
     ]]
     else
@@ -247,7 +277,10 @@ function M.discover_positions(opts)
                 left: (infix_expression
                     left: (string)
                     operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
-                    right: (string) @test.name)
+                    right: [
+                      (string)
+                      (interpolated_string_expression)
+                    ] @test.name)
                 operator: (_) @spec_in (#eq? @spec_in "in")
                 right: (_)
             ) @test.definition
@@ -256,7 +289,10 @@ function M.discover_positions(opts)
                 left: (infix_expression
                     left: (identifier) @it_name (#eq? @it_name "it")
                     operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
-                    right: (string) @test.name)
+                    right: [
+                      (string)
+                      (interpolated_string_expression)
+                    ] @test.name)
                 operator: (_) @spec_in (#eq? @spec_in "in")
                 right: (_)
             ) @test.definition
