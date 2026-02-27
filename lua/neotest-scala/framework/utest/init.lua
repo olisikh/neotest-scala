@@ -400,7 +400,24 @@ function M.parse_stdout_results(output, tree)
         end)
     end
 
-    local current_failure_id = nil
+    local current_failure_ids = {}
+
+    ---@param pos_id string
+    ---@param default_message string
+    ---@return neotest.Result|nil, neotest.Error|nil
+    local function ensure_failure_error(pos_id, default_message)
+        local result = results[pos_id]
+        if not result then
+            return nil, nil
+        end
+
+        result.errors = result.errors or {}
+        if #result.errors == 0 then
+            table.insert(result.errors, { message = default_message })
+        end
+
+        return result, result.errors[1]
+    end
 
     ---@param test_path string
     ---@return string[]
@@ -444,31 +461,43 @@ function M.parse_stdout_results(output, tree)
         if test_path then
             local is_pass = status_char == "+"
             local matched_ids = find_matching_position_ids(test_path)
+            current_failure_ids = {}
+
             for _, pos_id in ipairs(matched_ids) do
                 if is_pass then
                     results[pos_id] = { status = TEST_PASSED }
                 else
                     results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    current_failure_id = pos_id
+                    table.insert(current_failure_ids, pos_id)
                 end
             end
         end
 
         -- Stack frame: "Class.method(File.scala:line)"
         local file, line_num = line:match("%(([^:]+%.scala):(%d+)%)")
-        if file and line_num and current_failure_id then
-            local result = results[current_failure_id]
-            if result and result.errors and #result.errors == 0 then
-                table.insert(result.errors, { line = tonumber(line_num) - 1, message = "Test failed" })
+        if file and line_num and #current_failure_ids > 0 then
+            local zero_indexed_line = tonumber(line_num) - 1
+            for _, pos_id in ipairs(current_failure_ids) do
+                local _, err = ensure_failure_error(pos_id, "Test failed")
+                if err then
+                    err.line = zero_indexed_line
+                end
             end
         end
 
-        -- Exception: "java.lang.Exception: message"
-        local exc, msg = line:match("(%S+Exception):%s*(.*)")
-        if exc and current_failure_id then
-            local result = results[current_failure_id]
-            if result and result.errors and #result.errors > 0 then
-                result.errors[1].message = exc .. (msg ~= "" and ": " .. msg or "")
+        -- Exception/Error: "java.lang.Exception: message" or "java.lang.AssertionError: message"
+        local throwable_type, throwable_message = line:match("^%s*([%w%._$]+):%s*(.*)$")
+        if
+            throwable_type
+            and #current_failure_ids > 0
+            and (throwable_type:match("Exception$") or throwable_type:match("Error$"))
+        then
+            local message = throwable_type .. (throwable_message ~= "" and ": " .. throwable_message or "")
+            for _, pos_id in ipairs(current_failure_ids) do
+                local _, err = ensure_failure_error(pos_id, message)
+                if err then
+                    err.message = message
+                end
             end
         end
     end
