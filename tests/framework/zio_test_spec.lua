@@ -114,27 +114,6 @@ describe("zio-test", function()
     end)
   end)
 
-  describe("build_dap_test_selector", function()
-    it("returns selector for top-level tests", function()
-      local selector = zio_test.build_dap_test_selector({
-        position = {
-          type = "test",
-          name = '"zio success"',
-        },
-      })
-
-      assert.are.equal("zio success", selector)
-    end)
-
-    it("returns nil when position is missing", function()
-      local selector = zio_test.build_dap_test_selector({
-        tree = {},
-      })
-
-      assert.is_nil(selector)
-    end)
-  end)
-
   describe("build_test_result", function()
     before_each(function()
       H.mock_fn("neotest-scala.utils", "get_file_name", function(path)

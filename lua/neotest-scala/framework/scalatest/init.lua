@@ -418,23 +418,6 @@ function M.build_command(opts)
     })
 end
 
----@param opts { tree: neotest.Tree, position: neotest.Position }
----@return string|nil
-function M.build_dap_test_selector(opts)
-    local tree = opts.tree
-    local position = opts.position
-    if not tree or not position then
-        return nil
-    end
-
-    local test_name = utils.get_position_name(position)
-    if not test_name or test_name == "" then
-        return nil
-    end
-
-    return build_freespec_test_path(tree, test_name)
-end
-
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean

@@ -138,14 +138,13 @@ Common issues and solutions when using neotest-scala.
 **Symptoms**: You debug a nested test and a broader test subtree runs.
 
 **Cause**:
-- By default, nearest-test DAP runs at file scope for reliability.
-- If strict selectors are enabled, nested clicks map to the nearest top-level test selector (direct suite child).
-- Both behaviors are intentional to avoid fragile/hanging debug runs.
+- Nearest-test DAP intentionally launches file-level debug.
+- This is intentional to avoid fragile/hanging debug runs.
 
 **What to do**:
 1. Use breakpoints within the nested block.
 2. If needed, temporarily isolate the nested test logic.
-3. If you want strict per-test selectors, enable `dap_strict_test_selectors = true`.
+3. Use class/file debug directly when you want deterministic scope.
 
 ---
 

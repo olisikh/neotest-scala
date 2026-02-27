@@ -320,23 +320,6 @@ function M.build_command(opts)
     })
 end
 
----@param opts { tree: neotest.Tree, position: neotest.Position }
----@return string|nil
-function M.build_dap_test_selector(opts)
-    local tree = opts.tree
-    local position = opts.position
-    if not tree or not position then
-        return nil
-    end
-
-    local test_name = utils.get_position_name(position)
-    if not test_name or test_name == "" then
-        return nil
-    end
-
-    return build_test_path(tree, test_name)
-end
-
 function M.build_namespace(ns_node, report_prefix, node)
     local data = ns_node:data()
     local path = data.path

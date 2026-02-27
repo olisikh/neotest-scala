@@ -35,7 +35,7 @@ Support levels below describe **test execution + result reporting** in neotest.
 | specs2 | text spec (`s2""" ... """`) | `bloop` | **Limited** | Same single-test limits plus stdout parsing constraints. |
 | zio-test | `ZIOSpecDefault` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | zio-test | `ZIOSpecDefault` | `bloop` | **Not supported** | Automatically forced to `sbt` (`bloop` execution is disabled for this framework). |
-| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; interpolated names may run at suite scope with numeric JUnit result mapping; debug single-test remains constrained by uTest selector limitations. |
+| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; interpolated names may run at suite scope with numeric JUnit result mapping; DAP nearest-test runs at file scope. |
 | uTest | `TestSuite` | `bloop` | **Not supported** | Known issue: uTest suites can't be discovered by bloop; tests will be run by sbt. |
 
 > Recommendation: prefer `sbt` for stability. Use `bloop` when speed matters and current framework limitations are acceptable.
@@ -139,26 +139,12 @@ Diagnostics are automatically displayed when tests fail, making it easy to ident
 ## Debugging
 
 Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
-`debug nearest test` now defaults to file-level debug for reliability (this avoids fragile selector payload hangs). \
-You can opt in to strict per-test selectors by setting `dap_strict_test_selectors = true` in adapter setup. \
-When strict selectors are enabled, nested test clicks map to the nearest top-level test subtree and unsafe cases fall back to file scope. \
-`utest` still does not support strict single-test debug because it does not implement `sbt.testing.TestSelector`. \
+`debug nearest test` intentionally launches file-scope debug for reliability. \
+Per-test DAP selectors are not supported. \
 Runs that report `No test suites were run.` are marked as failures (including DAP runs). \
 See [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md) for limitations and troubleshooting details. \
 To run tests with debugger pass `strategy = "dap"` when running neotest:
 
 ```lua
 require('neotest').run.run({strategy = 'dap'})
-```
-
-Optional strict-selector mode:
-
-```lua
-require("neotest").setup({
-  adapters = {
-    require("neotest-scala")({
-      dap_strict_test_selectors = true,
-    })
-  }
-})
 ```

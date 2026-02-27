@@ -176,33 +176,6 @@ describe("specs2", function()
     end)
   end)
 
-  describe("build_dap_test_selector", function()
-    it("returns selector for mutable specs", function()
-      local selector = specs2.build_dap_test_selector({
-        position = {
-          type = "test",
-          name = '"failing test"',
-        },
-      })
-
-      assert.are.equal("failing test", selector)
-    end)
-
-    it("returns nil for textspec positions", function()
-      local selector = specs2.build_dap_test_selector({
-        position = {
-          type = "test",
-          name = '"text spec example"',
-          extra = {
-            textspec_path = "text spec example",
-          },
-        },
-      })
-
-      assert.is_nil(selector)
-    end)
-  end)
-
   describe("build_test_result matching", function()
     after_each(function()
       H.restore_mocks()

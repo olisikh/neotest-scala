@@ -172,8 +172,6 @@ describe("build tool switch behavior", function()
         return { strategy = "dap" }
       end)
 
-      H.mock_fn("neotest-scala.strategy", "reset_run_state", function() end)
-
       adapter({ cache_build_info = false })
 
       adapter.build_spec({
@@ -193,65 +191,6 @@ describe("build tool switch behavior", function()
       assert.are.equal("munit", captured_strategy_opts.framework)
       assert.are.equal("bloop", captured_strategy_opts.build_tool)
       assert.are.equal("dap", captured_strategy_opts.strategy)
-      assert.is_false(captured_strategy_opts.strict_test_selectors)
-    end)
-
-    it("forwards strict dap selector opt-in to strategy config", function()
-      local adapter = require("neotest-scala")
-
-      local captured_strategy_opts = nil
-
-      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
-        return {
-          ["Target"] = { "munit-test" },
-          ["Base Directory"] = { "file:/tmp/project/" },
-        }
-      end)
-
-      H.mock_fn("neotest-scala.metals", "get_project_name", function()
-        return "munit"
-      end)
-
-      H.mock_fn("neotest-scala.metals", "get_framework", function()
-        return "munit"
-      end)
-
-      H.mock_fn("neotest-scala.build", "get_tool", function()
-        return "bloop"
-      end)
-
-      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
-        return {
-          build_command = function()
-            return { "echo", "ok" }
-          end,
-        }
-      end)
-
-      H.mock_fn("neotest-scala.strategy", "get_config", function(opts)
-        captured_strategy_opts = opts
-        return { strategy = "dap" }
-      end)
-
-      H.mock_fn("neotest-scala.strategy", "reset_run_state", function() end)
-
-      adapter({ cache_build_info = false, dap_strict_test_selectors = true })
-
-      adapter.build_spec({
-        strategy = "dap",
-        tree = {
-          data = function()
-            return {
-              type = "test",
-              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
-              name = "\"works\"",
-            }
-          end,
-        },
-        extra_args = {},
-      })
-
-      assert.is_true(captured_strategy_opts.strict_test_selectors)
     end)
 
     it("pins resolved build tool into env and forwards it to framework command", function()
