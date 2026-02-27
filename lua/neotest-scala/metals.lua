@@ -11,6 +11,14 @@ local previous_build_target_handler = nil
 
 local CACHE_TTL = 60
 
+local FRAMEWORK_PATTERNS = {
+    { pattern = "specs2%-core_.*-.*%.jar", name = "specs2" },
+    { pattern = "munit_.*-.*%.jar", name = "munit" },
+    { pattern = "scalatest_.*-.*%.jar", name = "scalatest" },
+    { pattern = "utest_.*-.*%.jar", name = "utest" },
+    { pattern = "zio%-test_.*-.*%.jar", name = "zio-test" },
+}
+
 ---@class neotest-scala.MetalsBuildTargetInfoOpts
 ---@field root_path string
 ---@field target_path string
@@ -48,6 +56,63 @@ local function is_cache_valid(key)
     return (os.time() - timestamp) < CACHE_TTL
 end
 
+---@param build_target_info table<string, string[]>|nil
+---@return string[]|nil
+local function get_classpath(build_target_info)
+    if not build_target_info then
+        return nil
+    end
+
+    return build_target_info["Scala Classpath"] or build_target_info["Classpath"]
+end
+
+---@param classpath string[]|nil
+---@return string[]
+local function detect_frameworks_from_classpath(classpath)
+    if not classpath then
+        return {}
+    end
+
+    local frameworks = {}
+    local found = {}
+
+    for _, jar in ipairs(classpath) do
+        for _, fw in ipairs(FRAMEWORK_PATTERNS) do
+            if jar:match(fw.pattern) and not found[fw.name] then
+                table.insert(frameworks, fw.name)
+                found[fw.name] = true
+            end
+        end
+    end
+
+    return frameworks
+end
+
+---@param path string
+---@return string
+local function normalize_source_path(path)
+    return path:gsub("%*$", "")
+end
+
+---@param metals table
+---@param root_path string
+---@param project string
+---@return table<string, string[]>|nil
+local function decode_project_build_target(metals, root_path, project)
+    local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", root_path, project)
+
+    local decode_err, decode_result = metals.request.workspace_executeCommand({
+        command = "metals.file-decode",
+        arguments = { metals_uri },
+    })
+
+    if decode_err or not decode_result or not decode_result.value then
+        return nil
+    end
+
+    return parse_build_target_info(decode_result.value)
+end
+
 local function do_get_build_target_info(root_path, target_path, timeout_ms)
     timeout_ms = timeout_ms or 10000
 
@@ -68,41 +133,20 @@ local function do_get_build_target_info(root_path, target_path, timeout_ms)
     end
 
     if #targets_result == 1 then
-        local project = targets_result[1]
-        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", root_path, project)
-
-        local decode_err, decode_result = metals.request.workspace_executeCommand({
-            command = "metals.file-decode",
-            arguments = { metals_uri },
-        })
-
-        if decode_err or not decode_result or not decode_result.value then
-            return nil
-        end
-
-        return parse_build_target_info(decode_result.value)
+        return decode_project_build_target(metals, root_path, targets_result[1])
     end
 
-    local target_src_path = target_path:gsub("%*$", "")
+    local target_src_path = normalize_source_path(target_path)
 
     for _, project in ipairs(targets_result) do
-        local metals_uri = string.format("metalsDecode:file://%s/%s.metals-buildtarget", root_path, project)
+        local project_info = decode_project_build_target(metals, root_path, project)
 
-        local decode_err, decode_result = metals.request.workspace_executeCommand({
-            command = "metals.file-decode",
-            arguments = { metals_uri },
-        })
+        if project_info and project_info["Sources"] then
+            for _, src_path in ipairs(project_info["Sources"]) do
+                local normalized_src_path = normalize_source_path(src_path)
 
-        if not decode_err and decode_result and decode_result.value then
-            local project_info = parse_build_target_info(decode_result.value)
-
-            if project_info and project_info["Sources"] then
-                for _, src_path in ipairs(project_info["Sources"]) do
-                    src_path = src_path:gsub("%*$", "")
-
-                    if vim.startswith(target_src_path, src_path) then
-                        return project_info
-                    end
+                if vim.startswith(target_src_path, normalized_src_path) then
+                    return project_info
                 end
             end
         end
@@ -167,37 +211,14 @@ function M.get_project_name(build_target_info)
 end
 
 function M.get_framework(build_target_info)
-    if not build_target_info then
-        return nil
-    end
-
-    local classpath = build_target_info["Scala Classpath"] or build_target_info["Classpath"]
+    local classpath = get_classpath(build_target_info)
     if not classpath then
         return nil
     end
 
-    for _, jar in ipairs(classpath) do
-        local framework = jar:match("(specs2)-core_.*-.*%.jar")
-            or jar:match("(munit)_.*-.*%.jar")
-            or jar:match("(scalatest)_.*-.*%.jar")
-            or jar:match("(utest)_.*-.*%.jar")
-            or jar:match("(zio%-test)_.*-.*%.jar")
-
-        if framework then
-            return framework
-        end
-    end
-
-    return nil
+    local frameworks = detect_frameworks_from_classpath(classpath)
+    return frameworks[1]
 end
-
-local FRAMEWORK_PATTERNS = {
-    { pattern = "specs2%-core_.*-.*%.jar", name = "specs2" },
-    { pattern = "munit_.*-.*%.jar", name = "munit" },
-    { pattern = "scalatest_.*-.*%.jar", name = "scalatest" },
-    { pattern = "utest_.*-.*%.jar", name = "utest" },
-    { pattern = "zio%-test_.*-.*%.jar", name = "zio-test" },
-}
 
 function M.get_frameworks(root_path, target_path, cache_enabled)
     local build_info = M.get_build_target_info({
@@ -209,25 +230,13 @@ function M.get_frameworks(root_path, target_path, cache_enabled)
         return {}
     end
 
-    local classpath = build_info["Scala Classpath"] or build_info["Classpath"]
+    local classpath = get_classpath(build_info)
     if not classpath then
         vim.print("[neotest-scala]: No classpath information found in build target info")
         return {}
     end
 
-    local frameworks = {}
-    local found = {}
-
-    for _, jar in ipairs(classpath) do
-        for _, fw in ipairs(FRAMEWORK_PATTERNS) do
-            if jar:match(fw.pattern) and not found[fw.name] then
-                table.insert(frameworks, fw.name)
-                found[fw.name] = true
-            end
-        end
-    end
-
-    return frameworks
+    return detect_frameworks_from_classpath(classpath)
 end
 
 function M.prefetch(root_path, file_path, cache_enabled)
