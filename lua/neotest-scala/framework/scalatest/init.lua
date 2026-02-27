@@ -37,7 +37,7 @@ local function matches_suite_style(content, suite_patterns)
 end
 
 ---@param content string
----@return "funsuite"|"freespec"|"flatspec"|"propspec"|nil
+---@return "funsuite"|"freespec"|"flatspec"|"propspec"|"wordspec"|"funspec"|"featurespec"|nil
 local function detect_style(content)
     if
         matches_suite_style(content, {
@@ -74,6 +74,33 @@ local function detect_style(content)
         }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*PropSpec%f[%W]"))
     then
         return "propspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyWordSpec",
+            "AsyncWordSpec",
+            "FixtureAnyWordSpec",
+            "fixture%.AnyWordSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*WordSpec%f[%W]"))
+    then
+        return "wordspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFunSpec",
+            "AsyncFunSpec",
+            "FixtureAnyFunSpec",
+            "fixture%.AnyFunSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FunSpec%f[%W]"))
+    then
+        return "funspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFeatureSpec",
+            "AsyncFeatureSpec",
+            "FixtureAnyFeatureSpec",
+            "fixture%.AnyFeatureSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FeatureSpec%f[%W]"))
+    then
+        return "featurespec"
     end
 
     return nil
@@ -139,6 +166,69 @@ function M.discover_positions(opts)
         operator: (_) @spec_init (#any-of? @spec_init "-" "in")
         right: (_)
       ) @test.definition
+    ]]
+    elseif style == "wordspec" then
+        -- WordSpec: "A thing" should { "do X" in { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (infix_expression
+        left: (string) @test.name
+        operator: (_) @spec_in (#eq? @spec_in "in")
+        right: (_)
+      ) @test.definition
+    ]]
+    elseif style == "funspec" then
+        -- FunSpec: describe("name") { it("test") { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#any-of? @func_name "describe" "context")
+          arguments: (arguments (string) @test.name))
+      )) @test.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "it")
+          arguments: (arguments (string) @test.name))
+      )) @test.definition
+    ]]
+    elseif style == "featurespec" then
+        -- FeatureSpec: Feature("x") { Scenario("y") { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "Feature")
+          arguments: (arguments (string) @test.name))
+      )) @test.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "Scenario")
+          arguments: (arguments (string) @test.name))
+      )) @test.definition
     ]]
     else
         -- FlatSpec:
@@ -279,6 +369,8 @@ local function match_test(junit_test, position)
     local flat_should = junit_name:match("^.-%s+[Ss]hould%s+(.+)$")
     local flat_must = junit_name:match("^.-%s+[Mm]ust%s+(.+)$")
     local flat_can = junit_name:match("^.-%s+[Cc]an%s+(.+)$")
+    local feature_scenario = junit_name:gsub("[Ff]eature:%s*", ""):gsub("[Ss]cenario:%s*", "")
+    feature_scenario = vim.trim(feature_scenario)
 
     if flat_should then
         table.insert(junit_name_variants, flat_should)
@@ -288,6 +380,9 @@ local function match_test(junit_test, position)
     end
     if flat_can then
         table.insert(junit_name_variants, flat_can)
+    end
+    if feature_scenario ~= "" and feature_scenario ~= junit_name then
+        table.insert(junit_name_variants, feature_scenario)
     end
 
     -- Normalize: remove dashes and spaces for comparison
@@ -317,8 +412,8 @@ local function match_test(junit_test, position)
         end
 
         -- Try 4: Remove all dots and compare (fallback for edge cases)
-        local junit_no_dots = junit_test_id:gsub("%.", "")
-        local position_no_dots = position_no_package:gsub("%.", "")
+        local junit_no_dots = junit_test_id:gsub("%.", ""):gsub(":", "")
+        local position_no_dots = position_no_package:gsub("%.", ""):gsub(":", "")
         if junit_no_dots == position_no_dots then
             return true
         end

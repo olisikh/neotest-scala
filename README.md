@@ -29,8 +29,8 @@ Support levels below describe **test execution + result reporting** in neotest.
 
 | Library | Test type | Build tool | Support | Notes |
 |---------|-----------|------------|---------|-------|
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec` (+ `Async*` / `Fixture*` variants) | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec` (+ `Async*` / `Fixture*` variants) | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec` (+ `Async*` / `Fixture*` variants) | `sbt` | **Full** | Stable path via JUnit XML reports. |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec` (+ `Async*` / `Fixture*` variants) | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
 | munit | `FunSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | munit | `FunSuite` | `bloop` | **Limited** | Uses stdout parsing; works for common output, but parser-based matching is inherently less stable than XML. |
 | specs2 | `mutable.Specification` | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |

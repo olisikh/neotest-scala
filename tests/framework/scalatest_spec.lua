@@ -91,6 +91,65 @@ describe("scalatest", function()
       assert.is_true(parse_positions_calls[1].query:find('"property"', 1, true) ~= nil)
     end)
 
+    it("discovers tests for AsyncWordSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/AsyncWordSpecSuite.scala",
+        content = [[
+          import org.scalatest.wordspec.AsyncWordSpec
+
+          class AsyncWordSpecSuite extends AsyncWordSpec {
+            "service" should {
+              "work" in {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyFunSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSpec.scala",
+        content = [[
+          import org.scalatest.funspec.AnyFunSpec
+
+          class FunSpec extends AnyFunSpec {
+            describe("List operations") {
+              it("works") {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"describe"', 1, true) ~= nil)
+      assert.is_true(parse_positions_calls[1].query:find('"it"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyFeatureSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        content = [[
+          import org.scalatest.featurespec.AnyFeatureSpec
+
+          class FeatureSpec extends AnyFeatureSpec {
+            Feature("Authentication") {
+              Scenario("successful login") {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"Feature"', 1, true) ~= nil)
+      assert.is_true(parse_positions_calls[1].query:find('"Scenario"', 1, true) ~= nil)
+    end)
+
     it("returns nil for unsupported style", function()
       local tree = scalatest.discover_positions({
         path = "/project/src/test/scala/com/example/Nope.scala",
@@ -507,6 +566,57 @@ describe("scalatest", function()
       local position = {
         path = "/path/to/FlatSpec.scala",
         id = "com.example.FlatSpec.pop values in last-in-first-out order",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches AnyWordSpec JUnit names with behavior prefix", function()
+      local junit_test = {
+        name = "A calculator should add numbers successfully",
+        namespace = "WordSpec",
+      }
+
+      local position = {
+        path = "/path/to/WordSpec.scala",
+        id = "com.example.WordSpec.add numbers successfully",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches AnyFunSpec JUnit names with describe context", function()
+      local junit_test = {
+        name = "List operations supports successful checks",
+        namespace = "FunSpec",
+      }
+
+      local position = {
+        path = "/path/to/FunSpec.scala",
+        id = "com.example.FunSpec.List operations.supports successful checks",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches AnyFeatureSpec JUnit names with Feature/Scenario prefixes", function()
+      local junit_test = {
+        name = "Feature: Authentication Scenario: successful login",
+        namespace = "FeatureSpec",
+      }
+
+      local position = {
+        path = "/path/to/FeatureSpec.scala",
+        id = "com.example.FeatureSpec.Authentication.successful login",
       }
 
       local result = scalatest.build_test_result(junit_test, position)
