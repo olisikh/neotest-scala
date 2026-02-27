@@ -29,16 +29,12 @@ neotest-scala supports debugging tests with [nvim-dap](https://github.com/mfusse
 ```lua
 local metals_config = require('metals').bare_config()
 
--- Enable DAP integration
-metals_config.settings = {
-  enableSemanticHighlighting = true,
-}
-
 -- Auto-attach Metals
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "scala", "sbt" },
   callback = function()
     require("metals").initialize_or_attach(metals_config)
+    require("metals").setup_dap()
   end,
   group = vim.api.nvim_create_augroup("nvim-metals", { clear = true }),
 })
