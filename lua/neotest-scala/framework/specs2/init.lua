@@ -121,6 +121,26 @@ function M.build_command(opts)
     })
 end
 
+---@param opts { tree: neotest.Tree, position: neotest-scala.PositionWithExtra }
+---@return string|nil
+function M.build_dap_test_selector(opts)
+    local position = opts.position
+    if not position then
+        return nil
+    end
+
+    if position.extra and position.extra.textspec_path then
+        return nil
+    end
+
+    local test_name = utils.get_position_name(position)
+    if not test_name or test_name == "" then
+        return nil
+    end
+
+    return test_name
+end
+
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest-scala.PositionWithExtra
 ---@return boolean
