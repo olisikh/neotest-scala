@@ -168,6 +168,23 @@ describe("scalatest", function()
       assert.is_true(parse_positions_calls[1].query:find('"Scenario"', 1, true) ~= nil)
     end)
 
+    it("discovers tests for RefSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/RefSpecSuite.scala",
+        content = [[
+          import org.scalatest.refspec.RefSpec
+
+          class RefSpecSuite extends RefSpec {
+            def `successful example`(): Unit = {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("function_definition", 1, true) ~= nil)
+    end)
+
     it("returns nil for unsupported style", function()
       local tree = scalatest.discover_positions({
         path = "/project/src/test/scala/com/example/Nope.scala",
@@ -635,6 +652,25 @@ describe("scalatest", function()
       local position = {
         path = "/path/to/FeatureSpec.scala",
         id = "com.example.FeatureSpec.Authentication.successful login",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches RefSpec names discovered with backticks", function()
+      local junit_test = {
+        name = "successful example",
+        namespace = "RefSpecSuite",
+      }
+
+      local position = {
+        path = "/path/to/RefSpecSuite.scala",
+        id = "com.example.RefSpecSuite.successfulexample",
+        name = "`successful example`",
+        type = "test",
       }
 
       local result = scalatest.build_test_result(junit_test, position)

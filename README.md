@@ -29,12 +29,12 @@ Support levels below describe **test execution + result reporting** in neotest.
 
 | Library | Test type | Build tool | Support | Notes |
 |---------|-----------|------------|---------|-------|
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec` (+ `Async*` / `Fixture*` variants) | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec` (+ `Async*` / `Fixture*` variants) | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec`, `RefSpec` (+ `Async*` / `Fixture*` variants where applicable) | `sbt` | **Full** | Stable path via JUnit XML reports. |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec`, `AnyPropSpec`, `AnyWordSpec`, `AnyFunSpec`, `AnyFeatureSpec`, `RefSpec` (+ `Async*` / `Fixture*` variants where applicable) | `bloop` | **Limited** | Uses stdout parsing for results (with additional JUnit report flags passed to runner); matching is best-effort vs XML. |
 | munit | `FunSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | munit | `FunSuite` | `bloop` | **Limited** | Uses stdout parsing; works for common output, but parser-based matching is inherently less stable than XML. |
-| specs2 | `mutable.Specification` | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |
-| specs2 | `mutable.Specification` | `bloop` | **Limited** | Uses stdout parsing; supports fail/crash markers, but matching remains best-effort. |
+| specs2 | `Specification` (`>>`, `in`, basic `!` fragments) | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |
+| specs2 | `Specification` (`>>`, `in`, basic `!` fragments) | `bloop` | **Limited** | Uses stdout parsing; supports fail/crash markers, but matching remains best-effort. |
 | specs2 | text spec (`s2""" ... """`) | `sbt` | **Limited** | Execution works, but fine-grained single-test runs are limited. |
 | specs2 | text spec (`s2""" ... """`) | `bloop` | **Limited** | Same single-test limits plus stdout parsing constraints. |
 | zio-test | `ZIOSpecDefault` | `sbt` | **Full** | Stable path via JUnit XML reports. |

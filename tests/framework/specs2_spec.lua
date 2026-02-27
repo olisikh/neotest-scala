@@ -35,6 +35,25 @@ describe("specs2", function()
       assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
     end)
 
+    it("discovers immutable fragments with ! operator", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/FragmentsSpec.scala",
+        content = [[
+          import org.specs2.Specification
+
+          class FragmentsSpec extends Specification {
+            def is = "Fragments" ^
+              "successful fragment" ! ok ^
+              "failing fragment" ! ko("boom")
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"!"', 1, true) ~= nil)
+    end)
+
     it("supports interpolated mutable spec test names", function()
       local tree = specs2.discover_positions({
         path = "/project/src/test/scala/com/example/MutableSpec.scala",

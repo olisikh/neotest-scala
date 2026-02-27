@@ -14,7 +14,7 @@ function M.get_position_name(position)
         if interpolator then
             name = name:gsub("^" .. interpolator, "", 1)
         end
-        return (name:gsub('"', ""))
+        return (name:gsub('"', ""):gsub("`", ""))
     end
     return position.name
 end

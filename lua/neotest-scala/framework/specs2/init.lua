@@ -46,7 +46,7 @@ local function parse_mutable_positions(path)
           (string)
           (interpolated_string_expression)
         ] @test.name
-        operator: (_) @spec_init (#any-of? @spec_init ">>" "in")
+        operator: (_) @spec_init (#any-of? @spec_init ">>" "in" "!")
         right: (_)
       ) @test.definition
     ]]

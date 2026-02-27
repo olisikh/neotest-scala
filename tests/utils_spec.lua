@@ -174,6 +174,11 @@ describe('utils', function()
       local position = { type = 'test', name = 's"$baseName success2"' }
       H.assert_eq(utils.get_position_name(position), '$baseName success2')
     end)
+
+    it('strips backticks from RefSpec method names', function()
+      local position = { type = 'test', name = '`successful example`' }
+      H.assert_eq(utils.get_position_name(position), 'successful example')
+    end)
   end)
 
   describe('matches_with_interpolation', function()

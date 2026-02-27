@@ -37,7 +37,7 @@ local function matches_suite_style(content, suite_patterns)
 end
 
 ---@param content string
----@return "funsuite"|"freespec"|"flatspec"|"propspec"|"wordspec"|"funspec"|"featurespec"|nil
+---@return "funsuite"|"freespec"|"flatspec"|"propspec"|"wordspec"|"funspec"|"featurespec"|"refspec"|nil
 local function detect_style(content)
     if
         matches_suite_style(content, {
@@ -101,6 +101,15 @@ local function detect_style(content)
         }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FeatureSpec%f[%W]"))
     then
         return "featurespec"
+    elseif
+        matches_suite_style(content, {
+            "AnyRefSpec",
+            "RefSpec",
+            "FixtureAnyRefSpec",
+            "fixture%.AnyRefSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*RefSpec%f[%W]"))
+    then
+        return "refspec"
     end
 
     return nil
@@ -259,6 +268,28 @@ function M.discover_positions(opts)
               (interpolated_string_expression)
             ] @test.name))
       )) @test.definition
+    ]]
+    elseif style == "refspec" then
+        -- RefSpec: discover zero-arg test methods
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      [
+        (function_definition
+          name: (identifier) @test.name
+          parameters: (parameters) @test_params (#eq? @test_params "()")
+        )
+        (function_definition
+          name: (identifier) @test.name
+          !parameters
+        )
+      ] @test.definition
     ]]
     else
         -- FlatSpec:
