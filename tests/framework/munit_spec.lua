@@ -283,7 +283,7 @@ describe("munit", function()
     end)
 
     describe("for file (type == 'file')", function()
-      it("builds path with package wildcard", function()
+      it("builds path with package and suite when file has one suite", function()
         local namespace_child = mock_tree({
           type = "namespace",
           name = "FileSpec",
@@ -301,6 +301,35 @@ describe("munit", function()
           project = "root",
           tree = file_tree,
           name = "FileSpec.scala",
+          extra_args = {},
+        })
+
+        assert.are.equal("com.example.FileSpec", captured_test_path)
+      end)
+
+      it("builds package wildcard when file has multiple suites", function()
+        local namespace_child1 = mock_tree({
+          type = "namespace",
+          name = "SuiteA",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        })
+        local namespace_child2 = mock_tree({
+          type = "namespace",
+          name = "SuiteB",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        })
+
+        local file_tree = mock_tree({
+          type = "file",
+          name = "MultiSpec.scala",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        }, nil, { namespace_child1, namespace_child2 })
+
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = file_tree,
+          name = "MultiSpec.scala",
           extra_args = {},
         })
 

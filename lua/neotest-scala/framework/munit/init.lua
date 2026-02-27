@@ -105,8 +105,14 @@ local function build_test_path(tree, name)
                 table.insert(test_suites, child:data().name)
             end
         end
-        if test_suites then
+        if #test_suites > 0 then
             local package = utils.get_package_name(tree:data().path)
+            if not package then
+                return nil
+            end
+            if #test_suites == 1 then
+                return package .. test_suites[1]
+            end
             return package .. "*"
         end
     end
