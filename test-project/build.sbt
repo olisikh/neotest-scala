@@ -9,11 +9,15 @@ def module(moduleName: String) = Project(moduleName, file(moduleName))
 
 lazy val zioTest = module("zio-test")
   .settings(
-    libraryDependencies ++= Seq(
-      "dev.zio" %% "zio-test"          % "2.1.2" % Test,
-      "dev.zio" %% "zio-test-sbt"      % "2.1.2" % Test,
-      "dev.zio" %% "zio-test-magnolia" % "2.1.2" % Test
-    )
+    libraryDependencies ++= {
+      val zioVersion = "2.1.2"
+
+      Seq(
+        "dev.zio" %% "zio-test"          % zioVersion % Test,
+        "dev.zio" %% "zio-test-sbt"      % zioVersion % Test,
+        "dev.zio" %% "zio-test-magnolia" % zioVersion % Test
+      )
+    }
   )
 
 lazy val munit = module("munit")
