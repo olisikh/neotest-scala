@@ -6,8 +6,6 @@ M.TEST_FAILED = "failed"
 _G.TEST_PASSED = M.TEST_PASSED
 _G.TEST_FAILED = M.TEST_FAILED
 
-<<<<<<< Updated upstream
-=======
 local FRAMEWORK_MARKERS = {
     scalatest = {
         "org%.scalatest",
@@ -38,7 +36,6 @@ local FRAMEWORK_MARKERS = {
     },
 }
 
->>>>>>> Stashed changes
 ---@class neotest-scala.PositionExtra
 ---@field textspec_path? string
 
@@ -73,8 +70,6 @@ function M.get_framework_class(framework)
     return nil
 end
 
-<<<<<<< Updated upstream
-=======
 ---@param tree neotest.Tree
 ---@return integer, integer
 local function count_discovered_positions(tree)
@@ -183,6 +178,4 @@ function M.select_framework_tree(opts)
 
     return best_tree, best_framework
 end
-
->>>>>>> Stashed changes
 return M

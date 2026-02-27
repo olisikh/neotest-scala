@@ -56,11 +56,7 @@ function M.discover_positions(opts)
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]
-<<<<<<< Updated upstream
-    else
-=======
     elseif style == "freespec" then
->>>>>>> Stashed changes
         -- FreeSpec: "name" - { } and "name" in { }
         query = [[
       (object_definition
@@ -77,8 +73,6 @@ function M.discover_positions(opts)
         right: (_)
       ) @test.definition
     ]]
-<<<<<<< Updated upstream
-=======
     else
         -- FlatSpec:
         -- "A Stack" should "pop values" in { }
@@ -110,7 +104,6 @@ function M.discover_positions(opts)
                 right: (_)
             ) @test.definition
         ]]
->>>>>>> Stashed changes
     end
 
     return lib.treesitter.parse_positions(path, query, {
