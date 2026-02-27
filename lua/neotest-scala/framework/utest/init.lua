@@ -176,6 +176,68 @@ function M.build_namespace(ns_node, report_prefix, node)
     return namespace
 end
 
+---@param namespace table|nil
+---@return neotest.Position[]
+local function get_ordered_namespace_tests(namespace)
+    if not namespace then
+        return {}
+    end
+
+    if namespace._ordered_utest_tests then
+        return namespace._ordered_utest_tests
+    end
+
+    local ordered_tests = {}
+    for _, n in ipairs(namespace.tests or {}) do
+        local position = n and n.data and n:data() or n
+        if position and position.type == "test" then
+            table.insert(ordered_tests, position)
+        end
+    end
+
+    table.sort(ordered_tests, function(left, right)
+        local left_start = left.range and left.range[1] or math.huge
+        local right_start = right.range and right.range[1] or math.huge
+
+        if left_start ~= right_start then
+            return left_start < right_start
+        end
+
+        local left_col = left.range and left.range[2] or 0
+        local right_col = right.range and right.range[2] or 0
+        if left_col ~= right_col then
+            return left_col < right_col
+        end
+
+        return (left.id or "") < (right.id or "")
+    end)
+
+    namespace._ordered_utest_tests = ordered_tests
+    return ordered_tests
+end
+
+---@param namespace table|nil
+---@param junit_test neotest-scala.JUnitTest
+---@return string|nil
+local function get_numeric_junit_target_id(namespace, junit_test)
+    if not namespace or not junit_test or not junit_test.name then
+        return nil
+    end
+
+    local numeric_index = tonumber(junit_test.name)
+    if not numeric_index then
+        return nil
+    end
+
+    local ordered_tests = get_ordered_namespace_tests(namespace)
+    local target_position = ordered_tests[numeric_index + 1]
+    if not target_position then
+        return nil
+    end
+
+    return target_position.id
+end
+
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
@@ -184,7 +246,7 @@ local function match_test(junit_test, position)
         return true
     end
 
-    local package_name = utils.get_package_name(position.path)
+    local package_name = utils.get_package_name(position.path) or ""
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
     local test_id = position.id:gsub("-", "."):gsub(" ", "")
     return utils.matches_with_interpolation(junit_test_id, test_id)
@@ -216,6 +278,28 @@ function M.build_test_result(junit_test, position)
     }
 end
 
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return neotest.Result
+local function build_test_result_unchecked(junit_test, position)
+    local error_message = junit_test.error_message or junit_test.error_stacktrace
+    if error_message then
+        local error = { message = error_message }
+        local file_name = utils.get_file_name(position.path)
+
+        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+
+        return {
+            errors = { error },
+            status = TEST_FAILED,
+        }
+    end
+
+    return {
+        status = TEST_PASSED,
+    }
+end
+
 ---@param opts { position: neotest.Position, test_node: neotest.Tree, junit_results: neotest-scala.JUnitTest[] }
 ---@return neotest.Result|nil
 function M.build_position_result(opts)
@@ -226,6 +310,15 @@ function M.build_position_result(opts)
 
     for index, junit_test in ipairs(junit_results) do
         if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
+        local numeric_target_id = get_numeric_junit_target_id(namespace, junit_test)
+        if numeric_target_id then
+            if numeric_target_id == position.id then
+                utils.claim_junit_result(namespace, index)
+                return build_test_result_unchecked(junit_test, position)
+            end
             goto continue
         end
 
@@ -254,14 +347,89 @@ function M.parse_stdout_results(output, tree)
 
     -- Build position lookup for matching
     local positions = {}
+    local positions_by_namespace = {}
+    local function add_namespace_position(namespace_key, position)
+        if not namespace_key then
+            return
+        end
+        positions_by_namespace[namespace_key] = positions_by_namespace[namespace_key] or {}
+        table.insert(positions_by_namespace[namespace_key], position)
+    end
+
     for _, node in tree:iter_nodes() do
         local data = node:data()
         if data.type == "test" then
             positions[data.id] = data
+
+            local namespace_node = utils.find_node(node, "namespace", false)
+            if namespace_node then
+                local namespace_data = namespace_node:data()
+                local namespace_id = namespace_data.id
+                add_namespace_position(namespace_id, data)
+
+                local package_name = utils.get_package_name(namespace_data.path)
+                if package_name then
+                    add_namespace_position(package_name .. namespace_id, data)
+                end
+            end
         end
     end
 
+    for _, namespace_positions in pairs(positions_by_namespace) do
+        table.sort(namespace_positions, function(left, right)
+            local left_start = left.range and left.range[1] or math.huge
+            local right_start = right.range and right.range[1] or math.huge
+
+            if left_start ~= right_start then
+                return left_start < right_start
+            end
+
+            local left_col = left.range and left.range[2] or 0
+            local right_col = right.range and right.range[2] or 0
+            if left_col ~= right_col then
+                return left_col < right_col
+            end
+
+            return (left.id or "") < (right.id or "")
+        end)
+    end
+
     local current_failure_id = nil
+
+    ---@param test_path string
+    ---@return string[]
+    local function find_matching_position_ids(test_path)
+        local matches = {}
+
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local pos_matches = pos_name and test_path:find(pos_name, 1, true)
+            local interpolated_match = pos_name
+                and utils.matches_with_interpolation(test_path, pos_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matches, pos_id)
+            end
+        end
+
+        if #matches > 0 then
+            return matches
+        end
+
+        local namespace_id, numeric_index_str = test_path:match("^(.*)%.(%d+)$")
+        local numeric_index = tonumber(numeric_index_str or "")
+        if namespace_id and numeric_index ~= nil then
+            local namespace_positions = positions_by_namespace[namespace_id]
+            local target = namespace_positions and namespace_positions[numeric_index + 1] or nil
+            if target then
+                return { target.id }
+            end
+        end
+
+        return {}
+    end
 
     for line in output:gmatch("[^\r\n]+") do
         -- Result: "+ path time" or "X path time"
@@ -269,21 +437,13 @@ function M.parse_stdout_results(output, tree)
         local status_char, test_path = line:match("^([%+X])%s+(.+)%s+%d+ms")
         if test_path then
             local is_pass = status_char == "+"
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                local pos_matches = pos_name and test_path:find(pos_name, 1, true)
-                local interpolated_match = pos_name
-                    and utils.matches_with_interpolation(test_path, pos_name, {
-                        anchor_start = false,
-                        anchor_end = true,
-                    })
-                if pos_matches or interpolated_match then
-                    if is_pass then
-                        results[pos_id] = { status = TEST_PASSED }
-                    else
-                        results[pos_id] = { status = TEST_FAILED, errors = {} }
-                        current_failure_id = pos_id
-                    end
+            local matched_ids = find_matching_position_ids(test_path)
+            for _, pos_id in ipairs(matched_ids) do
+                if is_pass then
+                    results[pos_id] = { status = TEST_PASSED }
+                else
+                    results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    current_failure_id = pos_id
                 end
             end
         end

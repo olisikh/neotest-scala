@@ -15,8 +15,7 @@ object UTestInterpolatedSuite extends TestSuite {
       1 ==> 2
     }
 
-    val runtimeName = s"${baseName}-crash"
-    test(runtimeName) {
+    test(s"${baseName}-crash") {
       throw new RuntimeException("utest interpolated crash")
     }
   }
