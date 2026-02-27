@@ -450,4 +450,48 @@ describe("munit", function()
       end)
     end)
   end)
+
+  describe("parse_stdout_results", function()
+    it("captures ScalaCheck seed failures and line numbers", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "ScalaCheckMUnitSuite",
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      })
+
+      local pass_tree = mock_tree({
+        id = "com.example.ScalaCheckMUnitSuite.reverse reverse is identity",
+        type = "test",
+        name = '"reverse reverse is identity"',
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, namespace_tree)
+      local fail_tree = mock_tree({
+        id = "com.example.ScalaCheckMUnitSuite.intentionally failing property",
+        type = "test",
+        name = '"intentionally failing property"',
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, nil, { pass_tree, fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
++ com.example.ScalaCheckMUnitSuite.reverse reverse is identity 0.02s
+==> X com.example.ScalaCheckMUnitSuite.intentionally failing property 0.01s
+Failing seed: Xq5QcHcxgqqNkBJvwuEN99CKcoc9_q9Lxlwq992-h0D=
+You can reproduce this failure by adding the following override to your suite:
+at com.example.ScalaCheckMUnitSuite.$anonfun$2(ScalaCheckMUnitSuite.scala:14)
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+
+      assert.are.equal(fw.TEST_PASSED, results["com.example.ScalaCheckMUnitSuite.reverse reverse is identity"].status)
+      assert.are.equal(fw.TEST_FAILED, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].status)
+      assert.are.equal(13, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].line)
+      assert.is_not_nil(results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].message:match("Failing seed:"))
+    end)
+  end)
 end)

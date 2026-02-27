@@ -245,73 +245,131 @@ function M.parse_stdout_results(output, tree)
         table.insert(lines, line)
     end
 
-    local function find_line_in_trace(start_idx, file_pattern)
-        -- TODO: arbitrary +15 looks hacky
-        for j = start_idx, math.min(start_idx + 15, #lines) do
-            local trace_line = lines[j] or ""
-            local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
-
-            if line_num and trace_line:find(file_pattern, 1, true) then
-                return tonumber(line_num)
+    local function extract_line_number_from_detail(detail, matched_file)
+        local trace_file, trace_line = detail:match("%(([^:]+%.scala):(%d+)%)")
+        if trace_file and trace_line then
+            if not matched_file or utils.get_file_name(trace_file) == matched_file then
+                return tonumber(trace_line) - 1
             end
         end
+
+        local plain_file, plain_line = detail:match("at%s+([^:]+%.scala):(%d+)%s*$")
+        if plain_file and plain_line then
+            if not matched_file or utils.get_file_name(plain_file) == matched_file then
+                return tonumber(plain_line) - 1
+            end
+        end
+
         return nil
     end
 
-    for i, line in ipairs(lines) do
-        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$")
-        if pass_name then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                local pos_matches = pos_name and pass_name:find(pos_name, 1, true)
-                local interpolated_match = pos_name
-                    and utils.matches_with_interpolation(pass_name, pos_name, {
-                        anchor_start = false,
-                        anchor_end = true,
-                    })
-                if pos_matches or interpolated_match then
-                    results[pos_id] = { status = TEST_PASSED }
-                end
-            end
+    local function is_test_result_line(line)
+        return line:match("^%s*%+%s+.+%s+%d+%.%d+s$")
+            or line:match("^%s*%+%s+.+%s+%d+ms$")
+            or line:match("^==>%s+X%s+.+$")
+    end
+
+    local function parse_test_path(line)
+        local fail_line = line:match("^==>%s+X%s+(.+)$")
+        if not fail_line then
+            return nil
         end
 
-        local fail_line = line:match("^==> X (.+)$")
-        if fail_line then
-            local test_path = fail_line:match("^(.+)  %d+%.%d+s")
-            if test_path then
-                for pos_id, pos in pairs(positions) do
-                    local pos_name = utils.get_position_name(pos) or pos.name
-                    local matched_file = utils.get_file_name(pos.path)
-                    local pos_matches = pos_name and test_path:find(pos_name, 1, true)
-                    local interpolated_match = pos_name
-                        and utils.matches_with_interpolation(test_path, pos_name, {
-                            anchor_start = false,
-                            anchor_end = true,
-                        })
-                    if pos_matches or interpolated_match then
-                        local line_num, msg = fail_line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
-                        if line_num and msg then
-                            results[pos_id] = {
-                                status = TEST_FAILED,
-                                errors = { { message = msg, line = tonumber(line_num) - 1 } },
-                            }
-                        else
-                            local exc = fail_line:match("%s+([%w%.$]+: .+)$")
-                            if exc then
-                                local trace_line = find_line_in_trace(i + 1, matched_file or "")
-                                results[pos_id] = {
-                                    status = TEST_FAILED,
-                                    errors = { { message = exc, line = trace_line } },
-                                }
-                            else
-                                results[pos_id] = { status = TEST_FAILED, errors = {} }
-                            end
-                        end
-                        break
-                    end
-                end
+        local test_path = fail_line:match("^(.+)%s+%d+%.%d+s$")
+        if not test_path then
+            test_path = fail_line:match("^(.+)%s+%d+ms$")
+        end
+
+        return test_path or fail_line
+    end
+
+    local function find_matching_positions(test_path)
+        local matched = {}
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local pos_matches = pos_name and test_path:find(pos_name, 1, true)
+            local interpolated_match = pos_name
+                and utils.matches_with_interpolation(test_path, pos_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matched, { id = pos_id, file = utils.get_file_name(pos.path) })
             end
         end
+        return matched
+    end
+
+    local index = 1
+    while index <= #lines do
+        local line = lines[index]
+        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$") or line:match("^%s*%+%s*(.+)%s+%d+ms$")
+        if pass_name then
+            local matched = find_matching_positions(pass_name)
+            for _, pos in ipairs(matched) do
+                results[pos.id] = { status = TEST_PASSED }
+            end
+            index = index + 1
+            goto continue
+        end
+
+        local test_path = parse_test_path(line)
+        if test_path then
+            local matched = find_matching_positions(test_path)
+            local fail_line_num, fail_msg = line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
+            local fallback_message = line:match("^==>%s+X%s+.+%s+([%w%.$]+: .+)$")
+
+            local detail_messages = {}
+            local detail_line = nil
+            local lookahead = index + 1
+            while lookahead <= #lines do
+                local detail = lines[lookahead]
+                if is_test_result_line(detail) then
+                    break
+                end
+
+                local trimmed_detail = utils.string_trim(detail)
+                if trimmed_detail ~= "" then
+                    table.insert(detail_messages, trimmed_detail)
+                    if not detail_line then
+                        local parsed_line = nil
+                        for _, pos in ipairs(matched) do
+                            parsed_line = extract_line_number_from_detail(trimmed_detail, pos.file)
+                            if parsed_line ~= nil then
+                                break
+                            end
+                        end
+                        detail_line = parsed_line
+                    end
+                end
+
+                lookahead = lookahead + 1
+            end
+
+            for _, pos in ipairs(matched) do
+                if fail_line_num and fail_msg then
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = fail_msg, line = tonumber(fail_line_num) - 1 } },
+                    }
+                else
+                    local message = table.concat(detail_messages, "\n")
+                    if message == "" then
+                        message = fallback_message or "munit failure"
+                    end
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = message, line = detail_line } },
+                    }
+                end
+            end
+
+            index = lookahead
+            goto continue
+        end
+
+        index = index + 1
+        ::continue::
     end
 
     local global_failure = nil
