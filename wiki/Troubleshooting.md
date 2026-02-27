@@ -133,6 +133,21 @@ Common issues and solutions when using neotest-scala.
 
 ---
 
+### "Debug nearest test" Runs the Whole File
+
+**Symptoms**: You run debug on nearest test, but the entire test file is launched.
+
+**Behavior**:
+- This is currently intentional.
+- neotest-scala uses file-level DAP fallback for test nodes to avoid hangs from fragile per-test selector payloads.
+
+**What still works**:
+1. File-level debug
+2. Namespace/class debug
+3. Reliable DAP session startup for nearest test requests
+
+---
+
 ### "Compilation failed" Error
 
 **Symptoms**: Tests show compilation failure

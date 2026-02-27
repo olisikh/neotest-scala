@@ -96,7 +96,7 @@ When you run a test with the `dap` strategy, neotest-scala:
 2. **Builds a debug configuration** appropriate for the test type:
    - **File**: Uses `runType = "testFile"`
    - **Namespace/Class**: Uses `testClass` parameter
-   - **Individual Test**: Uses `ScalaTestSuitesDebugRequest` with test selectors
+   - **Individual Test**: Falls back to file-level debug (`runType = "testFile"`) for reliability
 
 3. **Starts the debugger** via nvim-dap
 
@@ -135,32 +135,25 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "from_lens",
+  name = "NeotestScala",
   metals = {
-    target = { uri = "file:/project-root/?id=project-test" },
-    requestData = {
-      suites = {
-        {
-          className = "com.example.MyTestSuite",
-          tests = { "my test name" },
-        },
-      },
-      jvmOptions = {},
-      environmentVariables = {},
-    },
+    runType = "testFile",
+    path = "/path/to/TestFile.scala",
   },
 }
 ```
+
+> This is an intentional quick-win fallback to avoid hangs caused by fragile per-test selector payloads.
 
 ## Debugging Support by Library
 
 | Library | Single Test Debug | Class Debug | Notes |
 |---------|-------------------|-------------|-------|
-| ScalaTest | ✅ | ✅ | Full support |
-| munit | ✅ | ✅ | Full support |
-| specs2 | ✅ | ✅ | Full support |
-| utest | ❌ | ✅ | No `TestSelector` implementation |
-| zio-test | ✅ | ✅ | Full support |
+| ScalaTest | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| munit | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| specs2 | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| utest | ⚠️ File-level fallback | ✅ | Also limited by no `TestSelector` implementation |
+| zio-test | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
 
 ### utest Limitation
 

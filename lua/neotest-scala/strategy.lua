@@ -1,6 +1,7 @@
 local utils = require("neotest-scala.utils")
 
 local M = {}
+local did_notify_test_fallback = false
 
 ---@class neotest-scala.StrategyGetConfigOpts
 ---@field strategy string|nil
@@ -13,10 +14,8 @@ local M = {}
 function M.get_config(opts)
     local strategy = opts.strategy
     local tree = opts.tree
-    local project = opts.project
-    local root = opts.root
     local position = tree:data()
-    if strategy == "integrated" then
+    if strategy ~= "dap" then
         return nil
     end
 
@@ -44,23 +43,20 @@ function M.get_config(opts)
     end
 
     if position.type == "test" then
-        local parent = tree:parent()
-        if not parent then
-            return nil
+        if not did_notify_test_fallback then
+            did_notify_test_fallback = true
+            vim.notify(
+                "neotest-scala: DAP nearest test is running at file scope for reliability.",
+                vim.log.levels.INFO
+            )
         end
-        local parent_data = parent:data()
-
-        metals_args = {
-            target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
-            requestData = {
-                suites = {
-                    {
-                        className = utils.get_package_name(parent_data.path) .. parent_data.name,
-                        tests = { utils.get_position_name(position) },
-                    },
-                },
-                jvmOptions = {},
-                environmentVariables = {},
+        return {
+            type = "scala",
+            request = "launch",
+            name = "NeotestScala",
+            metals = {
+                runType = "testFile",
+                path = position.path,
             },
         }
     end
@@ -75,6 +71,10 @@ function M.get_config(opts)
     end
 
     return nil
+end
+
+function M.reset_run_state()
+    did_notify_test_fallback = false
 end
 
 return M
