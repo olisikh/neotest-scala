@@ -2,7 +2,8 @@ package com.example
 
 import utest._
 
-object UtestInterpolatedSuite extends TestSuite {
+object UTestInterpolatedSuite extends TestSuite {
+
   private val baseName = "dynamic-case"
 
   val tests = Tests {
