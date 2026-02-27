@@ -209,6 +209,31 @@ describe("munit", function()
         assert.are.equal("com.example.MySpec.should pass", captured_test_path)
       end)
 
+      it("uses suite path for bloop single-test runs", function()
+        local namespace_tree = mock_tree({
+          type = "namespace",
+          name = "MySpec",
+          path = "/project/src/test/scala/com/example/MySpec.scala",
+        })
+
+        local test_tree = mock_tree({
+          type = "test",
+          name = '"should pass"',
+          path = "/project/src/test/scala/com/example/MySpec.scala",
+        }, namespace_tree)
+
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = test_tree,
+          name = "should pass",
+          extra_args = {},
+          build_tool = "bloop",
+        })
+
+        assert.are.equal("com.example.MySpec", captured_test_path)
+      end)
+
       it("handles nested tests with parent test", function()
         local namespace_tree = mock_tree({
           type = "namespace",

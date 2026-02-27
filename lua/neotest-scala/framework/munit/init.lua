@@ -122,6 +122,29 @@ local function build_test_path(tree, name)
     return nil
 end
 
+---@param tree neotest.Tree
+---@param default_path string|nil
+---@param build_tool "bloop"|"sbt"|nil
+---@return string|nil
+local function resolve_test_path_for_tool(tree, default_path, build_tool)
+    if build_tool ~= "bloop" or tree:data().type ~= "test" then
+        return default_path
+    end
+
+    local namespace_node = utils.find_node(tree, "namespace", false)
+    if not namespace_node then
+        return default_path
+    end
+
+    local namespace_data = namespace_node:data()
+    local package_name = utils.get_package_name(namespace_data.path)
+    if not package_name then
+        return default_path
+    end
+
+    return package_name .. namespace_data.name
+end
+
 ---@param line string
 ---@return boolean
 local function is_source_snippet_line(line)
@@ -287,7 +310,7 @@ function M.build_command(opts)
     local name = opts.name
     local extra_args = opts.extra_args
     local build_tool = opts.build_tool
-    local test_path = build_test_path(tree, name)
+    local test_path = resolve_test_path_for_tool(tree, build_test_path(tree, name), build_tool)
     return build.command_with_path({
         root_path = root_path,
         project = project,
