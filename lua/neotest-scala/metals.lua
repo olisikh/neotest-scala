@@ -261,7 +261,9 @@ end
 function M.cleanup()
     for key, task in pairs(running_tasks) do
         if task and task.cancel then
-            pcall(function() task:cancel() end)
+            pcall(function()
+                task:cancel()
+            end)
         end
     end
     running_tasks = {}

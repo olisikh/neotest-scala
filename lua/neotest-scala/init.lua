@@ -23,6 +23,10 @@ local adapter = { name = "neotest-scala" }
 
 adapter.root = lib.files.match_root_pattern("build.sbt")
 
+---This is a placeholder for the args function,
+---it will be overridden by passing a function or a table to the adapter setup opts.
+---The function receives an object with the path of the test file, build target info, project name and framework,
+---and should return an array of strings with extra arguments to pass to the test command.
 ---@param _ neotest-scala.AdapterArgsContext
 ---@return string[]
 local function get_args(_)
@@ -30,7 +34,6 @@ local function get_args(_)
 end
 
 local cache_build_info = true
-
 
 ---@async
 ---@param file_path string
