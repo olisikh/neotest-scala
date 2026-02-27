@@ -138,11 +138,16 @@ Diagnostics are automatically displayed when tests fail, making it easy to ident
 
 ## Debugging
 
-Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
-For reliability, "debug nearest test" currently runs at file scope (test file debug) instead of strict per-test selectors. \
-Class/file debug flows are unchanged. \
-utest still doesn't support strict single-test debugging because it doesn't implement `sbt.testing.TestSelector`. \
-To run tests with debugger pass `strategy = "dap"` when running neotest:
+Plugin supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)).
+
+Current DAP behavior:
+- `debug nearest test` runs at **file scope** for reliability.
+- Class/file debug flows are supported.
+- Strict per-test debug is still limited (notably for `utest`, which has no `sbt.testing.TestSelector`).
+
+For detailed limitations and troubleshooting, see [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md).
+
+To run tests with debugger, pass `strategy = "dap"` when running neotest:
 
 ```lua
 require('neotest').run.run({strategy = 'dap'})

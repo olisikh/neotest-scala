@@ -84,6 +84,21 @@ end, { desc = "Debug nearest test" })
 :lua require('neotest').run.run({strategy = 'dap'})
 ```
 
+## Current Limitations
+
+DAP support currently prioritizes reliable session startup over strict per-test targeting:
+
+1. **Nearest test debug runs at file scope**
+   - Debugging a test node launches `metals.runType = "testFile"` for that file.
+2. **Per-test DAP selectors are intentionally disabled**
+   - This avoids fragile selector payloads and hanging sessions.
+3. **Metals controls the underlying debug backend**
+   - neotest-scala cannot force Metals DAP to use a specific backend.
+4. **stdout diagnostics assume ordered output**
+   - If framework output is interleaved or reordered, diagnostic attribution may be imprecise.
+5. **utest has an upstream selector limitation**
+   - `utest` does not implement `sbt.testing.TestSelector`, so strict single-test debug is not available.
+
 ## How It Works
 
 When you run a test with the `dap` strategy, neotest-scala:
