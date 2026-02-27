@@ -4,6 +4,13 @@ local junit = require("neotest-scala.junit")
 local build = require("neotest-scala.build")
 
 local M = {}
+
+---@param strategy table|nil
+---@return boolean
+local function is_dap_run(strategy)
+    return type(strategy) == "table" and strategy.type == "scala" and strategy.request == "launch"
+end
+
 local function collect_namespaces(framework, node, report_prefix)
     local ns_data = node:data()
     local namespaces = {}
@@ -52,6 +59,13 @@ function M.collect(spec, result, node)
     if not framework then
         vim.print("[neotest-scala] Test framework '" .. spec.env.framework .. "' is not supported")
         return {}
+    end
+
+    if is_dap_run(spec.strategy) then
+        local parsed = framework.parse_stdout_results(log, node)
+        if type(parsed) == "table" and next(parsed) ~= nil then
+            return parsed
+        end
     end
 
     -- Branch on build tool

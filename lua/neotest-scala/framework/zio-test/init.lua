@@ -243,53 +243,55 @@ function M.parse_stdout_results(output, tree)
 
     output = utils.string_remove_ansi(output)
 
-    -- Build position lookup by file name
-    local positions_by_file = {}
+    -- Build position lookup for matching
+    local positions = {}
     for _, node in tree:iter_nodes() do
         local data = node:data()
         if data.type == "test" then
-            local file_name = utils.get_file_name(data.path)
-            if not positions_by_file[file_name] then
-                positions_by_file[file_name] = {}
-            end
-            table.insert(positions_by_file[file_name], {
-                id = data.id,
-                range = data.range,
-            })
+            positions[data.id] = data
         end
     end
 
-    -- Find the most specific (narrowest) position containing a JVM line number
-    local function find_position_for_line(file_name, jvm_line_num)
-        local positions = positions_by_file[file_name]
-        if not positions then
-            return nil
-        end
-
-        local line_0idx = jvm_line_num - 1
-        local best_match = nil
-        local best_span = math.huge
-
-        for _, pos in ipairs(positions) do
-            if pos.range then
-                if pos.range[1] <= line_0idx and line_0idx <= pos.range[3] then
-                    local span = pos.range[3] - pos.range[1]
-                    if span < best_span then
-                        best_match = pos
-                        best_span = span
-                    end
-                end
+    ---@param test_name string
+    ---@return string[]
+    local function find_matching_position_ids(test_name)
+        local matched_ids = {}
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local normalized_name = pos_name and pos_name:gsub("['\"]", "")
+            local pos_matches = normalized_name and test_name:find(normalized_name, 1, true)
+            local interpolated_match = normalized_name
+                and utils.matches_with_interpolation(test_name, normalized_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matched_ids, pos_id)
             end
         end
-        return best_match
+        return matched_ids
     end
 
-    local lines = {}
-    for line in output:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
+    ---@param pos_id string
+    ---@param default_message string
+    ---@return neotest.Result
+    local function ensure_failed_result(pos_id, default_message)
+        local result = results[pos_id]
+        if not result or result.status ~= TEST_FAILED then
+            result = { status = TEST_FAILED, errors = {} }
+            results[pos_id] = result
+        elseif not result.errors then
+            result.errors = {}
+        end
+
+        if #result.errors == 0 then
+            table.insert(result.errors, { message = default_message, line = nil })
+        end
+
+        return result
     end
 
-    local failed_ids = {}
+    local current_failed_ids = nil
 
     -- Detect compilation or bootstrapping failures
     local global_failure = nil
@@ -301,44 +303,56 @@ function M.parse_stdout_results(output, tree)
         global_failure = "Suite initialization failed"
     end
 
-    for i, line in ipairs(lines) do
-        -- Pattern 1: "at /full/path/File.scala:22" (assertion failures)
-        local full_path, line_num_str = line:match("at ([^:]+%.scala):(%d+)%s*$")
-
-        -- Pattern 2: "at pkg.Class(File.scala:33)" (stack traces)
-        if not full_path then
-            full_path, line_num_str = line:match("%(([^:]+%.scala):(%d+)%)")
+    for line in output:gmatch("[^\r\n]+") do
+        local pass_name = line:match("^%s*%+%s*(.+)$")
+        if pass_name then
+            local matched_ids = find_matching_position_ids(pass_name)
+            for _, pos_id in ipairs(matched_ids) do
+                results[pos_id] = { status = TEST_PASSED }
+            end
+            current_failed_ids = nil
         end
 
-        if full_path and line_num_str then
-            local file_name = utils.get_file_name(full_path)
-            local line_num = tonumber(line_num_str)
-            local pos = find_position_for_line(file_name, line_num)
+        local fail_name = line:match("^%s*%-%s*(.+)$")
+        if fail_name then
+            local matched_ids = find_matching_position_ids(fail_name)
+            for _, pos_id in ipairs(matched_ids) do
+                ensure_failed_result(pos_id, "Test failed")
+            end
+            current_failed_ids = #matched_ids > 0 and matched_ids or nil
+        end
 
-            if pos and not failed_ids[pos.id] then
-                -- Look backwards for error message
-                local err_msg = "Test failed"
-                for j = i - 1, math.max(1, i - 10), -1 do
-                    local prev = lines[j]
-                    -- Assertion message: "✗ message"
-                    local msg = prev:match("^%s*✗ (.+)$")
-                    if msg then
-                        err_msg = msg
-                        break
-                    end
-                    -- Exception message: "...Exception: message"
-                    local exc = prev:match("Exception[^:]*:%s*(.+)$")
-                    if exc then
-                        err_msg = exc
-                        break
-                    end
-                end
+        local assertion_message = line:match("^%s*✗%s*(.+)$")
+        if assertion_message and current_failed_ids then
+            for _, pos_id in ipairs(current_failed_ids) do
+                local result = ensure_failed_result(pos_id, assertion_message)
+                result.errors[1].message = assertion_message
+            end
+        end
 
-                results[pos.id] = {
-                    status = TEST_FAILED,
-                    errors = { { message = err_msg, line = line_num - 1 } }, -- 0-indexed for neotest
-                }
-                failed_ids[pos.id] = true
+        local throwable_type, throwable_message = line:match("^%s*([%w%._$]+):%s*(.*)$")
+        if
+            throwable_type
+            and current_failed_ids
+            and (throwable_type:match("Exception$") or throwable_type:match("Error$"))
+        then
+            local message = throwable_type .. (throwable_message ~= "" and ": " .. throwable_message or "")
+            for _, pos_id in ipairs(current_failed_ids) do
+                local result = ensure_failed_result(pos_id, message)
+                result.errors[1].message = message
+            end
+        end
+
+        local _, line_num_str = line:match("at ([^:]+%.scala):(%d+)%s*$")
+        if not line_num_str then
+            _, line_num_str = line:match("%(([^:]+%.scala):(%d+)%)")
+        end
+
+        if line_num_str and current_failed_ids then
+            local line_num = tonumber(line_num_str) - 1
+            for _, pos_id in ipairs(current_failed_ids) do
+                local result = ensure_failed_result(pos_id, "Test failed")
+                result.errors[1].line = line_num
             end
         end
     end
@@ -350,13 +364,12 @@ function M.parse_stdout_results(output, tree)
         default_error = { message = global_failure }
     end
 
-    for _, node in tree:iter_nodes() do
-        local data = node:data()
-        if data.type == "test" and not results[data.id] then
+    for pos_id in pairs(positions) do
+        if not results[pos_id] then
             if default_error then
-                results[data.id] = { status = default_status, errors = { default_error } }
+                results[pos_id] = { status = default_status, errors = { default_error } }
             else
-                results[data.id] = { status = default_status }
+                results[pos_id] = { status = default_status }
             end
         end
     end

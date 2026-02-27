@@ -178,6 +178,9 @@ function adapter.build_spec(args)
         extra_args = extra_args,
         build_tool = build_tool,
     })
+    if strategy.reset_run_state then
+        strategy.reset_run_state()
+    end
     local strategy_config = strategy.get_config({
         strategy = args.strategy,
         tree = args.tree,

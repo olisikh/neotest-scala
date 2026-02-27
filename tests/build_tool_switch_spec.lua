@@ -92,6 +92,46 @@ describe("build tool switch behavior", function()
       assert.is_true(parse_called)
       assert.are.same({ ["fallback.id"] = { status = TEST_PASSED } }, collected)
     end)
+
+    it("uses stdout parsing for dap runs even when build tool is sbt", function()
+      local results = require("neotest-scala.results")
+
+      local parse_called = false
+
+      H.mock_fn("neotest.lib", "files", {
+        read = function()
+          return "FunSpec output"
+        end,
+      })
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          name = "scalatest",
+          parse_stdout_results = function()
+            parse_called = true
+            return { ["com.example.FunSpec.passing"] = { status = TEST_PASSED } }
+          end,
+        }
+      end)
+
+      local spec = {
+        strategy = {
+          type = "scala",
+          request = "launch",
+        },
+        env = {
+          framework = "scalatest",
+          root_path = "/tmp/project",
+          build_tool = "sbt",
+          build_target_info = {},
+        },
+      }
+
+      local collected = results.collect(spec, { output = "/tmp/out.log" }, {})
+
+      assert.is_true(parse_called)
+      assert.are.same({ ["com.example.FunSpec.passing"] = { status = TEST_PASSED } }, collected)
+    end)
   end)
 
   describe("adapter build_spec", function()
@@ -336,6 +376,107 @@ describe("build tool switch behavior", function()
 
       assert.are.equal("sbt", captured_tool)
       assert.are.equal("sbt", spec.env.build_tool)
+    end)
+
+    it("uses file-level dap strategy when debugging nearest test", function()
+      local adapter = require("neotest-scala")
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "sbt"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      local spec = adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        strategy = "dap",
+        extra_args = {},
+      })
+
+      assert.are.equal("scala", spec.strategy.type)
+      assert.are.equal("testFile", spec.strategy.metals.runType)
+      assert.are.equal(vim.uri_from_fname("/tmp/project/src/test/scala/ExampleSpec.scala"), spec.strategy.metals.path)
+      assert.is_nil(spec.strategy.metals.requestData)
+    end)
+
+    it("does not attach debug strategy when strategy is not dap", function()
+      local adapter = require("neotest-scala")
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "sbt"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      local spec = adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        strategy = "integrated",
+        extra_args = {},
+      })
+
+      assert.is_nil(spec.strategy)
     end)
   end)
 

@@ -1,6 +1,33 @@
 local utils = require("neotest-scala.utils")
 
 local M = {}
+local did_notify_test_fallback = false
+local TEST_FALLBACK_MESSAGE = "neotest-scala: DAP nearest test is running at file scope for reliability."
+
+local function notify_test_fallback()
+    if vim.in_fast_event and vim.in_fast_event() then
+        vim.schedule(function()
+            vim.notify(TEST_FALLBACK_MESSAGE, vim.log.levels.INFO)
+        end)
+        return
+    end
+
+    vim.notify(TEST_FALLBACK_MESSAGE, vim.log.levels.INFO)
+end
+
+---@param file_path string
+---@return table
+local function build_test_file_config(file_path)
+    return {
+        type = "scala",
+        request = "launch",
+        name = "Run Test",
+        metals = {
+            runType = "testFile",
+            path = vim.uri_from_fname(file_path),
+        },
+    }
+end
 
 ---@class neotest-scala.StrategyGetConfigOpts
 ---@field strategy string|nil
@@ -13,10 +40,8 @@ local M = {}
 function M.get_config(opts)
     local strategy = opts.strategy
     local tree = opts.tree
-    local project = opts.project
-    local root = opts.root
     local position = tree:data()
-    if strategy == "integrated" then
+    if strategy ~= "dap" then
         return nil
     end
 
@@ -25,15 +50,7 @@ function M.get_config(opts)
     end
 
     if position.type == "file" then
-        return {
-            type = "scala",
-            request = "launch",
-            name = "NeotestScala",
-            metals = {
-                runType = "testFile",
-                path = position.path,
-            },
-        }
+        return build_test_file_config(position.path)
     end
 
     local metals_args = nil
@@ -44,25 +61,11 @@ function M.get_config(opts)
     end
 
     if position.type == "test" then
-        local parent = tree:parent()
-        if not parent then
-            return nil
+        if not did_notify_test_fallback then
+            did_notify_test_fallback = true
+            notify_test_fallback()
         end
-        local parent_data = parent:data()
-
-        metals_args = {
-            target = { uri = "file:" .. root .. "/?id=" .. project .. "-test" },
-            requestData = {
-                suites = {
-                    {
-                        className = utils.get_package_name(parent_data.path) .. parent_data.name,
-                        tests = { utils.get_position_name(position) },
-                    },
-                },
-                jvmOptions = {},
-                environmentVariables = {},
-            },
-        }
+        return build_test_file_config(position.path)
     end
 
     if metals_args ~= nil then
@@ -75,6 +78,10 @@ function M.get_config(opts)
     end
 
     return nil
+end
+
+function M.reset_run_state()
+    did_notify_test_fallback = false
 end
 
 return M

@@ -362,4 +362,74 @@ describe("zio-test", function()
       end)
     end)
   end)
+
+  describe("parse_stdout_results", function()
+    local function mk_tree(test_positions)
+      local nodes = {}
+      for _, pos in ipairs(test_positions) do
+        table.insert(nodes, {
+          data = function()
+            return pos
+          end,
+        })
+      end
+
+      return {
+        iter_nodes = function()
+          local i = 0
+          return function()
+            i = i + 1
+            if i <= #nodes then
+              return i, nodes[i]
+            end
+          end
+        end,
+      }
+    end
+
+    it("maps ordered stdout blocks to passing and failing tests", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.ZioSpec.zio success",
+          name = '"zio success"',
+          path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.ZioSpec.zio failure",
+          name = '"zio failure"',
+          path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.ZioSpec.zio crash",
+          name = '"zio crash"',
+          path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        },
+      })
+
+      local output = [[
++ zio success
+- zio failure
+  ✗ expected true but got false
+  at /project/src/test/scala/com/example/ZioSpec.scala:14
+- zio crash
+  java.lang.RuntimeException: boom
+  at com.example.ZioSpec$.run(ZioSpec.scala:18)
+]]
+
+      local results = zio_test.parse_stdout_results(output, tree)
+
+      assert.are.equal("passed", results["com.example.ZioSpec.zio success"].status)
+
+      assert.are.equal("failed", results["com.example.ZioSpec.zio failure"].status)
+      assert.are.equal(13, results["com.example.ZioSpec.zio failure"].errors[1].line)
+      assert.are.equal("expected true but got false", results["com.example.ZioSpec.zio failure"].errors[1].message)
+
+      assert.are.equal("failed", results["com.example.ZioSpec.zio crash"].status)
+      assert.are.equal(17, results["com.example.ZioSpec.zio crash"].errors[1].line)
+      assert.are.equal("java.lang.RuntimeException: boom", results["com.example.ZioSpec.zio crash"].errors[1].message)
+    end)
+  end)
 end)

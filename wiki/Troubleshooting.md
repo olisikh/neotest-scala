@@ -133,6 +133,40 @@ Common issues and solutions when using neotest-scala.
 
 ---
 
+### "Debug nearest test" Runs the Whole File
+
+**Symptoms**: You run debug on nearest test, but the entire test file is launched.
+
+**Behavior**:
+- This is currently intentional.
+- neotest-scala uses file-level DAP fallback for test nodes to avoid hangs from fragile per-test selector payloads.
+
+**What still works**:
+1. File-level debug
+2. Namespace/class debug
+3. Reliable DAP session startup for nearest test requests
+
+---
+
+### DAP Diagnostics Look Misattributed
+
+**Symptoms**: Failures are attached to the wrong test, or diagnostics look too generic during debug runs.
+
+**Cause**:
+- DAP result extraction relies on stdout parsing.
+- Current parsers assume stdout arrives in-order.
+- If test framework output is interleaved/reordered (for example with parallel execution), attribution can degrade.
+
+**Current status**:
+- This is a known limitation of the current DAP quick-win mode.
+- neotest-scala currently favors reliable debug startup over complex out-of-order reconstruction.
+
+**Workarounds**:
+1. Re-run with normal test strategy (non-DAP) when you need precise diagnostics.
+2. Debug at file/class scope and inspect stack traces directly in output.
+
+---
+
 ### "Compilation failed" Error
 
 **Symptoms**: Tests show compilation failure

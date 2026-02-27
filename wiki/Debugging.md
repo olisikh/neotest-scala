@@ -29,16 +29,12 @@ neotest-scala supports debugging tests with [nvim-dap](https://github.com/mfusse
 ```lua
 local metals_config = require('metals').bare_config()
 
--- Enable DAP integration
-metals_config.settings = {
-  enableSemanticHighlighting = true,
-}
-
 -- Auto-attach Metals
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "scala", "sbt" },
   callback = function()
     require("metals").initialize_or_attach(metals_config)
+    require("metals").setup_dap()
   end,
   group = vim.api.nvim_create_augroup("nvim-metals", { clear = true }),
 })
@@ -88,6 +84,21 @@ end, { desc = "Debug nearest test" })
 :lua require('neotest').run.run({strategy = 'dap'})
 ```
 
+## Current Limitations
+
+DAP support currently prioritizes reliable session startup over strict per-test targeting:
+
+1. **Nearest test debug runs at file scope**
+   - Debugging a test node launches `metals.runType = "testFile"` for that file.
+2. **Per-test DAP selectors are intentionally disabled**
+   - This avoids fragile selector payloads and hanging sessions.
+3. **Metals controls the underlying debug backend**
+   - neotest-scala cannot force Metals DAP to use a specific backend.
+4. **stdout diagnostics assume ordered output**
+   - If framework output is interleaved or reordered, diagnostic attribution may be imprecise.
+5. **utest has an upstream selector limitation**
+   - `utest` does not implement `sbt.testing.TestSelector`, so strict single-test debug is not available.
+
 ## How It Works
 
 When you run a test with the `dap` strategy, neotest-scala:
@@ -96,7 +107,7 @@ When you run a test with the `dap` strategy, neotest-scala:
 2. **Builds a debug configuration** appropriate for the test type:
    - **File**: Uses `runType = "testFile"`
    - **Namespace/Class**: Uses `testClass` parameter
-   - **Individual Test**: Uses `ScalaTestSuitesDebugRequest` with test selectors
+   - **Individual Test**: Falls back to file-level debug (`runType = "testFile"`) for reliability
 
 3. **Starts the debugger** via nvim-dap
 
@@ -108,10 +119,10 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "NeotestScala",
+  name = "Run Test",
   metals = {
     runType = "testFile",
-    path = "/path/to/TestFile.scala",
+    path = "file:///path/to/TestFile.scala",
   },
 }
 ```
@@ -135,32 +146,25 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "from_lens",
+  name = "Run Test",
   metals = {
-    target = { uri = "file:/project-root/?id=project-test" },
-    requestData = {
-      suites = {
-        {
-          className = "com.example.MyTestSuite",
-          tests = { "my test name" },
-        },
-      },
-      jvmOptions = {},
-      environmentVariables = {},
-    },
+    runType = "testFile",
+    path = "file:///path/to/TestFile.scala",
   },
 }
 ```
+
+> This is an intentional quick-win fallback to avoid hangs caused by fragile per-test selector payloads.
 
 ## Debugging Support by Library
 
 | Library | Single Test Debug | Class Debug | Notes |
 |---------|-------------------|-------------|-------|
-| ScalaTest | ✅ | ✅ | Full support |
-| munit | ✅ | ✅ | Full support |
-| specs2 | ✅ | ✅ | Full support |
-| utest | ❌ | ✅ | No `TestSelector` implementation |
-| zio-test | ✅ | ✅ | Full support |
+| ScalaTest | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| munit | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| specs2 | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| utest | ⚠️ File-level fallback | ✅ | Also limited by no `TestSelector` implementation |
+| zio-test | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
 
 ### utest Limitation
 
