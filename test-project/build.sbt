@@ -18,7 +18,13 @@ lazy val zioTest = module("zio-test")
 
 lazy val munit = module("munit")
   .settings(
-    libraryDependencies += "org.scalameta" %% "munit" % "0.7.29" % Test
+    libraryDependencies ++= Seq(
+      "org.scalameta" %% "munit" % "0.7.29" % Test,
+      "org.typelevel" %% "munit-cats-effect-3" % "1.0.7" % Test,
+      "com.github.poslegm" %% "munit-zio" % "0.4.0" % Test,
+      "org.scalameta" %% "munit-scalacheck" % "0.7.29" % Test,
+      "org.typelevel" %% "discipline-munit" % "2.0.0" % Test
+    )
   )
 
 lazy val scalatest = module("scalatest")
