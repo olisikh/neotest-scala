@@ -486,6 +486,8 @@ function M.parse_stdout_results(output, tree)
         global_failure = "Test suite aborted"
     elseif output:match("initializationError") then
         global_failure = "Suite initialization failed"
+    elseif output:match("No test suites were run") then
+        global_failure = "No test suites were run"
     end
 
     for pos_id in pairs(positions) do

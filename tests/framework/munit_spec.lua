@@ -703,5 +703,40 @@ values are not the same
       assert.are.equal(11, result.errors[1].line)
       assert.is_not_nil(result.errors[1].message:match("values are not the same", 1, true))
     end)
+
+    it("marks all positions failed when bloop reports no suites were run", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "CatsEffectMUnitSuite",
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      })
+
+      local test_tree = mock_tree({
+        id = "com.example.CatsEffectMUnitSuite.cats effect success",
+        type = "test",
+        name = '"cats effect success"',
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      }, nil, { test_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+The test execution was successfully closed.
+================================================================================
+Total duration: 0ms
+No test suites were run.
+================================================================================
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local result = results["com.example.CatsEffectMUnitSuite.cats effect success"]
+
+      assert.are.equal(fw.TEST_FAILED, result.status)
+      assert.are.equal("No test suites were run", result.errors[1].message)
+    end)
   end)
 end)
