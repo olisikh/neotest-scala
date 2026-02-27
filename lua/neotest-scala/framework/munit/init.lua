@@ -128,6 +128,43 @@ local function is_source_snippet_line(line)
     return line:match("^%s*%d+:%s") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
 end
 
+---@param snippet_line string
+---@return number|nil, boolean|nil
+local function parse_snippet_line_number(snippet_line)
+    local line_num_str, code = snippet_line:match("^%s*(%d+):%s*(.*)$")
+    if not line_num_str then
+        return nil
+    end
+
+    local line_num = tonumber(line_num_str)
+    if not line_num then
+        return nil
+    end
+
+    local trimmed_code = utils.string_trim(code or "")
+    local is_block_boundary = trimmed_code == "" or trimmed_code:match("{%s*$") or trimmed_code:match("^}%s*$")
+
+    return line_num - 1, is_block_boundary
+end
+
+---@param message string
+---@return number|nil
+local function extract_snippet_line_number(message)
+    local fallback_line = nil
+
+    for line in message:gmatch("[^\r\n]+") do
+        local parsed_line, is_block_boundary = parse_snippet_line_number(line)
+        if parsed_line ~= nil then
+            fallback_line = fallback_line or parsed_line
+            if not is_block_boundary then
+                return parsed_line
+            end
+        end
+    end
+
+    return fallback_line
+end
+
 ---@param line string
 ---@return boolean
 local function is_summary_boundary_line(line)
@@ -198,7 +235,11 @@ function M.build_test_result(junit_test, position)
     local message = junit_test.error_stacktrace or junit_test.error_message
 
     if message then
+        local snippet_line = extract_snippet_line_number(message)
         error.line = utils.extract_line_number(message, file_name)
+        if error.line == nil then
+            error.line = snippet_line
+        end
         error.message = sanitize_failure_message(message, file_name)
     end
 
@@ -396,6 +437,11 @@ function M.parse_stdout_results(output, tree)
                         for _, pos in ipairs(matched) do
                             parsed_line = extract_line_number_from_detail(trimmed_detail, pos.file)
                             if parsed_line ~= nil then
+                                break
+                            end
+                            local snippet_line, is_block_boundary = parse_snippet_line_number(trimmed_detail)
+                            if snippet_line ~= nil and not is_block_boundary then
+                                parsed_line = snippet_line
                                 break
                             end
                         end

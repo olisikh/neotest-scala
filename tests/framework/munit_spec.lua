@@ -499,6 +499,26 @@ Values are not the same
         assert.is_nil(result.errors[1].message:match("12:%s+assertEquals", 1, false))
         assert.is_not_nil(result.errors[1].message:match("Values are not the same", 1, true))
       end)
+
+      it("extracts line from snippet when stacktrace has no file reference", function()
+        local junit_test = {
+          error_stacktrace = [[
+munit.ComparisonFailException: assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+values are not the same
+]],
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.are.equal(11, result.errors[1].line)
+        assert.is_not_nil(result.errors[1].message:match("values are not the same", 1, true))
+      end)
     end)
   end)
 
@@ -639,6 +659,43 @@ Failed:
       assert.is_nil(diagnostic:match("Execution took", 1, true))
       assert.is_nil(diagnostic:match("The test execution was successfully closed", 1, true))
       assert.is_nil(diagnostic:match("discipline style failure", 1, true))
+    end)
+
+    it("uses snippet line when no stack frame line is present", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local fail_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+values are not the same
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local result = results["com.example.DisciplineMUnitSuite.discipline style failure"]
+
+      assert.are.equal(fw.TEST_FAILED, result.status)
+      assert.are.equal(11, result.errors[1].line)
+      assert.is_not_nil(result.errors[1].message:match("values are not the same", 1, true))
     end)
   end)
 end)
