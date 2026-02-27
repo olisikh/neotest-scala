@@ -52,3 +52,5 @@ metals.sbt
 
 # Other
 .DS_Store
+.nvim-test-state
+.nvimlog
