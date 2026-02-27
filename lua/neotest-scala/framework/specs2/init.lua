@@ -43,7 +43,7 @@ local function parse_mutable_positions(path)
 
       (infix_expression
         left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init ">>" "in" "!")
+        operator: (_) @spec_init (#any-of? @spec_init ">>" "in")
         right: (_)
       ) @test.definition
     ]]
@@ -67,14 +67,10 @@ function M.discover_positions(opts)
     local content = opts.content
 
     if style == "text" then
-        local textspec_tree = textspec.discover_positions({
+        return textspec.discover_positions({
             path = path,
             content = content,
         })
-
-        if textspec_tree then
-            return textspec_tree
-        end
     end
 
     return parse_mutable_positions(path)

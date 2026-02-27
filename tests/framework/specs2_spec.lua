@@ -19,20 +19,20 @@ describe("specs2", function()
       H.restore_mocks()
     end)
 
-    it("discovers mutable spec tests including bang operator", function()
+    it("discovers mutable spec tests with in/>> operators", function()
       local tree = specs2.discover_positions({
         path = "/project/src/test/scala/com/example/MutableSpec.scala",
         content = [[
           class MutableSpec extends Specification {
             "ok" >> { 1 must_== 1 }
-            "failing" ! { 1 must_== 2 }
+            "failing" in { 1 must_== 2 }
           }
         ]],
       })
 
       assert.is_not_nil(tree)
       assert.are.equal(1, #parse_positions_calls)
-      assert.is_true(parse_positions_calls[1].query:find('"!"', 1, true) ~= nil)
+      assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
     end)
 
     it("uses textspec parser when references are present", function()
@@ -55,7 +55,7 @@ describe("specs2", function()
       assert.are.equal(0, #parse_positions_calls)
     end)
 
-    it("falls back to mutable parsing when textspec parser finds no refs", function()
+    it("returns nil when textspec parser finds no refs", function()
       H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
         return nil
       end)
@@ -75,9 +75,8 @@ describe("specs2", function()
         ]],
       })
 
-      assert.is_not_nil(tree)
-      assert.are.equal(1, #parse_positions_calls)
-      assert.are.equal("/project/src/test/scala/com/example/TextWithoutRefsSpec.scala", parse_positions_calls[1].path)
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
     end)
   end)
 
