@@ -167,10 +167,15 @@ function M.build_namespace(ns_node, report_prefix, node)
         namespace = id,
         report_path = report_prefix .. "TEST-" .. package_name .. id .. ".xml",
         tests = {},
+        all_tests = {},
     }
 
     for _, n in node:iter_nodes() do
         table.insert(namespace.tests, n)
+    end
+
+    for _, n in ns_node:iter_nodes() do
+        table.insert(namespace.all_tests, n)
     end
 
     return namespace
@@ -188,7 +193,8 @@ local function get_ordered_namespace_tests(namespace)
     end
 
     local ordered_tests = {}
-    for _, n in ipairs(namespace.tests or {}) do
+    local source_tests = namespace.all_tests or namespace.tests or {}
+    for _, n in ipairs(source_tests) do
         local position = n and n.data and n:data() or n
         if position and position.type == "test" then
             table.insert(ordered_tests, position)

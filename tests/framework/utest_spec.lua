@@ -571,6 +571,48 @@ describe("utest", function()
       assert.are.equal("failed", second_result.status)
       assert.are.equal(14, second_result.errors[1].line)
     end)
+
+    it("maps numeric junit names from namespace all_tests for single test runs", function()
+      local selected_test = {
+        id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+        type = "test",
+        range = { 14, 0, 14, 0 },
+        path = "/path/to/UTestInterpolatedSuite.scala",
+      }
+      local namespace = {
+        tests = { selected_test },
+        all_tests = {
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+            type = "test",
+            range = { 9, 0, 9, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          selected_test,
+        },
+      }
+
+      local selected_node = mock_tree(selected_test)
+      local junit_results = {
+        { namespace = "UTestInterpolatedSuite", name = "0" },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "1",
+          error_message = "assertion failed",
+          error_stacktrace = "java.lang.AssertionError: assertion failed\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:15)",
+        },
+      }
+
+      local selected_result = utest.build_position_result({
+        position = selected_test,
+        test_node = selected_node,
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+
+      assert.are.equal("failed", selected_result.status)
+      assert.are.equal(14, selected_result.errors[1].line)
+    end)
   end)
 
   describe("parse_stdout_results", function()
