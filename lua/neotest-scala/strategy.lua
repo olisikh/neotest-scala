@@ -2,6 +2,18 @@ local utils = require("neotest-scala.utils")
 
 local M = {}
 local did_notify_test_fallback = false
+local TEST_FALLBACK_MESSAGE = "neotest-scala: DAP nearest test is running at file scope for reliability."
+
+local function notify_test_fallback()
+    if vim.in_fast_event and vim.in_fast_event() then
+        vim.schedule(function()
+            vim.notify(TEST_FALLBACK_MESSAGE, vim.log.levels.INFO)
+        end)
+        return
+    end
+
+    vim.notify(TEST_FALLBACK_MESSAGE, vim.log.levels.INFO)
+end
 
 ---@class neotest-scala.StrategyGetConfigOpts
 ---@field strategy string|nil
@@ -45,10 +57,7 @@ function M.get_config(opts)
     if position.type == "test" then
         if not did_notify_test_fallback then
             did_notify_test_fallback = true
-            vim.notify(
-                "neotest-scala: DAP nearest test is running at file scope for reliability.",
-                vim.log.levels.INFO
-            )
+            notify_test_fallback()
         end
         return {
             type = "scala",

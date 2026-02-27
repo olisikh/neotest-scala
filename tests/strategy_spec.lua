@@ -1,6 +1,8 @@
 local H = require("tests.helpers")
 local strategy = require("neotest-scala.strategy")
 local original_notify = vim.notify
+local original_schedule = vim.schedule
+local original_in_fast_event = vim.in_fast_event
 
 local function mock_tree(data)
   return {
@@ -15,6 +17,8 @@ describe("strategy", function()
     H.restore_mocks()
     strategy.reset_run_state()
     vim.notify = original_notify
+    vim.schedule = original_schedule
+    vim.in_fast_event = original_in_fast_event
   end)
 
   describe("get_config", function()
@@ -128,6 +132,38 @@ describe("strategy", function()
       assert.are.equal("testFile", second_config.metals.runType)
       assert.are.equal(1, notify_calls)
       assert.is_true(notify_messages[1]:find("file scope for reliability", 1, true) ~= nil)
+    end)
+
+    it("schedules fallback notification in fast event context", function()
+      local notify_calls = 0
+      local schedule_calls = 0
+
+      vim.in_fast_event = function()
+        return true
+      end
+      vim.schedule = function(callback)
+        schedule_calls = schedule_calls + 1
+        callback()
+      end
+      vim.notify = function()
+        notify_calls = notify_calls + 1
+      end
+
+      local tree = mock_tree({
+        type = "test",
+        path = "/tmp/project/src/test/scala/com/example/MySpec.scala",
+        name = '"works"',
+      })
+
+      strategy.get_config({
+        strategy = "dap",
+        tree = tree,
+        project = "myproject",
+        root = "/tmp/project",
+      })
+
+      assert.are.equal(1, schedule_calls)
+      assert.are.equal(1, notify_calls)
     end)
   end)
 end)
