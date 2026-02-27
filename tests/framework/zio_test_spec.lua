@@ -93,6 +93,34 @@ describe("zio-test", function()
     end)
 
     describe("with error_message present", function()
+      it("strips leading '- test name' line from diagnostic message", function()
+        local junit_test = {
+          error_message = "- should return expected value\nAssertion failed\nExpected: true\nActual: false",
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        }
+
+        local result = zio_test.build_test_result(junit_test, position)
+
+        assert.are.equal("failed", result.status)
+        assert.are.equal("Assertion failed\nExpected: true\nActual: false", result.errors[1].message)
+      end)
+
+      it("removes leading indentation from each diagnostic line", function()
+        local junit_test = {
+          error_message = "- should return expected value\n    Assertion failed\n      Expected: true\n    Actual: false",
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/ZioSpec.scala",
+        }
+
+        local result = zio_test.build_test_result(junit_test, position)
+
+        assert.are.equal("failed", result.status)
+        assert.are.equal("Assertion failed\n  Expected: true\nActual: false", result.errors[1].message)
+      end)
+
       it("extracts error message from error_message", function()
         local junit_test = {
           error_message = "Some error header\nactual error message here\nat /path/to/ZioSpec.scala:42\ntrailing",

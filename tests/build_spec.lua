@@ -194,4 +194,79 @@ describe("build", function()
       assert.are.equal("bloop", tool)
     end)
   end)
+
+  describe("enforce_framework_tool", function()
+    it("forces sbt when framework does not support bloop", function()
+      local tool = build.enforce_framework_tool("bloop", "utest")
+      assert.are.equal("sbt", tool)
+    end)
+
+    it("forces sbt for zio-test on bloop", function()
+      local tool = build.enforce_framework_tool("bloop", "zio-test")
+      assert.are.equal("sbt", tool)
+    end)
+
+    it("keeps bloop when framework supports bloop", function()
+      local tool = build.enforce_framework_tool("bloop", "munit")
+      assert.are.equal("bloop", tool)
+    end)
+
+    it("keeps sbt unchanged", function()
+      local tool = build.enforce_framework_tool("sbt", "utest")
+      assert.are.equal("sbt", tool)
+    end)
+  end)
+
+  describe("sbt command batch mode", function()
+    local function mk_tree(data)
+      return {
+        data = function()
+          return data
+        end,
+      }
+    end
+
+    before_each(function()
+      H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
+        return "com.example."
+      end)
+
+      H.mock_fn("neotest-scala.utils", "find_node", function(tree, node_type)
+        local data = tree:data()
+        if node_type == "namespace" and data.type ~= "namespace" then
+          return {
+            data = function()
+              return { name = "SampleSpec" }
+            end,
+          }
+        end
+        return nil
+      end)
+    end)
+
+    it("prepends --batch for sbt command", function()
+      local cmd = build.command({
+        root_path = "/tmp/project",
+        project = "sample",
+        tree = mk_tree({ type = "namespace", name = "SampleSpec", path = "/tmp/project/src/test/scala/SampleSpec.scala" }),
+        name = "SampleSpec",
+        extra_args = nil,
+        tool_override = "sbt",
+      })
+
+      assert.are.same({ "sbt", "--batch", "sample/testOnly com.example.SampleSpec" }, cmd)
+    end)
+
+    it("does not duplicate --batch when already provided", function()
+      local cmd = build.command_with_path({
+        root_path = "/tmp/project",
+        project = "sample",
+        test_path = "com.example.SampleSpec",
+        extra_args = { "--batch", "-v" },
+        tool_override = "sbt",
+      })
+
+      assert.are.same({ "sbt", "--batch", "-v", 'sample/testOnly -- "com.example.SampleSpec"' }, cmd)
+    end)
+  end)
 end)

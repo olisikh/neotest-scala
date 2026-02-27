@@ -225,6 +225,118 @@ describe("build tool switch behavior", function()
       assert.are.equal(2, call_idx)
       assert.are.same({ "bloop" }, captured_build_info["Build server"])
     end)
+
+    it("forces sbt when framework does not support bloop", function()
+      local adapter = require("neotest-scala")
+
+      local captured_tool
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "utest-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "utest"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "utest"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "bloop"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function(opts)
+            captured_tool = opts.build_tool
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return { strategy = "integrated" }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      local spec = adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        extra_args = {},
+      })
+
+      assert.are.equal("sbt", captured_tool)
+      assert.are.equal("sbt", spec.env.build_tool)
+    end)
+
+    it("forces sbt for zio-test when detected tool is bloop", function()
+      local adapter = require("neotest-scala")
+
+      local captured_tool
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "zio-test-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "zio-test"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "zio-test"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "bloop"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function(opts)
+            captured_tool = opts.build_tool
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return { strategy = "integrated" }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      local spec = adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ZioSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        extra_args = {},
+      })
+
+      assert.are.equal("sbt", captured_tool)
+      assert.are.equal("sbt", spec.env.build_tool)
+    end)
   end)
 
   describe("metals buildTargetChanged handler", function()

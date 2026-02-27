@@ -15,7 +15,6 @@ local results = require("neotest-scala.results")
 ---@class neotest-scala.AdapterSetupOpts
 ---@field cache_build_info? boolean
 ---@field build_tool? "auto"|"bloop"|"sbt"
----@field compile_on_save? boolean
 ---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
 
 ---@type neotest.Adapter
@@ -75,36 +74,16 @@ function adapter.discover_positions(path)
         return {}
     end
 
-    local trees = {}
-    for _, fw_name in ipairs(frameworks) do
-        local framework = fw.get_framework_class(fw_name)
-        if framework then
-            local tree = framework.discover_positions({
-                path = path,
-                content = content,
-            })
-            if tree then
-                table.insert(trees, tree)
-            end
-        end
+    local tree = fw.select_framework_tree({
+        frameworks = frameworks,
+        path = path,
+        content = content,
+    })
+    if not tree then
+        return {}
     end
 
-    if #trees == 0 then
-        return {}
-    elseif #trees == 1 then
-        return trees[1]
-    else
-        local result = trees[1]
-        for i = 2, #trees do
-            local other = trees[i]
-            if other._children then
-                for _, child in ipairs(other._children) do
-                    table.insert(result._children, child)
-                end
-            end
-        end
-        return result
-    end
+    return tree
 end
 
 ---@async
@@ -144,7 +123,26 @@ function adapter.build_spec(args)
         return {}
     end
 
-    local framework = metals.get_framework(build_target_info)
+    local framework = nil
+    if position.extra and position.extra.framework then
+        framework = position.extra.framework
+    else
+        if lib.files and type(lib.files.read) == "function" then
+            local ok, source_content = pcall(lib.files.read, position.path)
+            if ok and source_content then
+                local frameworks = metals.get_frameworks(root_path, position.path, cache_build_info)
+                local _, selected_framework = fw.select_framework_tree({
+                    frameworks = frameworks or {},
+                    path = position.path,
+                    content = source_content,
+                })
+                framework = selected_framework
+            end
+        end
+
+        framework = framework or metals.get_framework(build_target_info)
+    end
+
     if not framework then
         vim.print("[neotest-scala]: Failed to detect testing library based on classpath")
         return {}
@@ -156,6 +154,7 @@ function adapter.build_spec(args)
     end
 
     local build_tool = build.get_tool(root_path, build_target_info)
+    build_tool = build.enforce_framework_tool(build_tool, framework)
 
     local extra_args = vim.list_extend(
         get_args({
@@ -223,7 +222,6 @@ setmetatable(adapter, {
 
         build.setup({
             build_tool = opts.build_tool,
-            compile_on_save = opts.compile_on_save,
         })
 
         local root = adapter.root(vim.fn.getcwd())
@@ -241,18 +239,6 @@ setmetatable(adapter, {
                 end,
                 group = vim.api.nvim_create_augroup("neotest-scala-prefetch", { clear = true }),
             })
-        end
-
-        if opts.compile_on_save then
-            if root then
-                build.setup_compile_on_save(root, function(r, p)
-                    return metals.get_build_target_info({
-                        root_path = r,
-                        target_path = p,
-                        cache_enabled = cache_build_info,
-                    })
-                end)
-            end
         end
 
         if is_callable(opts.args) then

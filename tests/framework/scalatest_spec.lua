@@ -381,6 +381,41 @@ describe("scalatest", function()
 
       assert.is_not_nil(result)
     end)
+
+    it("matches AnyFlatSpec JUnit names with behavior prefix", function()
+      local junit_test = {
+        name = "A Stack should fail",
+        namespace = "FlatSpec",
+        error_message = "1 did not equal 2",
+      }
+
+      local position = {
+        path = "/path/to/FlatSpec.scala",
+        id = "com.example.FlatSpec.fail",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_FAILED, result.status)
+    end)
+
+    it("matches AnyFlatSpec JUnit names with XML-unescaped symbols", function()
+      local junit_test = {
+        name = "A Stack should pop values in last-in-first-out order",
+        namespace = "FlatSpec",
+      }
+
+      local position = {
+        path = "/path/to/FlatSpec.scala",
+        id = "com.example.FlatSpec.pop values in last-in-first-out order",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
   end)
 
   describe("build_test_result", function()
@@ -481,6 +516,316 @@ describe("scalatest", function()
       assert.are.equal(TEST_FAILED, result.status)
       assert.are.equal("Some error without line info", result.errors[1].message)
       assert.is_nil(result.errors[1].line)
+    end)
+
+    it("removes first-line (FileName.scala:line) suffix from error message", function()
+      local junit_test = {
+        error_message = "1 did not equal 2 (FunSuiteSpec.scala:12)",
+        error_stacktrace = "org.scalatest.exceptions.TestFailedException: 1 did not equal 2\n  at com.example.FunSuiteSpec.test(FunSuiteSpec.scala:12)",
+      }
+      local position = {
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.are.equal(TEST_FAILED, result.status)
+      assert.are.equal("1 did not equal 2", result.errors[1].message)
+      assert.are.equal(11, result.errors[1].line)
+    end)
+  end)
+
+  describe("parse_stdout_results", function()
+    local function mk_tree(test_positions)
+      local nodes = {}
+      for _, pos in ipairs(test_positions) do
+        table.insert(nodes, {
+          data = function()
+            return pos
+          end,
+        })
+      end
+
+      return {
+        iter_nodes = function()
+          local i = 0
+          return function()
+            i = i + 1
+            if i <= #nodes then
+              return i, nodes[i]
+            end
+          end
+        end,
+      }
+    end
+
+    it("parses FreeSpec bloop failures with nested output and line numbers", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FreeSpec.Hello, ScalaTest!.deeeeeeeeep.even deeeeeeeeeper.test",
+          name = '"test"',
+          path = "/project/src/test/scala/com/example/FreeSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FreeSpec.failing test",
+          name = '"failing test"',
+          path = "/project/src/test/scala/com/example/FreeSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FreeSpec.deeply.nested",
+          name = '"nested"',
+          path = "/project/src/test/scala/com/example/FreeSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FreeSpec.failing",
+          name = '"failing"',
+          path = "/project/src/test/scala/com/example/FreeSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FreeSpec.custom exception",
+          name = '"custom exception"',
+          path = "/project/src/test/scala/com/example/FreeSpec.scala",
+        },
+      })
+
+      local output = [[
+FreeSpec
+- Hello, ScalaTest!
+  deeeeeeeeep
+    even deeeeeeeeeper
+    - test *** FAILED ***
+      1 did not equal 2 (FreeSpec.scala:17)
+- failing test *** FAILED ***
+  1 did not equal 2 (FreeSpec.scala:22)
+  deeply
+  - nested *** FAILED ***
+    1 did not equal 5 (FreeSpec.scala:26)
+- failing *** FAILED ***
+  java.lang.RuntimeException: boom
+  at com.example.FreeSpec.$init$$$anonfun$1$$anonfun$5(FreeSpec.scala:30)
+  at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+  ...
+- custom exception *** FAILED ***
+  com.example.Babbah$:
+  ...
+Execution took 18ms
+6 tests, 1 passed, 5 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FreeSpec.Hello, ScalaTest!.deeeeeeeeep.even deeeeeeeeeper.test"].status)
+      assert.are.equal(16, results["com.example.FreeSpec.Hello, ScalaTest!.deeeeeeeeep.even deeeeeeeeeper.test"].errors[1].line)
+      assert.is_not_nil(results["com.example.FreeSpec.Hello, ScalaTest!.deeeeeeeeep.even deeeeeeeeeper.test"].errors[1].message:match("1 did not equal 2"))
+
+      assert.are.equal(TEST_FAILED, results["com.example.FreeSpec.failing test"].status)
+      assert.are.equal(21, results["com.example.FreeSpec.failing test"].errors[1].line)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FreeSpec.deeply.nested"].status)
+      assert.are.equal(25, results["com.example.FreeSpec.deeply.nested"].errors[1].line)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FreeSpec.failing"].status)
+      assert.are.equal(29, results["com.example.FreeSpec.failing"].errors[1].line)
+      assert.is_not_nil(results["com.example.FreeSpec.failing"].errors[1].message:match("RuntimeException: boom"))
+
+      assert.are.equal(TEST_FAILED, results["com.example.FreeSpec.custom exception"].status)
+      assert.is_nil(results["com.example.FreeSpec.custom exception"].errors[1].line)
+      assert.is_not_nil(results["com.example.FreeSpec.custom exception"].errors[1].message:match("com.example.Babbah"))
+    end)
+
+    it("parses FunSuite bloop output with pass, failure and crashes", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FunSuiteSpec.Hello, & ScalaTest!",
+          name = '"Hello, & ScalaTest!"',
+          path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FunSuiteSpec.failing test",
+          name = '"failing test"',
+          path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FunSuiteSpec.crashing test",
+          name = '"crashing test"',
+          path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FunSuiteSpec.crashing with custom exception",
+          name = '"crashing with custom exception"',
+          path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        },
+      })
+
+      local output = [[
+FunSuiteSpec:
+- Hello, & ScalaTest!
+- failing test *** FAILED ***
+  1 did not equal 2 (FunSuiteSpec.scala:15)
+- crashing test *** FAILED ***
+  java.lang.RuntimeException: kaboom
+  at com.example.FunSuiteSpec.testFun$proxy3$1(FunSuiteSpec.scala:18)
+  at com.example.FunSuiteSpec.$init$$$anonfun$3(FunSuiteSpec.scala:17)
+  at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+  ...
+- crashing with custom exception *** FAILED ***
+  com.example.Boom$: Boom!
+  ...
+Execution took 1ms
+4 tests, 1 passed, 3 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FunSuiteSpec.Hello, & ScalaTest!"].status)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.failing test"].status)
+      assert.are.equal(14, results["com.example.FunSuiteSpec.failing test"].errors[1].line)
+      assert.are.equal("1 did not equal 2", results["com.example.FunSuiteSpec.failing test"].errors[1].message)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.crashing test"].status)
+      assert.are.equal(17, results["com.example.FunSuiteSpec.crashing test"].errors[1].line)
+      assert.is_not_nil(results["com.example.FunSuiteSpec.crashing test"].errors[1].message:match("RuntimeException: kaboom"))
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.crashing with custom exception"].status)
+      assert.is_nil(results["com.example.FunSuiteSpec.crashing with custom exception"].errors[1].line)
+      assert.is_not_nil(results["com.example.FunSuiteSpec.crashing with custom exception"].errors[1].message:match("com.example.Boom"))
+    end)
+
+    it("parses AnyFlatSpec bloop output with should-style names", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FlatSpec.pop values in last-in-first-out order",
+          name = '"pop values in last-in-first-out order"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FlatSpec.throw NoSuchElementException if an empty stack is popped",
+          name = '"throw NoSuchElementException if an empty stack is popped"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FlatSpec.fail",
+          name = '"fail"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FlatSpec.crash",
+          name = '"crash"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+      })
+
+      local output = [[
+FlatSpec:
+A Stack
+- should pop values in last-in-first-out order
+- should throw NoSuchElementException if an empty stack is popped
+- should fail *** FAILED ***
+  1 did not equal 2 (FlatSpec.scala:31)
+- should crash *** FAILED ***
+  java.lang.RuntimeException: boom
+  at com.example.FlatSpec.testFun$proxy4$1(FlatSpec.scala:35)
+  at com.example.FlatSpec.$init$$$anonfun$4(FlatSpec.scala:34)
+  at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+  at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
+  at org.scalatest.OutcomeOf.outcomeOf$(OutcomeOf.scala:31)
+  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:22)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
+  at org.scalatest.flatspec.AnyFlatSpecLike$$anon$5.apply(AnyFlatSpecLike.scala:1717)
+  at org.scalatest.TestSuite.withFixture(TestSuite.scala:196)
+  ...
+Execution took 18ms
+4 tests, 2 passed, 2 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FlatSpec.pop values in last-in-first-out order"].status)
+      assert.are.equal(TEST_PASSED, results["com.example.FlatSpec.throw NoSuchElementException if an empty stack is popped"].status)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FlatSpec.fail"].status)
+      assert.are.equal(30, results["com.example.FlatSpec.fail"].errors[1].line)
+      assert.are.equal("1 did not equal 2", results["com.example.FlatSpec.fail"].errors[1].message)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FlatSpec.crash"].status)
+      assert.are.equal(34, results["com.example.FlatSpec.crash"].errors[1].line)
+      assert.is_not_nil(results["com.example.FlatSpec.crash"].errors[1].message:match("RuntimeException: boom"))
+    end)
+
+    it("strips first-line location suffix from stdout diagnostic messages", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FunSuiteSpec.failing test",
+          name = '"failing test"',
+          path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        },
+      })
+
+      local output = [[
+FunSuiteSpec:
+- failing test *** FAILED ***
+  1 did not equal 2 (FunSuiteSpec.scala:15)
+Execution took 1ms
+1 test, 0 passed, 1 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSuiteSpec.failing test"].status)
+      assert.are.equal(14, results["com.example.FunSuiteSpec.failing test"].errors[1].line)
+      assert.are.equal("1 did not equal 2", results["com.example.FunSuiteSpec.failing test"].errors[1].message)
+    end)
+
+    it("picks the first stack frame for the current test file", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FlatSpec.crash",
+          name = '"crash"',
+          path = "/project/src/test/scala/com/example/FlatSpec.scala",
+        },
+      })
+
+      local output = [[
+FlatSpec:
+- should crash *** FAILED ***
+  java.lang.RuntimeException: boom
+  at com.example.FlatSpec.testFun$proxy4$1(FlatSpec.scala:35)
+  at com.example.FlatSpec.$init$$$anonfun$4(FlatSpec.scala:34)
+  at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+  at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
+  at org.scalatest.OutcomeOf.outcomeOf$(OutcomeOf.scala:31)
+  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:22)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
+  at org.scalatest.flatspec.AnyFlatSpecLike$$anon$5.apply(AnyFlatSpecLike.scala:1717)
+  at org.scalatest.TestSuite.withFixture(TestSuite.scala:196)
+  ...
+Execution took 18ms
+1 test, 0 passed, 1 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FlatSpec.crash"].status)
+      assert.are.equal(34, results["com.example.FlatSpec.crash"].errors[1].line)
+      assert.is_not_nil(results["com.example.FlatSpec.crash"].errors[1].message:match("RuntimeException: boom"))
     end)
   end)
 end)

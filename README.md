@@ -29,8 +29,8 @@ Support levels below describe **test execution + result reporting** in neotest.
 
 | Library | Test type | Build tool | Support | Notes |
 |---------|-----------|------------|---------|-------|
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec` | `sbt` | **Full** | Stable path via JUnit XML reports. |
-| ScalaTest | `AnyFunSuite`, `AnyFreeSpec` | `bloop` | **Limited** | Can run, but report timing can lag (results may appear from previous run). |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec` | `sbt` | **Full** | Stable path via JUnit XML reports. |
+| ScalaTest | `AnyFunSuite`, `AnyFreeSpec`, `AnyFlatSpec` | `bloop` | **Limited** | Can run, but report timing can lag (results may appear from previous run). |
 | munit | `FunSuite` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | munit | `FunSuite` | `bloop` | **Limited** | Uses stdout parsing; works for common output, but parser-based matching is inherently less stable than XML. |
 | specs2 | `mutable.Specification` | `sbt` | **Limited** | General execution works, but single-test selection can still run a larger scope/spec. |
@@ -77,6 +77,9 @@ Selection priority in auto mode:
 - If Metals metadata clearly indicates `bloop`, use `bloop`
 - If metadata is ambiguous, fall back to local detection (`.bloop/` + `bloop` executable), otherwise `sbt`
 
+Framework compatibility guard:
+- If selected tool is `bloop` but the detected test library does not support bloop execution, neotest-scala automatically runs that test with `sbt`.
+
 You can explicitly configure the build tool:
 
 ```lua
@@ -93,20 +96,6 @@ require("neotest").setup({
 - It keeps a running compilation server (no JVM startup overhead)
 - It caches compilations incrementally
 - It's already running if you use Metals
-
-### Background Compilation
-
-Enable background compilation on file save for even faster test runs:
-
-```lua
-require("neotest").setup({
-  adapters = {
-    require("neotest-scala")({
-      compile_on_save = true,  -- Compile in background when saving Scala files
-    })
-  }
-})
-```
 
 ### Additional Arguments
 
