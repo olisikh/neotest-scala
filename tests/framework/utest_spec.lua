@@ -927,6 +927,86 @@ describe("utest", function()
       assert.are.equal("failed", crash_result.status)
       assert.are.equal(23, crash_result.errors[1].line)
     end)
+
+    it("prefers discovered position line for numeric interpolated and anonymous junit failures", function()
+      local namespace = {
+        tests = {
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+            type = "test",
+            name = 's"${baseName}-pass"',
+            range = { 9, 0, 9, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          {
+            id = "com.example.UTestInterpolatedSuite.test.__anonymous_14_0",
+            type = "test",
+            name = "test",
+            range = { 14, 0, 14, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+            type = "test",
+            name = 's"${baseName}-fail"',
+            range = { 19, 0, 19, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-crash",
+            type = "test",
+            name = 's"${baseName}-crash"',
+            range = { 23, 0, 23, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+        },
+      }
+
+      local junit_results = {
+        { namespace = "UTestInterpolatedSuite", name = "0" },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "1",
+          error_message = "anonymous fail",
+          error_stacktrace = "java.lang.AssertionError: anonymous fail\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:9)",
+        },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "2",
+          error_message = "interpolated fail",
+          error_stacktrace = "java.lang.AssertionError: interpolated fail\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:9)",
+        },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "3",
+          error_message = "interpolated crash",
+          error_stacktrace = "java.lang.RuntimeException: interpolated crash\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:31)",
+        },
+      }
+
+      local anon_result = utest.build_position_result({
+        position = namespace.tests[2],
+        test_node = mock_tree(namespace.tests[2]),
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+      local interpolated_fail_result = utest.build_position_result({
+        position = namespace.tests[3],
+        test_node = mock_tree(namespace.tests[3]),
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+      local interpolated_crash_result = utest.build_position_result({
+        position = namespace.tests[4],
+        test_node = mock_tree(namespace.tests[4]),
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+
+      assert.are.equal(14, anon_result.errors[1].line)
+      assert.are.equal(19, interpolated_fail_result.errors[1].line)
+      assert.are.equal(23, interpolated_crash_result.errors[1].line)
+    end)
   end)
 
   describe("parse_stdout_results", function()
@@ -1175,6 +1255,68 @@ describe("utest", function()
       assert.are.equal("failed", results[test2:data().id].status)
       assert.are.equal(19, results[test2:data().id].errors[1].line)
       assert.are.equal("failed", results[test3:data().id].status)
+      assert.are.equal(23, results[test3:data().id].errors[1].line)
+    end)
+
+    it("prefers discovered position line for numeric interpolated and anonymous stdout failures", function()
+      H.mock_fn("neotest-scala.utils", "get_package_name", function()
+        return "com.example."
+      end)
+
+      local namespace = mock_tree({
+        id = "UTestInterpolatedSuite",
+        type = "namespace",
+        name = "UTestInterpolatedSuite",
+        path = "/path/to/UTestInterpolatedSuite.scala",
+      })
+
+      local test0 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+        type = "test",
+        name = 's"${baseName}-pass"',
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 9, 0, 9, 0 },
+      }, namespace)
+      local test1 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.test.__anonymous_14_0",
+        type = "test",
+        name = "test",
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 14, 0, 14, 0 },
+      }, namespace)
+      local test2 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+        type = "test",
+        name = 's"${baseName}-fail"',
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 19, 0, 19, 0 },
+      }, namespace)
+      local test3 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.$baseName-crash",
+        type = "test",
+        name = 's"${baseName}-crash"',
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 23, 0, 23, 0 },
+      }, namespace)
+      namespace._children = { test0, test1, test2, test3 }
+
+      local output = table.concat({
+        "+ com.example.UTestInterpolatedSuite.0 4ms",
+        "X com.example.UTestInterpolatedSuite.1 0ms",
+        "  java.lang.AssertionError: anonymous fail",
+        "    com.example.UTestInterpolatedSuite$.$init$$$anonfun$1$$anonfun$2(UTestInterpolatedSuite.scala:9)",
+        "X com.example.UTestInterpolatedSuite.2 0ms",
+        "  java.lang.AssertionError: interpolated fail",
+        "    com.example.UTestInterpolatedSuite$.$init$$$anonfun$1$$anonfun$3(UTestInterpolatedSuite.scala:9)",
+        "X com.example.UTestInterpolatedSuite.3 0ms",
+        "  java.lang.RuntimeException: interpolated crash",
+        "    com.example.UTestInterpolatedSuite$.$init$$$anonfun$1$$anonfun$4(UTestInterpolatedSuite.scala:31)",
+      }, "\n")
+
+      local results = utest.parse_stdout_results(output, namespace)
+
+      assert.are.equal(14, results[test1:data().id].errors[1].line)
+      assert.are.equal(19, results[test2:data().id].errors[1].line)
       assert.are.equal(23, results[test3:data().id].errors[1].line)
     end)
   end)

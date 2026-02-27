@@ -110,6 +110,39 @@ local function normalize_test_id_for_match(id)
     return id:gsub("%.__anonymous_%d+_%d+$", "")
 end
 
+---@param position neotest.Position
+---@return boolean
+local function should_prefer_position_line(position)
+    if not position or position.type ~= "test" then
+        return false
+    end
+
+    return is_anonymous_test_position(position) or utils.is_interpolated_string(position.name or "")
+end
+
+---@param position neotest.Position
+---@return integer|nil
+local function get_position_line(position)
+    return position and position.range and position.range[1] or nil
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return integer|nil
+local function resolve_error_line(junit_test, position)
+    if should_prefer_position_line(position) then
+        return get_position_line(position)
+    end
+
+    local file_name = utils.get_file_name(position.path)
+    local extracted = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+    if extracted ~= nil then
+        return extracted
+    end
+
+    return get_position_line(position)
+end
+
 local function build_test_path(tree, name)
     if is_anonymous_test(tree, name) then
         return nil
@@ -322,9 +355,7 @@ function M.build_test_result(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
         local error = { message = error_message }
-        local file_name = utils.get_file_name(position.path)
-
-        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+        error.line = resolve_error_line(junit_test, position)
 
         return {
             errors = { error },
@@ -344,9 +375,7 @@ local function build_test_result_unchecked(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
         local error = { message = error_message }
-        local file_name = utils.get_file_name(position.path)
-
-        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+        error.line = resolve_error_line(junit_test, position)
 
         return {
             errors = { error },
@@ -520,7 +549,18 @@ function M.parse_stdout_results(output, tree)
                 if is_pass then
                     results[pos_id] = { status = TEST_PASSED }
                 else
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    local line = nil
+                    local position = positions[pos_id]
+                    if should_prefer_position_line(position) then
+                        line = get_position_line(position)
+                    end
+
+                    if line ~= nil then
+                        results[pos_id] = { status = TEST_FAILED, errors = { { message = "Test failed", line = line } } }
+                    else
+                        results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    end
+
                     table.insert(current_failure_ids, pos_id)
                 end
             end
@@ -532,7 +572,8 @@ function M.parse_stdout_results(output, tree)
             local zero_indexed_line = tonumber(line_num) - 1
             for _, pos_id in ipairs(current_failure_ids) do
                 local _, err = ensure_failure_error(pos_id, "Test failed")
-                if err then
+                local position = positions[pos_id]
+                if err and not should_prefer_position_line(position) then
                     err.line = zero_indexed_line
                 end
             end
