@@ -29,6 +29,32 @@ local function detect_style(content)
     return nil
 end
 
+---@param path string
+---@return neotest.Tree | nil
+local function parse_mutable_positions(path)
+    local query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (infix_expression
+        left: (string) @test.name
+        operator: (_) @spec_init (#any-of? @spec_init ">>" "in" "!")
+        right: (_)
+      ) @test.definition
+    ]]
+
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+        position_id = utils.build_position_id,
+    })
+end
+
 ---@param opts neotest-scala.Specs2DiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
@@ -41,33 +67,17 @@ function M.discover_positions(opts)
     local content = opts.content
 
     if style == "text" then
-        return textspec.discover_positions({
+        local textspec_tree = textspec.discover_positions({
             path = path,
             content = content,
         })
+
+        if textspec_tree then
+            return textspec_tree
+        end
     end
 
-    local query = [[
-      (object_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
-
-      (class_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
-
-      (infix_expression
-        left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init ">>" "in")
-        right: (_)
-      ) @test.definition
-    ]]
-
-    return lib.treesitter.parse_positions(path, query, {
-        nested_tests = true,
-        require_namespaces = true,
-        position_id = utils.build_position_id,
-    })
+    return parse_mutable_positions(path)
 end
 
 ---Build namespace for specs2 tests

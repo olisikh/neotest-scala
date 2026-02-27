@@ -1,7 +1,86 @@
 local specs2 = require("neotest-scala.framework.specs2")
 local H = require("tests.helpers")
+local parse_positions_calls = {}
+
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {}
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 describe("specs2", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    after_each(function()
+      H.restore_mocks()
+    end)
+
+    it("discovers mutable spec tests including bang operator", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/MutableSpec.scala",
+        content = [[
+          class MutableSpec extends Specification {
+            "ok" >> { 1 must_== 1 }
+            "failing" ! { 1 must_== 2 }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"!"', 1, true) ~= nil)
+    end)
+
+    it("uses textspec parser when references are present", function()
+      H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
+        return { source = "textspec" }
+      end)
+
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/ImmutableSpec.scala",
+        content = [[
+          class ImmutableSpec extends Specification {
+            def is = s2""" spec $e1 """
+            def e1 = ok
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal("textspec", tree.source)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
+
+    it("falls back to mutable parsing when textspec parser finds no refs", function()
+      H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
+        return nil
+      end)
+
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/TextWithoutRefsSpec.scala",
+        content = [[
+          class TextWithoutRefsSpec extends Specification {
+            def is = s2"""
+              this example should pass
+            """
+
+            "this example should pass" in {
+              1 must_== 1
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.are.equal("/project/src/test/scala/com/example/TextWithoutRefsSpec.scala", parse_positions_calls[1].path)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()
