@@ -372,6 +372,23 @@ describe("munit", function()
         assert.are.equal(fw.TEST_PASSED, result.status)
         assert.is_nil(result.errors)
       end)
+
+      it("matches interpolated discovered names to resolved junit names", function()
+        local junit_test = {
+          namespace = "ZioMUnitSuite",
+          name = "zio success2",
+        }
+        local position = {
+          id = "com.example.ZioMUnitSuite.$baseNamesuccess2",
+          name = 's"$baseName success2"',
+          path = "/project/src/test/scala/com/example/ZioMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.is_not_nil(result)
+        assert.are.equal(fw.TEST_PASSED, result.status)
+      end)
     end)
 
     describe("extracts line number from stacktrace", function()

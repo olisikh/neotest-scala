@@ -137,7 +137,17 @@ local function match_test(junit_test, position)
     local test_id = position.id:gsub(" ", ".")
     local test_prefix = package_name .. junit_test.namespace
     local test_postfix = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
-    return vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix)
+    if vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix) then
+        return true
+    end
+
+    local position_name = utils.get_position_name(position)
+    local position_postfix = position_name and position_name:gsub(" ", ".")
+    if vim.startswith(test_id, test_prefix) and position_postfix then
+        return utils.matches_with_interpolation(test_postfix, position_postfix)
+    end
+
+    return false
 end
 
 ---@param junit_test neotest-scala.JUnitTest
@@ -172,12 +182,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -209,7 +227,14 @@ function M.parse_stdout_results(output, tree)
         if pass_name then
             for pos_id, pos in pairs(positions) do
                 local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and pass_name:find(pos_name:gsub("['\"]", ""), 1, true) then
+                local normalized_name = pos_name and pos_name:gsub("['\"]", "")
+                local pos_matches = normalized_name and pass_name:find(normalized_name, 1, true)
+                local interpolated_match = normalized_name
+                    and utils.matches_with_interpolation(pass_name, normalized_name, {
+                        anchor_start = false,
+                        anchor_end = true,
+                    })
+                if pos_matches or interpolated_match then
                     results[pos_id] = { status = TEST_PASSED }
                 end
             end
@@ -221,7 +246,14 @@ function M.parse_stdout_results(output, tree)
             local matched_ids = {}
             for pos_id, pos in pairs(positions) do
                 local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
+                local normalized_name = pos_name and pos_name:gsub("['\"]", "")
+                local pos_matches = normalized_name and fail_name:find(normalized_name, 1, true)
+                local interpolated_match = normalized_name
+                    and utils.matches_with_interpolation(fail_name, normalized_name, {
+                        anchor_start = false,
+                        anchor_end = true,
+                    })
+                if pos_matches or interpolated_match then
                     results[pos_id] = { status = TEST_FAILED, errors = {} }
                     table.insert(matched_ids, pos_id)
                 end

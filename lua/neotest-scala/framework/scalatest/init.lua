@@ -430,13 +430,13 @@ local function match_test(junit_test, position)
     for _, variant in ipairs(junit_name_variants) do
         -- Try 1: Standard matching with package prefix (for regular tests)
         local junit_with_package = (package_name .. junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
-        if junit_with_package == normalized_position then
+        if utils.matches_with_interpolation(junit_with_package, normalized_position) then
             return true
         end
 
         -- Try 2: Without package prefix (for FreeSpec where JUnit namespace is just class name)
         local junit_test_id = (junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
-        if junit_test_id == normalized_position then
+        if utils.matches_with_interpolation(junit_test_id, normalized_position) then
             return true
         end
 
@@ -447,11 +447,28 @@ local function match_test(junit_test, position)
             return true
         end
 
+        if utils.matches_with_interpolation(junit_test_id, position_no_package, {
+            anchor_start = false,
+            anchor_end = true,
+        }) then
+            return true
+        end
+
         -- Try 4: Remove all dots and compare (fallback for edge cases)
         local junit_no_dots = junit_test_id:gsub("%.", ""):gsub(":", "")
         local position_no_dots = position_no_package:gsub("%.", ""):gsub(":", "")
-        if junit_no_dots == position_no_dots then
+        if utils.matches_with_interpolation(junit_no_dots, position_no_dots) then
             return true
+        end
+
+        -- Try 5: Compare against discovered position test name directly
+        local position_name = utils.get_position_name(position)
+        if position_name then
+            local normalized_variant = variant:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+            local normalized_position_name = position_name:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+            if utils.matches_with_interpolation(normalized_variant, normalized_position_name) then
+                return true
+            end
         end
     end
 
@@ -516,12 +533,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -606,6 +631,16 @@ local function find_matching_positions(positions_by_name, test_name)
             for _, pos in ipairs(positions) do
                 if pos.normalized_id:find(normalized_test_name, 1, true) then
                     table.insert(matches, pos)
+                end
+            end
+        end
+
+        if #matches == 0 then
+            for _, positions in pairs(positions_by_name) do
+                for _, pos in ipairs(positions) do
+                    if utils.matches_with_interpolation(normalized_test_name, pos.normalized_name) then
+                        table.insert(matches, pos)
+                    end
                 end
             end
         end

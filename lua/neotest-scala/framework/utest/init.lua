@@ -162,7 +162,7 @@ local function match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
     local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
+    return utils.matches_with_interpolation(junit_test_id, test_id)
 end
 
 ---@param junit_test neotest-scala.JUnitTest
@@ -197,12 +197,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -238,7 +246,13 @@ function M.parse_stdout_results(output, tree)
             local is_pass = status_char == "+"
             for pos_id, pos in pairs(positions) do
                 local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and test_path:find(pos_name, 1, true) then
+                local pos_matches = pos_name and test_path:find(pos_name, 1, true)
+                local interpolated_match = pos_name
+                    and utils.matches_with_interpolation(test_path, pos_name, {
+                        anchor_start = false,
+                        anchor_end = true,
+                    })
+                if pos_matches or interpolated_match then
                     if is_pass then
                         results[pos_id] = { status = TEST_PASSED }
                     else
