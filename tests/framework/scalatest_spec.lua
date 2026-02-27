@@ -1157,6 +1157,57 @@ Failed:
       )
     end)
 
+    it("parses AnyFunSpec output with passing, failure and crash", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FunSpec.List operations.supports successful checks",
+          name = '"supports successful checks"',
+          path = "/project/src/test/scala/com/example/FunSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FunSpec.List operations.contains a failing assertion",
+          name = '"contains a failing assertion"',
+          path = "/project/src/test/scala/com/example/FunSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FunSpec.List operations.can throw from test code",
+          name = '"can throw from test code"',
+          path = "/project/src/test/scala/com/example/FunSpec.scala",
+        },
+      })
+
+      local output = [[
+FunSpec:
+List operations
+- supports successful checks
+- contains a failing assertion *** FAILED ***
+  1 did not equal 99 (FunSpec.scala:13)
+- can throw from test code *** FAILED ***
+  java.lang.IllegalStateException: funspec crash
+  at com.example.FunSpec.testFun$proxy3$1(FunSpec.scala:17)
+  at com.example.FunSpec.fun$proxy1$1$$anonfun$3(FunSpec.scala:16)
+Execution took 12ms
+3 tests, 1 passed, 2 failed
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FunSpec.List operations.supports successful checks"].status)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSpec.List operations.contains a failing assertion"].status)
+      assert.are.equal(12, results["com.example.FunSpec.List operations.contains a failing assertion"].errors[1].line)
+      assert.are.equal("1 did not equal 99", results["com.example.FunSpec.List operations.contains a failing assertion"].errors[1].message)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FunSpec.List operations.can throw from test code"].status)
+      assert.are.equal(16, results["com.example.FunSpec.List operations.can throw from test code"].errors[1].line)
+      assert.is_not_nil(
+        results["com.example.FunSpec.List operations.can throw from test code"].errors[1].message:match("IllegalStateException: funspec crash")
+      )
+    end)
+
     it("strips first-line location suffix from stdout diagnostic messages", function()
       local tree = mk_tree({
         {

@@ -29,16 +29,12 @@ neotest-scala supports debugging tests with [nvim-dap](https://github.com/mfusse
 ```lua
 local metals_config = require('metals').bare_config()
 
--- Enable DAP integration
-metals_config.settings = {
-  enableSemanticHighlighting = true,
-}
-
 -- Auto-attach Metals
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "scala", "sbt" },
   callback = function()
     require("metals").initialize_or_attach(metals_config)
+    require("metals").setup_dap()
   end,
   group = vim.api.nvim_create_augroup("nvim-metals", { clear = true }),
 })
@@ -124,7 +120,7 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "NeotestScala",
+  name = "Run Test",
   metals = {
     runType = "testFile",
     path = "file:///path/to/TestFile.scala",
@@ -151,19 +147,10 @@ When you run a test with the `dap` strategy, neotest-scala:
 {
   type = "scala",
   request = "launch",
-  name = "from_lens",
+  name = "Run Test",
   metals = {
-    target = { uri = "file:/project-root/?id=project-test" },
-    requestData = {
-      suites = {
-        {
-          className = "com.example.MyTestSuite",
-          tests = { "my test name" },
-        },
-      },
-      jvmOptions = {},
-      environmentVariables = {},
-    },
+    runType = "testFile",
+    path = "file:///path/to/TestFile.scala",
   },
 }
 ```
