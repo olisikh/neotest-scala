@@ -1,4 +1,6 @@
 local nio = require("nio")
+local logger = require("neotest-scala.logger")
+local log = logger.new("metals")
 
 local M = {}
 
@@ -129,6 +131,7 @@ local function do_get_build_target_info(root_path, target_path, timeout_ms)
         vim.schedule(function()
             vim.print("[neotest-scala]: Metals returned no build targets")
         end)
+        log.warn("Metals returned no build targets")
         return nil
     end
 
@@ -233,6 +236,7 @@ function M.get_frameworks(root_path, target_path, cache_enabled)
     local classpath = get_classpath(build_info)
     if not classpath then
         vim.print("[neotest-scala]: No classpath information found in build target info")
+        log.warn("No classpath information found in build target info")
         return {}
     end
 

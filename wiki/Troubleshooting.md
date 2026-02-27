@@ -133,37 +133,18 @@ Common issues and solutions when using neotest-scala.
 
 ---
 
-### "Debug nearest test" Runs the Whole File
+### "Debug nearest test" Runs More Than One Test
 
-**Symptoms**: You run debug on nearest test, but the entire test file is launched.
-
-**Behavior**:
-- This is currently intentional.
-- neotest-scala uses file-level DAP fallback for test nodes to avoid hangs from fragile per-test selector payloads.
-
-**What still works**:
-1. File-level debug
-2. Namespace/class debug
-3. Reliable DAP session startup for nearest test requests
-
----
-
-### DAP Diagnostics Look Misattributed
-
-**Symptoms**: Failures are attached to the wrong test, or diagnostics look too generic during debug runs.
+**Symptoms**: You debug a nested test and a broader test subtree runs.
 
 **Cause**:
-- DAP result extraction relies on stdout parsing.
-- Current parsers assume stdout arrives in-order.
-- If test framework output is interleaved/reordered (for example with parallel execution), attribution can degrade.
+- Nearest-test DAP intentionally launches file-level debug.
+- This is intentional to avoid fragile/hanging debug runs.
 
-**Current status**:
-- This is a known limitation of the current DAP quick-win mode.
-- neotest-scala currently favors reliable debug startup over complex out-of-order reconstruction.
-
-**Workarounds**:
-1. Re-run with normal test strategy (non-DAP) when you need precise diagnostics.
-2. Debug at file/class scope and inspect stack traces directly in output.
+**What to do**:
+1. Use breakpoints within the nested block.
+2. If needed, temporarily isolate the nested test logic.
+3. Use class/file debug directly when you want deterministic scope.
 
 ---
 
@@ -232,12 +213,27 @@ Common issues and solutions when using neotest-scala.
 
 **Behavior**:
 - neotest-scala treats this as a failed run (not passed).
+- This includes DAP runs.
 
 **Cause**:
 - Most often a selector mismatch in the underlying build tool invocation.
 
 **Notes**:
 - For munit + bloop single-test execution, neotest-scala now intentionally runs at suite scope to reduce this class of mismatch.
+
+---
+
+### DAP Diagnostics Look Misattributed
+
+**Symptoms**: Failure diagnostics are attached to unexpected tests during debug runs.
+
+**Cause**:
+- DAP result extraction uses stdout parsing.
+- Parsers currently assume ordered stdout blocks.
+
+**Workarounds**:
+1. Re-run with normal (non-DAP) strategy for more stable diagnostics.
+2. Use stacktrace line information from output panel for precise source location.
 
 ---
 

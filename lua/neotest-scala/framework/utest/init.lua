@@ -17,6 +17,26 @@ local M = { name = "utest" }
 ---@field extra_args nil|string|string[]
 ---@field build_tool? "bloop"|"sbt"
 
+---@param position neotest.Position
+---@return boolean
+local function is_anonymous_test_position(position)
+    return position.type == "test" and position.name == "test"
+end
+
+---@param position neotest.Position
+---@param parents neotest.Position[]
+---@return string
+local function build_position_id(position, parents)
+    local id = utils.build_position_id(position, parents)
+    if not is_anonymous_test_position(position) then
+        return id
+    end
+
+    local line = position.range and position.range[1] or 0
+    local col = position.range and position.range[2] or 0
+    return id .. ".__anonymous_" .. line .. "_" .. col
+end
+
 ---@param content string
 ---@return boolean
 local function is_suite_style(content)
@@ -53,15 +73,81 @@ function M.discover_positions(opts)
             (interpolated_string_expression)
           ] @test.name))
       )) @test.definition
+
+      (infix_expression
+        left: (identifier) @test.name (#eq? @test.name "test")
+        operator: (operator_identifier) @dash (#eq? @dash "-")
+        right: (_)
+      ) @test.definition
+
+      (call_expression
+        function: (identifier) @test.name (#eq? @test.name "test")
+        (block)
+      ) @test.definition
     ]]
     return lib.treesitter.parse_positions(path, query, {
         nested_tests = true,
         require_namespaces = true,
-        position_id = utils.build_position_id,
+        position_id = build_position_id,
     })
 end
 
+---@param tree neotest.Tree
+---@param name string|nil
+---@return boolean
+local function is_anonymous_test(tree, name)
+    local position = tree:data()
+    if not is_anonymous_test_position(position) then
+        return false
+    end
+
+    return name == "test"
+end
+
+---@param id string
+---@return string
+local function normalize_test_id_for_match(id)
+    return id:gsub("%.__anonymous_%d+_%d+$", "")
+end
+
+---@param position neotest.Position
+---@return boolean
+local function should_prefer_position_line(position)
+    if not position or position.type ~= "test" then
+        return false
+    end
+
+    return is_anonymous_test_position(position) or utils.is_interpolated_string(position.name or "")
+end
+
+---@param position neotest.Position
+---@return integer|nil
+local function get_position_line(position)
+    return position and position.range and position.range[1] or nil
+end
+
+---@param junit_test neotest-scala.JUnitTest
+---@param position neotest.Position
+---@return integer|nil
+local function resolve_error_line(junit_test, position)
+    if should_prefer_position_line(position) then
+        return get_position_line(position)
+    end
+
+    local file_name = utils.get_file_name(position.path)
+    local extracted = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+    if extracted ~= nil then
+        return extracted
+    end
+
+    return get_position_line(position)
+end
+
 local function build_test_path(tree, name)
+    if is_anonymous_test(tree, name) then
+        return nil
+    end
+
     if name and utils.is_interpolated_string(name) then
         return nil
     end
@@ -254,7 +340,7 @@ local function match_test(junit_test, position)
 
     local package_name = utils.get_package_name(position.path) or ""
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
-    local test_id = position.id:gsub("-", "."):gsub(" ", "")
+    local test_id = normalize_test_id_for_match(position.id):gsub("-", "."):gsub(" ", "")
     return utils.matches_with_interpolation(junit_test_id, test_id)
 end
 
@@ -269,9 +355,7 @@ function M.build_test_result(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
         local error = { message = error_message }
-        local file_name = utils.get_file_name(position.path)
-
-        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+        error.line = resolve_error_line(junit_test, position)
 
         return {
             errors = { error },
@@ -291,9 +375,7 @@ local function build_test_result_unchecked(junit_test, position)
     local error_message = junit_test.error_message or junit_test.error_stacktrace
     if error_message then
         local error = { message = error_message }
-        local file_name = utils.get_file_name(position.path)
-
-        error.line = utils.extract_line_number(junit_test.error_stacktrace, file_name)
+        error.line = resolve_error_line(junit_test, position)
 
         return {
             errors = { error },
@@ -467,7 +549,18 @@ function M.parse_stdout_results(output, tree)
                 if is_pass then
                     results[pos_id] = { status = TEST_PASSED }
                 else
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    local line = nil
+                    local position = positions[pos_id]
+                    if should_prefer_position_line(position) then
+                        line = get_position_line(position)
+                    end
+
+                    if line ~= nil then
+                        results[pos_id] = { status = TEST_FAILED, errors = { { message = "Test failed", line = line } } }
+                    else
+                        results[pos_id] = { status = TEST_FAILED, errors = {} }
+                    end
+
                     table.insert(current_failure_ids, pos_id)
                 end
             end
@@ -479,7 +572,8 @@ function M.parse_stdout_results(output, tree)
             local zero_indexed_line = tonumber(line_num) - 1
             for _, pos_id in ipairs(current_failure_ids) do
                 local _, err = ensure_failure_error(pos_id, "Test failed")
-                if err then
+                local position = positions[pos_id]
+                if err and not should_prefer_position_line(position) then
                     err.line = zero_indexed_line
                 end
             end

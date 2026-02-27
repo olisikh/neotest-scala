@@ -135,6 +135,64 @@ describe("build tool switch behavior", function()
   end)
 
   describe("adapter build_spec", function()
+    it("forwards framework and build tool to strategy config", function()
+      local adapter = require("neotest-scala")
+
+      local captured_strategy_opts = nil
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "bloop"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function(opts)
+        captured_strategy_opts = opts
+        return { strategy = "dap" }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      adapter.build_spec({
+        strategy = "dap",
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        extra_args = {},
+      })
+
+      assert.are.equal("munit", captured_strategy_opts.framework)
+      assert.are.equal("bloop", captured_strategy_opts.build_tool)
+      assert.are.equal("dap", captured_strategy_opts.strategy)
+    end)
+
     it("pins resolved build tool into env and forwards it to framework command", function()
       local adapter = require("neotest-scala")
 
@@ -477,6 +535,104 @@ describe("build tool switch behavior", function()
       })
 
       assert.is_nil(spec.strategy)
+    end)
+
+    it("emits run spec through logger.info", function()
+      local adapter = require("neotest-scala")
+      local logged_payload = nil
+
+      H.mock_fn("neotest-scala.logger", "new", function()
+        return {
+          debug = function() end,
+          info = function(payload)
+            logged_payload = payload
+          end,
+          warn = function() end,
+          error = function() end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "sbt"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return {
+          type = "scala",
+          request = "launch",
+          metals = { runType = "testFile" },
+        }
+      end)
+
+      adapter({ cache_build_info = false })
+
+      adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        strategy = "dap",
+        extra_args = {},
+      })
+
+      assert.is_not_nil(logged_payload)
+      assert.are.equal("neotest-scala", logged_payload.source)
+      assert.are.equal("build_spec", logged_payload.event)
+      assert.are.same({ "echo", "ok" }, logged_payload.command)
+      assert.are.equal("scala", logged_payload.strategy.type)
+      assert.are.equal("test", logged_payload.position.type)
+      assert.are.equal("munit", logged_payload.framework)
+      assert.are.equal("sbt", logged_payload.build_tool)
+    end)
+
+    it("configures logger from adapter setup logging options", function()
+      local adapter = require("neotest-scala")
+      local captured = nil
+
+      H.mock_fn("neotest-scala.logger", "configure", function(opts)
+        captured = opts
+      end)
+
+      adapter({
+        cache_build_info = false,
+        logging = {
+          enabled = false,
+          level = "warn",
+        },
+      })
+
+      assert.is_not_nil(captured)
+      assert.is_not_nil(captured.logging)
+      assert.is_false(captured.logging.enabled)
+      assert.are.equal("warn", captured.logging.level)
     end)
   end)
 

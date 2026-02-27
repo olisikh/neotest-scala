@@ -84,20 +84,18 @@ end, { desc = "Debug nearest test" })
 :lua require('neotest').run.run({strategy = 'dap'})
 ```
 
-## Current Limitations
+## Current Behavior and Limits
 
-DAP support currently prioritizes reliable session startup over strict per-test targeting:
+DAP support prioritizes reliable session startup:
 
-1. **Nearest test debug runs at file scope**
-   - Debugging a test node launches `metals.runType = "testFile"` for that file.
-2. **Per-test DAP selectors are intentionally disabled**
-   - This avoids fragile selector payloads and hanging sessions.
-3. **Metals controls the underlying debug backend**
-   - neotest-scala cannot force Metals DAP to use a specific backend.
-4. **stdout diagnostics assume ordered output**
-   - If framework output is interleaved or reordered, diagnostic attribution may be imprecise.
-5. **utest has an upstream selector limitation**
-   - `utest` does not implement `sbt.testing.TestSelector`, so strict single-test debug is not available.
+1. **Nearest test runs at file scope**
+   - Test-node debug requests launch `runType = "testFile"`.
+2. **Per-test DAP selectors are disabled**
+   - This applies to all frameworks, including ScalaTest, munit, specs2, utest, and zio-test.
+3. **No-suite runs are failed**
+   - `No test suites were run.` is reported as a failed run, including DAP.
+4. **Metals controls backend execution**
+   - neotest-scala cannot force Metals DAP to pick sbt/bloop at debug-launch time.
 
 ## How It Works
 
@@ -107,7 +105,7 @@ When you run a test with the `dap` strategy, neotest-scala:
 2. **Builds a debug configuration** appropriate for the test type:
    - **File**: Uses `runType = "testFile"`
    - **Namespace/Class**: Uses `testClass` parameter
-   - **Individual Test**: Falls back to file-level debug (`runType = "testFile"`) for reliability
+   - **Individual Test**: Uses file-level debug (`runType = "testFile"`)
 
 3. **Starts the debugger** via nvim-dap
 
@@ -154,21 +152,33 @@ When you run a test with the `dap` strategy, neotest-scala:
 }
 ```
 
-> This is an intentional quick-win fallback to avoid hangs caused by fragile per-test selector payloads.
+### Fallback (Unsafe/Unsupported Test Selection)
+
+```lua
+{
+  type = "scala",
+  request = "launch",
+  name = "Run Test",
+  metals = {
+    runType = "testFile",
+    path = "file:///path/to/TestFile.scala",
+  },
+}
+```
 
 ## Debugging Support by Library
 
 | Library | Single Test Debug | Class Debug | Notes |
 |---------|-------------------|-------------|-------|
-| ScalaTest | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
-| munit | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
-| specs2 | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
-| utest | ⚠️ File-level fallback | ✅ | Also limited by no `TestSelector` implementation |
-| zio-test | ⚠️ File-level fallback | ✅ | Nearest test debug runs the file for reliability |
+| ScalaTest | ❌ | ✅ | Nearest-test debug runs file scope |
+| munit | ❌ | ✅ | Nearest-test debug runs file scope |
+| specs2 | ❌ | ✅ | Nearest-test debug runs file scope |
+| utest | ❌ | ✅ | Nearest-test debug runs file scope |
+| zio-test | ❌ | ✅ | Nearest-test debug runs file scope |
 
-### utest Limitation
+### Per-Test Limitation
 
-utest does not implement `sbt.testing.TestSelector`, so individual test debugging is not supported. You can:
+Individual test debugging is intentionally disabled in DAP mode. You can:
 
 1. Debug the entire test suite
 2. Temporarily isolate the test you want to debug

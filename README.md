@@ -35,7 +35,7 @@ Support levels below describe **test execution + result reporting** in neotest.
 | specs2 | text spec (`s2""" ... """`) | `bloop` | **Limited** | Same single-test limits plus stdout parsing constraints. |
 | zio-test | `ZIOSpecDefault` | `sbt` | **Full** | Stable path via JUnit XML reports. |
 | zio-test | `ZIOSpecDefault` | `bloop` | **Not supported** | Automatically forced to `sbt` (`bloop` execution is disabled for this framework). |
-| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; interpolated names may run at suite scope with numeric JUnit result mapping; debug single-test remains constrained by uTest selector limitations. |
+| uTest | `TestSuite` | `sbt` | **Full** | Works for run/result flow; interpolated names may run at suite scope with numeric JUnit result mapping; DAP nearest-test runs at file scope. |
 | uTest | `TestSuite` | `bloop` | **Not supported** | Known issue: uTest suites can't be discovered by bloop; tests will be run by sbt. |
 
 > Recommendation: prefer `sbt` for stability. Use `bloop` when speed matters and current framework limitations are acceptable.
@@ -127,6 +127,26 @@ require("neotest").setup({
 })
 ```
 
+### Logging
+
+neotest-scala writes logs to `/tmp/neotest-scala/log/<YYYY-MM-DD>.log`.
+Each line includes a logger name (for example `adapter`, `results`, `metals`) so you can see which module emitted it.
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      logging = {
+        enabled = true,   -- default: true
+        level = "info",   -- debug | info | warn | error
+      },
+    })
+  }
+})
+```
+
+`build_spec` payload logging uses `INFO` level.
+
 ## Diagnostics
 
 The plugin provides diagnostic information for failing tests directly in your editor:
@@ -138,16 +158,12 @@ Diagnostics are automatically displayed when tests fail, making it easy to ident
 
 ## Debugging
 
-Plugin supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)).
-
-Current DAP behavior:
-- `debug nearest test` runs at **file scope** for reliability.
-- Class/file debug flows are supported.
-- Strict per-test debug is still limited (notably for `utest`, which has no `sbt.testing.TestSelector`).
-
-For detailed limitations and troubleshooting, see [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md).
-
-To run tests with debugger, pass `strategy = "dap"` when running neotest:
+Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
+`debug nearest test` intentionally launches file-scope debug for reliability. \
+Per-test DAP selectors are not supported. \
+Runs that report `No test suites were run.` are marked as failures (including DAP runs). \
+See [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md) for limitations and troubleshooting details. \
+To run tests with debugger pass `strategy = "dap"` when running neotest:
 
 ```lua
 require('neotest').run.run({strategy = 'dap'})
