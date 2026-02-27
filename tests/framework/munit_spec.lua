@@ -7,6 +7,13 @@ package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {
     end,
   },
 }
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 local fw = require("neotest-scala.framework")
 local munit = require("neotest-scala.framework.munit")
@@ -51,6 +58,7 @@ describe("munit", function()
 
   before_each(function()
     captured_test_path = nil
+    parse_positions_calls = {}
     H.mock_fn("neotest-scala.utils", "get_package_name", function(path)
       if path and path:match("%.scala$") then
         return "com.example."
@@ -72,6 +80,107 @@ describe("munit", function()
 
   after_each(function()
     H.restore_mocks()
+  end)
+
+  describe("discover_positions", function()
+    it("discovers tests for munit FunSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuite.scala",
+        content = [[
+          class FunSuiteSpec extends FunSuite {
+            test("works") { assert(1 == 1) }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+    end)
+
+    it("discovers tests for CatsEffectSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/CatsEffectSuite.scala",
+        content = [[
+          class CatsEffectSpec extends CatsEffectSuite {
+            test("works") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("discovers property tests for ScalaCheckSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ScalaCheckSuite.scala",
+        content = [[
+          class ScalaCheckSpec extends ScalaCheckSuite {
+            property("commutative") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"property"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for DisciplineSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/DisciplineSuite.scala",
+        content = [[
+          class DisciplineSpec extends DisciplineSuite {
+            test("works") { assert(true) }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+    end)
+
+    it("discovers testZ tests for ZIOSuite", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ZioSuite.scala",
+        content = [[
+          class ZioSpec extends ZIOSuite {
+            testZ("zio test") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find('"testZ"', 1, true) ~= nil)
+    end)
+
+    it("supports interpolated string names in testZ", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/ZioSuite.scala",
+        content = [[
+          class ZioSpec extends ZIOSuite {
+            val baseName = "zio"
+            testZ(s"$baseName success2") { ??? }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
+    it("returns nil for unsupported style", function()
+      local tree = munit.discover_positions({
+        path = "/project/src/test/scala/com/example/Nope.scala",
+        content = [[
+          class NoopSpec extends AnyFlatSpec {
+            "x" should "y" in {}
+          }
+        ]],
+      })
+
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
   end)
 
   describe("build_test_path", function()
@@ -98,6 +207,31 @@ describe("munit", function()
         })
 
         assert.are.equal("com.example.MySpec.should pass", captured_test_path)
+      end)
+
+      it("uses suite path for bloop single-test runs", function()
+        local namespace_tree = mock_tree({
+          type = "namespace",
+          name = "MySpec",
+          path = "/project/src/test/scala/com/example/MySpec.scala",
+        })
+
+        local test_tree = mock_tree({
+          type = "test",
+          name = '"should pass"',
+          path = "/project/src/test/scala/com/example/MySpec.scala",
+        }, namespace_tree)
+
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = test_tree,
+          name = "should pass",
+          extra_args = {},
+          build_tool = "bloop",
+        })
+
+        assert.are.equal("com.example.MySpec", captured_test_path)
       end)
 
       it("handles nested tests with parent test", function()
@@ -132,7 +266,7 @@ describe("munit", function()
     end)
 
     describe("for namespace (type == 'namespace')", function()
-      it("builds path with package and spec name with wildcard", function()
+      it("builds path with package and spec name", function()
         local namespace_tree = mock_tree({
           type = "namespace",
           name = "MySpec",
@@ -147,7 +281,7 @@ describe("munit", function()
           extra_args = {},
         })
 
-        assert.are.equal("com.example.MySpec.*", captured_test_path)
+        assert.are.equal("com.example.MySpec", captured_test_path)
       end)
 
       it("returns nil when package cannot be determined", function()
@@ -174,7 +308,7 @@ describe("munit", function()
     end)
 
     describe("for file (type == 'file')", function()
-      it("builds path with package wildcard", function()
+      it("builds path with package and suite when file has one suite", function()
         local namespace_child = mock_tree({
           type = "namespace",
           name = "FileSpec",
@@ -192,6 +326,35 @@ describe("munit", function()
           project = "root",
           tree = file_tree,
           name = "FileSpec.scala",
+          extra_args = {},
+        })
+
+        assert.are.equal("com.example.FileSpec", captured_test_path)
+      end)
+
+      it("builds package wildcard when file has multiple suites", function()
+        local namespace_child1 = mock_tree({
+          type = "namespace",
+          name = "SuiteA",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        })
+        local namespace_child2 = mock_tree({
+          type = "namespace",
+          name = "SuiteB",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        })
+
+        local file_tree = mock_tree({
+          type = "file",
+          name = "MultiSpec.scala",
+          path = "/project/src/test/scala/com/example/MultiSpec.scala",
+        }, nil, { namespace_child1, namespace_child2 })
+
+        munit.build_command({
+          root_path = "/project",
+          project = "root",
+          tree = file_tree,
+          name = "MultiSpec.scala",
           extra_args = {},
         })
 
@@ -263,6 +426,23 @@ describe("munit", function()
         assert.are.equal(fw.TEST_PASSED, result.status)
         assert.is_nil(result.errors)
       end)
+
+      it("matches interpolated discovered names to resolved junit names", function()
+        local junit_test = {
+          namespace = "ZioMUnitSuite",
+          name = "zio success2",
+        }
+        local position = {
+          id = "com.example.ZioMUnitSuite.$baseNamesuccess2",
+          name = 's"$baseName success2"',
+          path = "/project/src/test/scala/com/example/ZioMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.is_not_nil(result)
+        assert.are.equal(fw.TEST_PASSED, result.status)
+      end)
     end)
 
     describe("extracts line number from stacktrace", function()
@@ -322,6 +502,266 @@ describe("munit", function()
         assert.is_not_nil(result.errors[1].message)
         assert.is_nil(result.errors[1].message:match("/some/path/MySpec%.scala:%d+"))
       end)
+
+      it("removes source snippet lines from error message", function()
+        local junit_test = {
+          error_stacktrace = [[
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+Values are not the same
+]],
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.is_not_nil(result.errors[1].message)
+        assert.is_nil(result.errors[1].message:match("^11:", 1, true))
+        assert.is_nil(result.errors[1].message:match("12:%s+assertEquals", 1, false))
+        assert.is_not_nil(result.errors[1].message:match("Values are not the same", 1, true))
+      end)
+
+      it("extracts line from snippet when stacktrace has no file reference", function()
+        local junit_test = {
+          error_stacktrace = [[
+munit.ComparisonFailException: assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+values are not the same
+]],
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.are.equal(11, result.errors[1].line)
+        assert.is_not_nil(result.errors[1].message:match("values are not the same", 1, true))
+      end)
+    end)
+  end)
+
+  describe("parse_stdout_results", function()
+    it("captures ScalaCheck seed failures and line numbers", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "ScalaCheckMUnitSuite",
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      })
+
+      local pass_tree = mock_tree({
+        id = "com.example.ScalaCheckMUnitSuite.reverse reverse is identity",
+        type = "test",
+        name = '"reverse reverse is identity"',
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, namespace_tree)
+      local fail_tree = mock_tree({
+        id = "com.example.ScalaCheckMUnitSuite.intentionally failing property",
+        type = "test",
+        name = '"intentionally failing property"',
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/ScalaCheckMUnitSuite.scala",
+      }, nil, { pass_tree, fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
++ com.example.ScalaCheckMUnitSuite.reverse reverse is identity 0.02s
+==> X com.example.ScalaCheckMUnitSuite.intentionally failing property 0.01s
+munit.FailException: /tmp/ScalaCheckMUnitSuite.scala:17
+16:    }
+17:  }
+18:
+Failing seed: Xq5QcHcxgqqNkBJvwuEN99CKcoc9_q9Lxlwq992-h0D=
+You can reproduce this failure by adding the following override to your suite:
+at com.example.ScalaCheckMUnitSuite.$anonfun$2(ScalaCheckMUnitSuite.scala:14)
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].message
+
+      assert.are.equal(fw.TEST_PASSED, results["com.example.ScalaCheckMUnitSuite.reverse reverse is identity"].status)
+      assert.are.equal(fw.TEST_FAILED, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].status)
+      assert.are.equal(16, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].line)
+      assert.is_not_nil(diagnostic:match("Failing seed:"))
+      assert.is_nil(diagnostic:match("^18:%s*$"))
+    end)
+
+    it("strips source snippet from bloop diagnostics", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local fail_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+Values are not the same
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.DisciplineMUnitSuite.discipline style failure"].errors[1].message
+
+      assert.are.equal(fw.TEST_FAILED, results["com.example.DisciplineMUnitSuite.discipline style failure"].status)
+      assert.are.equal(11, results["com.example.DisciplineMUnitSuite.discipline style failure"].errors[1].line)
+      assert.is_nil(diagnostic:match("^11:", 1, true))
+      assert.is_nil(diagnostic:match("12:%s+assertEquals", 1, false))
+      assert.is_not_nil(diagnostic:match("Values are not the same", 1, true))
+    end)
+
+    it("does not include suite summary in crash diagnostics", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local style_failure_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+      local crash_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline crash",
+        type = "test",
+        name = '"discipline crash"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { style_failure_tree, crash_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+values are not the same
+==> X com.example.DisciplineMUnitSuite.discipline crash 0.01s
+java.lang.IllegalStateException: discipline suite crash
+at com.example.DisciplineMUnitSuite.$init$$$anonfun$4(DisciplineMUnitSuite.scala:22)
+Execution took 79ms
+4 tests, 2 passed, 2 failed
+The test execution was successfully closed.
+================================================================================
+Total duration: 79ms
+1 failed
+Failed:
+- com.example.DisciplineMUnitSuite:
+* com.example.DisciplineMUnitSuite.discipline style failure - values are not the same
+* com.example.DisciplineMUnitSuite.discipline crash - java.lang.IllegalStateException: discipline suite crash
+================================================================================
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.DisciplineMUnitSuite.discipline crash"].errors[1].message
+
+      assert.are.equal(fw.TEST_FAILED, results["com.example.DisciplineMUnitSuite.discipline crash"].status)
+      assert.are.equal(21, results["com.example.DisciplineMUnitSuite.discipline crash"].errors[1].line)
+      assert.is_not_nil(diagnostic:match("IllegalStateException: discipline suite crash", 1, true))
+      assert.is_nil(diagnostic:match("Execution took", 1, true))
+      assert.is_nil(diagnostic:match("The test execution was successfully closed", 1, true))
+      assert.is_nil(diagnostic:match("discipline style failure", 1, true))
+    end)
+
+    it("uses snippet line when no stack frame line is present", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local fail_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+values are not the same
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local result = results["com.example.DisciplineMUnitSuite.discipline style failure"]
+
+      assert.are.equal(fw.TEST_FAILED, result.status)
+      assert.are.equal(11, result.errors[1].line)
+      assert.is_not_nil(result.errors[1].message:match("values are not the same", 1, true))
+    end)
+
+    it("marks all positions failed when bloop reports no suites were run", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "CatsEffectMUnitSuite",
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      })
+
+      local test_tree = mock_tree({
+        id = "com.example.CatsEffectMUnitSuite.cats effect success",
+        type = "test",
+        name = '"cats effect success"',
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/CatsEffectMUnitSuite.scala",
+      }, nil, { test_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+The test execution was successfully closed.
+================================================================================
+Total duration: 0ms
+No test suites were run.
+================================================================================
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local result = results["com.example.CatsEffectMUnitSuite.cats effect success"]
+
+      assert.are.equal(fw.TEST_FAILED, result.status)
+      assert.are.equal("No test suites were run", result.errors[1].message)
     end)
   end)
 end)

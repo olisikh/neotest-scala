@@ -5,11 +5,203 @@ package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {
     end,
   },
 }
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 local scalatest = require("neotest-scala.framework.scalatest")
 local H = require("tests.helpers")
 
 describe("scalatest", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    it("discovers tests for AnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        content = [[
+          import org.scalatest.funsuite.AnyFunSuite
+
+          class FunSuiteSpec extends AnyFunSuite {
+            test("works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("supports interpolated test names for AnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        content = [[
+          import org.scalatest.funsuite.AnyFunSuite
+
+          class FunSuiteSpec extends AnyFunSuite {
+            val baseName = "suite"
+            test(s"$baseName works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AsyncFlatSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/AsyncFlatSpec.scala",
+        content = [[
+          import org.scalatest.flatspec.AsyncFlatSpec
+
+          class AsyncFlatSpec extends AsyncFlatSpec {
+            "a service" should "work" in {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"should"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for FixtureAnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FixtureFunSuite.scala",
+        content = [[
+          import org.scalatest.funsuite.FixtureAnyFunSuite
+
+          class FixtureFunSuite extends FixtureAnyFunSuite {
+            type FixtureParam = String
+            test("works") { _ => () }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyPropSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/PropSpec.scala",
+        content = [[
+          import org.scalatest.propspec.AnyPropSpec
+
+          class PropSpec extends AnyPropSpec {
+            property("works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"property"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AsyncWordSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/AsyncWordSpecSuite.scala",
+        content = [[
+          import org.scalatest.wordspec.AsyncWordSpec
+
+          class AsyncWordSpecSuite extends AsyncWordSpec {
+            "service" should {
+              "work" in {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyFunSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSpec.scala",
+        content = [[
+          import org.scalatest.funspec.AnyFunSpec
+
+          class FunSpec extends AnyFunSpec {
+            describe("List operations") {
+              it("works") {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"describe"', 1, true) ~= nil)
+      assert.is_true(parse_positions_calls[1].query:find('"it"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyFeatureSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        content = [[
+          import org.scalatest.featurespec.AnyFeatureSpec
+
+          class FeatureSpec extends AnyFeatureSpec {
+            Feature("Authentication") {
+              Scenario("successful login") {}
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"Feature"', 1, true) ~= nil)
+      assert.is_true(parse_positions_calls[1].query:find('"Scenario"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for RefSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/RefSpecSuite.scala",
+        content = [[
+          import org.scalatest.refspec.RefSpec
+
+          class RefSpecSuite extends RefSpec {
+            def `successful example`(): Unit = {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("function_definition", 1, true) ~= nil)
+    end)
+
+    it("returns nil for unsupported style", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/Nope.scala",
+        content = [[
+          import munit.FunSuite
+
+          class Nope extends FunSuite {
+            test("nope") {}
+          }
+        ]],
+      })
+
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()
@@ -416,6 +608,76 @@ describe("scalatest", function()
       assert.is_not_nil(result)
       assert.are.equal(TEST_PASSED, result.status)
     end)
+
+    it("matches AnyWordSpec JUnit names with behavior prefix", function()
+      local junit_test = {
+        name = "A calculator should add numbers successfully",
+        namespace = "WordSpec",
+      }
+
+      local position = {
+        path = "/path/to/WordSpec.scala",
+        id = "com.example.WordSpec.add numbers successfully",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches AnyFunSpec JUnit names with describe context", function()
+      local junit_test = {
+        name = "List operations supports successful checks",
+        namespace = "FunSpec",
+      }
+
+      local position = {
+        path = "/path/to/FunSpec.scala",
+        id = "com.example.FunSpec.List operations.supports successful checks",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches AnyFeatureSpec JUnit names with Feature/Scenario prefixes", function()
+      local junit_test = {
+        name = "Feature: Authentication Scenario: successful login",
+        namespace = "FeatureSpec",
+      }
+
+      local position = {
+        path = "/path/to/FeatureSpec.scala",
+        id = "com.example.FeatureSpec.Authentication.successful login",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
+
+    it("matches RefSpec names discovered with backticks", function()
+      local junit_test = {
+        name = "successful example",
+        namespace = "RefSpecSuite",
+      }
+
+      local position = {
+        path = "/path/to/RefSpecSuite.scala",
+        id = "com.example.RefSpecSuite.successfulexample",
+        name = "`successful example`",
+        type = "test",
+      }
+
+      local result = scalatest.build_test_result(junit_test, position)
+
+      assert.is_not_nil(result)
+      assert.are.equal(TEST_PASSED, result.status)
+    end)
   end)
 
   describe("build_test_result", function()
@@ -765,6 +1027,69 @@ Execution took 18ms
       assert.are.equal(TEST_FAILED, results["com.example.FlatSpec.crash"].status)
       assert.are.equal(34, results["com.example.FlatSpec.crash"].errors[1].line)
       assert.is_not_nil(results["com.example.FlatSpec.crash"].errors[1].message:match("RuntimeException: boom"))
+    end)
+
+    it("parses AnyFeatureSpec bloop output with Scenario prefixes", function()
+      local tree = mk_tree({
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.successful login",
+          name = '"successful login"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.failing credential check",
+          name = '"failing credential check"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+        {
+          type = "test",
+          id = "com.example.FeatureSpec.Authentication.unexpected exception",
+          name = '"unexpected exception"',
+          path = "/project/src/test/scala/com/example/FeatureSpec.scala",
+        },
+      })
+
+      local output = [[
+FeatureSpec:
+Feature: Authentication
+  Scenario: successful login
+  Scenario: failing credential check *** FAILED ***
+  401 did not equal 200 (FeatureSpec.scala:14)
+  Scenario: unexpected exception *** FAILED ***
+  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+  at org.scalatest.Transformer.apply(Transformer.scala:21)
+  at com.example.FeatureSpec.fun$proxy1$1$$anonfun$3(FeatureSpec.scala:17)
+  java.lang.RuntimeException: featurespec crash
+  at com.example.FeatureSpec.testFun$proxy3$1(FeatureSpec.scala:18)
+Execution took 12ms
+3 tests, 1 passed, 2 failed
+
+================================================================================
+Total duration: 12ms
+1 failed
+
+Failed:
+- com.example.FeatureSpec:
+  * Feature: Authentication Scenario: failing credential check - 401 did not equal 200
+  * Feature: Authentication Scenario: unexpected exception - java.lang.RuntimeException: featurespec crash
+================================================================================
+]]
+
+      local results = scalatest.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FeatureSpec.Authentication.successful login"].status)
+
+      assert.are.equal(TEST_FAILED, results["com.example.FeatureSpec.Authentication.failing credential check"].status)
+      assert.are.equal(13, results["com.example.FeatureSpec.Authentication.failing credential check"].errors[1].line)
+      assert.is_not_nil(results["com.example.FeatureSpec.Authentication.failing credential check"].errors[1].message:match("401 did not equal 200"))
+
+      assert.are.equal(TEST_FAILED, results["com.example.FeatureSpec.Authentication.unexpected exception"].status)
+      assert.are.equal(16, results["com.example.FeatureSpec.Authentication.unexpected exception"].errors[1].line)
+      assert.is_not_nil(
+        results["com.example.FeatureSpec.Authentication.unexpected exception"].errors[1].message:match("RuntimeException: featurespec crash")
+      )
     end)
 
     it("strips first-line location suffix from stdout diagnostic messages", function()

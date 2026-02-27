@@ -45,6 +45,9 @@ target
 .bsp
 .bloop
 metals.sbt
+.ivy2
+.sbt-boot
+.sbt-global
 
 # LLM
 .sisyphus

@@ -1,7 +1,120 @@
 local specs2 = require("neotest-scala.framework.specs2")
 local H = require("tests.helpers")
+local parse_positions_calls = {}
+
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {}
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 describe("specs2", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    after_each(function()
+      H.restore_mocks()
+    end)
+
+    it("discovers mutable spec tests with in/>> operators", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/MutableSpec.scala",
+        content = [[
+          class MutableSpec extends Specification {
+            "ok" >> { 1 must_== 1 }
+            "failing" in { 1 must_== 2 }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"in"', 1, true) ~= nil)
+    end)
+
+    it("discovers immutable fragments with ! operator", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/FragmentsSpec.scala",
+        content = [[
+          import org.specs2.Specification
+
+          class FragmentsSpec extends Specification {
+            def is = "Fragments" ^
+              "successful fragment" ! ok ^
+              "failing fragment" ! ko("boom")
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"!"', 1, true) ~= nil)
+    end)
+
+    it("supports interpolated mutable spec test names", function()
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/MutableSpec.scala",
+        content = [[
+          class MutableSpec extends Specification {
+            val baseName = "ok"
+            s"$baseName spec" in { 1 must_== 1 }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+
+    it("uses textspec parser when references are present", function()
+      H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
+        return { source = "textspec" }
+      end)
+
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/ImmutableSpec.scala",
+        content = [[
+          class ImmutableSpec extends Specification {
+            def is = s2""" spec $e1 """
+            def e1 = ok
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal("textspec", tree.source)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
+
+    it("returns nil when textspec parser finds no refs", function()
+      H.mock_fn("neotest-scala.framework.specs2.textspec", "discover_positions", function()
+        return nil
+      end)
+
+      local tree = specs2.discover_positions({
+        path = "/project/src/test/scala/com/example/TextWithoutRefsSpec.scala",
+        content = [[
+          class TextWithoutRefsSpec extends Specification {
+            def is = s2"""
+              this example should pass
+            """
+
+            "this example should pass" in {
+              1 must_== 1
+            }
+          }
+        ]],
+      })
+
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()
@@ -299,6 +412,63 @@ HelloWereld
       assert.are.equal(TEST_FAILED, results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].status)
       assert.are.equal(21, results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].line)
       assert.is_truthy(results["com.example.MutableSpec.HelloWereld.and.a.crashing.test"].errors[1].message:find("RuntimeException", 1, true))
+    end)
+
+    it("maps fragment failures from [E] lines when status markers are collapsed", function()
+      local output = [[
+FragmentsSpecFragments spec+ fragment successx fragment failure
+[E]  fragment failure (FragmentsSpec.scala:14)
+[E] ! fragment crash
+[E]  java.lang.RuntimeException: fragment crash (FragmentsSpec.scala:15)com.example.FragmentsSpec.fragmentCrash(FragmentsSpec.scala:15)
+[E] com.example.FragmentsSpec.is$$anonfun$3$$anonfun$1(FragmentsSpec.scala:11)
+
+3 tests, 1 passed, 1 failed, 1 errors
+]]
+
+      local nodes = {
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.success",
+              type = "test",
+              name = "\"fragment success\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.failure",
+              type = "test",
+              name = "\"fragment failure\"",
+            }
+          end,
+        },
+        {
+          data = function()
+            return {
+              id = "com.example.FragmentsSpec.fragment.crash",
+              type = "test",
+              name = "\"fragment crash\"",
+            }
+          end,
+        },
+      }
+
+      local tree = {
+        iter_nodes = function()
+          return ipairs(nodes)
+        end,
+      }
+
+      local results = specs2.parse_stdout_results(output, tree)
+
+      assert.are.equal(TEST_PASSED, results["com.example.FragmentsSpec.fragment.success"].status)
+      assert.are.equal(TEST_FAILED, results["com.example.FragmentsSpec.fragment.failure"].status)
+      assert.are.equal(13, results["com.example.FragmentsSpec.fragment.failure"].errors[1].line)
+      assert.are.equal(TEST_FAILED, results["com.example.FragmentsSpec.fragment.crash"].status)
+      assert.are.equal(14, results["com.example.FragmentsSpec.fragment.crash"].errors[1].line)
+      assert.is_truthy(results["com.example.FragmentsSpec.fragment.crash"].errors[1].message:find("RuntimeException", 1, true))
     end)
   end)
 end)

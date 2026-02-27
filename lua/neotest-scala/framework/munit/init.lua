@@ -20,9 +20,27 @@ local M = { name = "munit" }
 ---@param content string
 ---@return boolean
 local function is_funsuite_style(content)
-    if content:match("extends%s+FunSuite") or content:match("extends%s+munit%.FunSuite") then
-        return true
+    local supported_suite_patterns = {
+        "FunSuite",
+        "munit%.FunSuite",
+        "CatsEffectSuite",
+        "munit%.CatsEffectSuite",
+        "ScalaCheckSuite",
+        "munit%.ScalaCheckSuite",
+        "DisciplineSuite",
+        "munit%.DisciplineSuite",
+        "ZSuite",
+        "munit%.ZSuite",
+        "ZIOSuite",
+        "munit%.ZIOSuite",
+    }
+
+    for _, suite_pattern in ipairs(supported_suite_patterns) do
+        if content:match("extends%s+.-" .. suite_pattern .. "%f[%W]") then
+            return true
+        end
     end
+
     return false
 end
 
@@ -46,8 +64,12 @@ function M.discover_positions(opts)
 
       ((call_expression
         function: (call_expression
-        function: (identifier) @func_name (#eq? @func_name "test")
-        arguments: (arguments (string) @test.name))
+        function: (identifier) @func_name (#any-of? @func_name "test" "property" "testZ")
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     return lib.treesitter.parse_positions(path, query, {
@@ -74,7 +96,7 @@ local function build_test_path(tree, name)
         if not package then
             return nil
         end
-        return package .. name .. ".*"
+        return package .. name
     end
     if type == "file" then
         local test_suites = {}
@@ -83,8 +105,14 @@ local function build_test_path(tree, name)
                 table.insert(test_suites, child:data().name)
             end
         end
-        if test_suites then
+        if #test_suites > 0 then
             local package = utils.get_package_name(tree:data().path)
+            if not package then
+                return nil
+            end
+            if #test_suites == 1 then
+                return package .. test_suites[1]
+            end
             return package .. "*"
         end
     end
@@ -92,6 +120,113 @@ local function build_test_path(tree, name)
         return "*"
     end
     return nil
+end
+
+---@param tree neotest.Tree
+---@param default_path string|nil
+---@param build_tool "bloop"|"sbt"|nil
+---@return string|nil
+local function resolve_test_path_for_tool(tree, default_path, build_tool)
+    if build_tool ~= "bloop" or tree:data().type ~= "test" then
+        return default_path
+    end
+
+    local namespace_node = utils.find_node(tree, "namespace", false)
+    if not namespace_node then
+        return default_path
+    end
+
+    local namespace_data = namespace_node:data()
+    local package_name = utils.get_package_name(namespace_data.path)
+    if not package_name then
+        return default_path
+    end
+
+    return package_name .. namespace_data.name
+end
+
+---@param line string
+---@return boolean
+local function is_source_snippet_line(line)
+    return line:match("^%s*%d+:%s*") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
+end
+
+---@param snippet_line string
+---@return number|nil, boolean|nil
+local function parse_snippet_line_number(snippet_line)
+    local line_num_str, code = snippet_line:match("^%s*(%d+):%s*(.*)$")
+    if not line_num_str then
+        return nil
+    end
+
+    local line_num = tonumber(line_num_str)
+    if not line_num then
+        return nil
+    end
+
+    local trimmed_code = utils.string_trim(code or "")
+    local is_block_boundary = trimmed_code == "" or trimmed_code:match("{%s*$") or trimmed_code:match("^}%s*$")
+
+    return line_num - 1, is_block_boundary
+end
+
+---@param message string
+---@return number|nil
+local function extract_snippet_line_number(message)
+    local fallback_line = nil
+
+    for line in message:gmatch("[^\r\n]+") do
+        local parsed_line, is_block_boundary = parse_snippet_line_number(line)
+        if parsed_line ~= nil then
+            fallback_line = fallback_line or parsed_line
+            if not is_block_boundary then
+                return parsed_line
+            end
+        end
+    end
+
+    return fallback_line
+end
+
+---@param line string
+---@return boolean
+local function is_summary_boundary_line(line)
+    local trimmed = utils.string_trim(line)
+    return trimmed:match("^Execution took") ~= nil
+        or trimmed:match("^%d+ tests?,%s*%d+ passed,%s*%d+ failed") ~= nil
+        or trimmed:match("^The test execution was successfully closed%.?$") ~= nil
+        or trimmed:match("^=+$") ~= nil
+        or trimmed:match("^Total duration:") ~= nil
+        or trimmed:match("^%d+ failed$") ~= nil
+        or trimmed == "Failed:"
+        or trimmed:match("^%-%s+[%w%._$]+:?$") ~= nil
+        or trimmed:match("^%*%s+") ~= nil
+end
+
+---@param message string
+---@param file_name string|nil
+---@return string
+local function sanitize_failure_message(message, file_name)
+    local cleaned_lines = {}
+    for line in message:gmatch("[^\r\n]+") do
+        if not is_source_snippet_line(line) and not is_summary_boundary_line(line) then
+            local cleaned = line
+            if file_name then
+                cleaned = cleaned:gsub("/.*/" .. file_name .. ":%d+ ", "")
+            end
+            table.insert(cleaned_lines, cleaned)
+        end
+    end
+
+    local cleaned_message = table.concat(cleaned_lines, "\n")
+    cleaned_message = cleaned_message:gsub("\n%s*\n+", "\n")
+    cleaned_message = utils.string_trim(cleaned_message)
+
+    if cleaned_message ~= "" then
+        return cleaned_message
+    end
+
+    return utils.string_trim(message)
 end
 
 ---@param junit_test neotest-scala.JUnitTest
@@ -105,7 +240,7 @@ local function match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
     local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
+    return utils.matches_with_interpolation(junit_test_id, test_id)
 end
 
 ---@param junit_test neotest-scala.JUnitTest
@@ -123,8 +258,12 @@ function M.build_test_result(junit_test, position)
     local message = junit_test.error_stacktrace or junit_test.error_message
 
     if message then
-        error.message = message:gsub("/.*/" .. file_name .. ":%d+ ", "")
+        local snippet_line = extract_snippet_line_number(message)
         error.line = utils.extract_line_number(message, file_name)
+        if error.line == nil then
+            error.line = snippet_line
+        end
+        error.message = sanitize_failure_message(message, file_name)
     end
 
     if vim.tbl_isempty(error) then
@@ -142,12 +281,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -163,7 +310,7 @@ function M.build_command(opts)
     local name = opts.name
     local extra_args = opts.extra_args
     local build_tool = opts.build_tool
-    local test_path = build_test_path(tree, name)
+    local test_path = resolve_test_path_for_tool(tree, build_test_path(tree, name), build_tool)
     return build.command_with_path({
         root_path = root_path,
         project = project,
@@ -215,61 +362,144 @@ function M.parse_stdout_results(output, tree)
         table.insert(lines, line)
     end
 
-    local function find_line_in_trace(start_idx, file_pattern)
-        -- TODO: arbitrary +15 looks hacky
-        for j = start_idx, math.min(start_idx + 15, #lines) do
-            local trace_line = lines[j] or ""
-            local line_num = trace_line:match("%(([^:]+)%.scala:(%d+)%)")
-
-            if line_num and trace_line:find(file_pattern, 1, true) then
-                return tonumber(line_num)
+    local function extract_line_number_from_detail(detail, matched_file)
+        local path_with_line, path_line_num = detail:match("([%w%._/%-]+%.scala):(%d+)")
+        if path_with_line and path_line_num then
+            if not matched_file or utils.get_file_name(path_with_line) == matched_file then
+                return tonumber(path_line_num) - 1
             end
         end
+
+        local trace_file, trace_line = detail:match("%(([^:]+%.scala):(%d+)%)")
+        if trace_file and trace_line then
+            if not matched_file or utils.get_file_name(trace_file) == matched_file then
+                return tonumber(trace_line) - 1
+            end
+        end
+
+        local plain_file, plain_line = detail:match("at%s+([^:]+%.scala):(%d+)%s*$")
+        if plain_file and plain_line then
+            if not matched_file or utils.get_file_name(plain_file) == matched_file then
+                return tonumber(plain_line) - 1
+            end
+        end
+
         return nil
     end
 
-    for i, line in ipairs(lines) do
-        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$")
-        if pass_name then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and pass_name:find(pos_name, 1, true) then
-                    results[pos_id] = { status = TEST_PASSED }
-                end
-            end
+    local function is_test_result_line(line)
+        return line:match("^%s*%+%s+.+%s+%d+%.%d+s$")
+            or line:match("^%s*%+%s+.+%s+%d+ms$")
+            or line:match("^==>%s+X%s+.+$")
+    end
+
+    local function parse_test_path(line)
+        local fail_line = line:match("^==>%s+X%s+(.+)$")
+        if not fail_line then
+            return nil
         end
 
-        local fail_line = line:match("^==> X (.+)$")
-        if fail_line then
-            local test_path = fail_line:match("^(.+)  %d+%.%d+s")
-            if test_path then
-                for pos_id, pos in pairs(positions) do
-                    local pos_name = utils.get_position_name(pos) or pos.name
-                    local matched_file = utils.get_file_name(pos.path)
-                    if pos_name and test_path:find(pos_name, 1, true) then
-                        local line_num, msg = fail_line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
-                        if line_num and msg then
-                            results[pos_id] = {
-                                status = TEST_FAILED,
-                                errors = { { message = msg, line = tonumber(line_num) - 1 } },
-                            }
-                        else
-                            local exc = fail_line:match("%s+([%w%.$]+: .+)$")
-                            if exc then
-                                local trace_line = find_line_in_trace(i + 1, matched_file or "")
-                                results[pos_id] = {
-                                    status = TEST_FAILED,
-                                    errors = { { message = exc, line = trace_line } },
-                                }
-                            else
-                                results[pos_id] = { status = TEST_FAILED, errors = {} }
-                            end
-                        end
-                        break
-                    end
-                end
+        local test_path = fail_line:match("^(.+)%s+%d+%.%d+s$")
+        if not test_path then
+            test_path = fail_line:match("^(.+)%s+%d+ms$")
+        end
+
+        return test_path or fail_line
+    end
+
+    local function find_matching_positions(test_path)
+        local matched = {}
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local pos_matches = pos_name and test_path:find(pos_name, 1, true)
+            local interpolated_match = pos_name
+                and utils.matches_with_interpolation(test_path, pos_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matched, { id = pos_id, file = utils.get_file_name(pos.path) })
             end
         end
+        return matched
+    end
+
+    local index = 1
+    while index <= #lines do
+        local line = lines[index]
+        local pass_name = line:match("^%s*%+%s*(.+)%s+%d+%.%d+s$") or line:match("^%s*%+%s*(.+)%s+%d+ms$")
+        if pass_name then
+            local matched = find_matching_positions(pass_name)
+            for _, pos in ipairs(matched) do
+                results[pos.id] = { status = TEST_PASSED }
+            end
+            index = index + 1
+            goto continue
+        end
+
+        local test_path = parse_test_path(line)
+        if test_path then
+            local matched = find_matching_positions(test_path)
+            local fail_line_num, fail_msg = line:match("munit%.FailException: [^:]+:(%d+) (.+)$")
+            local fallback_message = line:match("^==>%s+X%s+.+%s+([%w%.$]+: .+)$")
+
+            local detail_messages = {}
+            local detail_line = nil
+            local lookahead = index + 1
+            while lookahead <= #lines do
+                local detail = lines[lookahead]
+                if is_test_result_line(detail) or is_summary_boundary_line(detail) then
+                    break
+                end
+
+                local trimmed_detail = utils.string_trim(detail)
+                if trimmed_detail ~= "" then
+                    table.insert(detail_messages, trimmed_detail)
+                    if not detail_line then
+                        local parsed_line = nil
+                        for _, pos in ipairs(matched) do
+                            parsed_line = extract_line_number_from_detail(trimmed_detail, pos.file)
+                            if parsed_line ~= nil then
+                                break
+                            end
+                            local snippet_line, is_block_boundary = parse_snippet_line_number(trimmed_detail)
+                            if snippet_line ~= nil and not is_block_boundary then
+                                parsed_line = snippet_line
+                                break
+                            end
+                        end
+                        detail_line = parsed_line
+                    end
+                end
+
+                lookahead = lookahead + 1
+            end
+
+            for _, pos in ipairs(matched) do
+                if fail_line_num and fail_msg then
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = fail_msg, line = tonumber(fail_line_num) - 1 } },
+                    }
+                else
+                    local message = table.concat(detail_messages, "\n")
+                    message = sanitize_failure_message(message, pos.file)
+                    if message == "" then
+                        message = fallback_message or "munit failure"
+                    end
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = message, line = detail_line } },
+                    }
+                end
+            end
+
+            index = lookahead
+            goto continue
+        end
+
+        index = index + 1
+        ::continue::
     end
 
     local global_failure = nil
@@ -279,6 +509,8 @@ function M.parse_stdout_results(output, tree)
         global_failure = "Test suite aborted"
     elseif output:match("initializationError") then
         global_failure = "Suite initialization failed"
+    elseif output:match("No test suites were run") then
+        global_failure = "No test suites were run"
     end
 
     for pos_id in pairs(positions) do

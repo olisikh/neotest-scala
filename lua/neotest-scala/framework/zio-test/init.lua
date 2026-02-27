@@ -47,7 +47,11 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#any-of? @func_name "test" "suite" "suiteAll")
-        arguments: (arguments (string) @test.name))
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     return lib.treesitter.parse_positions(path, query, {
@@ -81,7 +85,7 @@ local function match_test(junit_test, position)
     local package_name = utils.get_package_name(position.path)
     local junit_test_id = (package_name .. junit_test.namespace .. "." .. junit_test.name):gsub("-", "."):gsub(" ", "")
     local test_id = position.id:gsub("-", "."):gsub(" ", "")
-    return junit_test_id == test_id
+    return utils.matches_with_interpolation(junit_test_id, test_id)
 end
 
 ---@param message string
@@ -190,12 +194,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED

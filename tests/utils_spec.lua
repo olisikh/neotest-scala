@@ -169,6 +169,36 @@ describe('utils', function()
       local position = { type = 'test', name = '"test "nested" case"' }
       H.assert_eq(utils.get_position_name(position), 'test nested case')
     end)
+
+    it('strips interpolator prefix from interpolated string', function()
+      local position = { type = 'test', name = 's"$baseName success2"' }
+      H.assert_eq(utils.get_position_name(position), '$baseName success2')
+    end)
+
+    it('strips backticks from RefSpec method names', function()
+      local position = { type = 'test', name = '`successful example`' }
+      H.assert_eq(utils.get_position_name(position), 'successful example')
+    end)
+  end)
+
+  describe('matches_with_interpolation', function()
+    it('matches resolved value for simple interpolation', function()
+      local matched = utils.matches_with_interpolation('ziosuccess2', '$baseNamesuccess2')
+      H.assert_eq(matched, true)
+    end)
+
+    it('supports suffix matching for interpolated strings', function()
+      local matched = utils.matches_with_interpolation('com.example.zio success2', '$baseName success2', {
+        anchor_start = false,
+        anchor_end = true,
+      })
+      H.assert_eq(matched, true)
+    end)
+
+    it('returns false for non-matching interpolation shape', function()
+      local matched = utils.matches_with_interpolation('zio failed', '$baseName success2')
+      H.assert_eq(matched, false)
+    end)
   end)
 
   describe('get_file_name', function()

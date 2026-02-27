@@ -18,15 +18,100 @@ local M = { name = "scalatest" }
 ---@field build_tool? "bloop"|"sbt"
 
 ---@param content string
----@return "funsuite"|"freespec"|"flatspec"|nil
-local function detect_style(content)
-    if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
-        return "funsuite"
-    elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
-        return "freespec"
-    elseif content:match("extends%s+AnyFlatSpec") or content:match("extends%s+.*FlatSpec") then
-        return "flatspec"
+---@return boolean
+local function has_scalatest_marker(content)
+    return content:match("org%.scalatest") ~= nil
+end
+
+---@param content string
+---@param suite_patterns string[]
+---@return boolean
+local function matches_suite_style(content, suite_patterns)
+    for _, suite_pattern in ipairs(suite_patterns) do
+        if content:match("extends%s+.-" .. suite_pattern .. "%f[%W]") then
+            return true
+        end
     end
+
+    return false
+end
+
+---@param content string
+---@return "funsuite"|"freespec"|"flatspec"|"propspec"|"wordspec"|"funspec"|"featurespec"|"refspec"|nil
+local function detect_style(content)
+    if
+        matches_suite_style(content, {
+            "AnyFunSuite",
+            "AsyncFunSuite",
+            "FixtureAnyFunSuite",
+            "fixture%.AnyFunSuite",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FunSuite%f[%W]"))
+    then
+        return "funsuite"
+    elseif
+        matches_suite_style(content, {
+            "AnyFreeSpec",
+            "AsyncFreeSpec",
+            "FixtureAnyFreeSpec",
+            "fixture%.AnyFreeSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FreeSpec%f[%W]"))
+    then
+        return "freespec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFlatSpec",
+            "AsyncFlatSpec",
+            "FixtureAnyFlatSpec",
+            "fixture%.AnyFlatSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FlatSpec%f[%W]"))
+    then
+        return "flatspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyPropSpec",
+            "FixtureAnyPropSpec",
+            "fixture%.AnyPropSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*PropSpec%f[%W]"))
+    then
+        return "propspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyWordSpec",
+            "AsyncWordSpec",
+            "FixtureAnyWordSpec",
+            "fixture%.AnyWordSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*WordSpec%f[%W]"))
+    then
+        return "wordspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFunSpec",
+            "AsyncFunSpec",
+            "FixtureAnyFunSpec",
+            "fixture%.AnyFunSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FunSpec%f[%W]"))
+    then
+        return "funspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFeatureSpec",
+            "AsyncFeatureSpec",
+            "FixtureAnyFeatureSpec",
+            "fixture%.AnyFeatureSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FeatureSpec%f[%W]"))
+    then
+        return "featurespec"
+    elseif
+        matches_suite_style(content, {
+            "AnyRefSpec",
+            "RefSpec",
+            "FixtureAnyRefSpec",
+            "fixture%.AnyRefSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*RefSpec%f[%W]"))
+    then
+        return "refspec"
+    end
+
     return nil
 end
 
@@ -55,7 +140,31 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#eq? @func_name "test")
-        arguments: (arguments (string) @test.name))
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
+      )) @test.definition
+    ]]
+    elseif style == "propspec" then
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+        function: (identifier) @func_name (#eq? @func_name "property")
+        arguments: (arguments
+          [
+            (string)
+            (interpolated_string_expression)
+          ] @test.name))
       )) @test.definition
     ]]
     elseif style == "freespec" then
@@ -70,10 +179,117 @@ function M.discover_positions(opts)
       ) @namespace.definition
 
       (infix_expression
-        left: (string) @test.name
+        left: [
+          (string)
+          (interpolated_string_expression)
+        ] @test.name
         operator: (_) @spec_init (#any-of? @spec_init "-" "in")
         right: (_)
       ) @test.definition
+    ]]
+    elseif style == "wordspec" then
+        -- WordSpec: "A thing" should { "do X" in { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (infix_expression
+        left: [
+          (string)
+          (interpolated_string_expression)
+        ] @test.name
+        operator: (_) @spec_in (#eq? @spec_in "in")
+        right: (_)
+      ) @test.definition
+    ]]
+    elseif style == "funspec" then
+        -- FunSpec: describe("name") { it("test") { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#any-of? @func_name "describe" "context")
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
+      )) @test.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "it")
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
+      )) @test.definition
+    ]]
+    elseif style == "featurespec" then
+        -- FeatureSpec: Feature("x") { Scenario("y") { ... } }
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "Feature")
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
+      )) @test.definition
+
+      ((call_expression
+        function: (call_expression
+          function: (identifier) @func_name (#eq? @func_name "Scenario")
+          arguments: (arguments
+            [
+              (string)
+              (interpolated_string_expression)
+            ] @test.name))
+      )) @test.definition
+    ]]
+    elseif style == "refspec" then
+        -- RefSpec: discover zero-arg test methods
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      [
+        (function_definition
+          name: (identifier) @test.name
+          parameters: (parameters) @test_params (#eq? @test_params "()")
+        )
+        (function_definition
+          name: (identifier) @test.name
+          !parameters
+        )
+      ] @test.definition
     ]]
     else
         -- FlatSpec:
@@ -92,7 +308,10 @@ function M.discover_positions(opts)
                 left: (infix_expression
                     left: (string)
                     operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
-                    right: (string) @test.name)
+                    right: [
+                      (string)
+                      (interpolated_string_expression)
+                    ] @test.name)
                 operator: (_) @spec_in (#eq? @spec_in "in")
                 right: (_)
             ) @test.definition
@@ -101,7 +320,10 @@ function M.discover_positions(opts)
                 left: (infix_expression
                     left: (identifier) @it_name (#eq? @it_name "it")
                     operator: (_) @spec_init (#any-of? @spec_init "should" "must" "can")
-                    right: (string) @test.name)
+                    right: [
+                      (string)
+                      (interpolated_string_expression)
+                    ] @test.name)
                 operator: (_) @spec_in (#eq? @spec_in "in")
                 right: (_)
             ) @test.definition
@@ -214,6 +436,8 @@ local function match_test(junit_test, position)
     local flat_should = junit_name:match("^.-%s+[Ss]hould%s+(.+)$")
     local flat_must = junit_name:match("^.-%s+[Mm]ust%s+(.+)$")
     local flat_can = junit_name:match("^.-%s+[Cc]an%s+(.+)$")
+    local feature_scenario = junit_name:gsub("[Ff]eature:%s*", ""):gsub("[Ss]cenario:%s*", "")
+    feature_scenario = vim.trim(feature_scenario)
 
     if flat_should then
         table.insert(junit_name_variants, flat_should)
@@ -223,6 +447,9 @@ local function match_test(junit_test, position)
     end
     if flat_can then
         table.insert(junit_name_variants, flat_can)
+    end
+    if feature_scenario ~= "" and feature_scenario ~= junit_name then
+        table.insert(junit_name_variants, feature_scenario)
     end
 
     -- Normalize: remove dashes and spaces for comparison
@@ -234,13 +461,13 @@ local function match_test(junit_test, position)
     for _, variant in ipairs(junit_name_variants) do
         -- Try 1: Standard matching with package prefix (for regular tests)
         local junit_with_package = (package_name .. junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
-        if junit_with_package == normalized_position then
+        if utils.matches_with_interpolation(junit_with_package, normalized_position) then
             return true
         end
 
         -- Try 2: Without package prefix (for FreeSpec where JUnit namespace is just class name)
         local junit_test_id = (junit_test.namespace .. "." .. variant):gsub("-", "."):gsub(" ", "")
-        if junit_test_id == normalized_position then
+        if utils.matches_with_interpolation(junit_test_id, normalized_position) then
             return true
         end
 
@@ -251,11 +478,28 @@ local function match_test(junit_test, position)
             return true
         end
 
-        -- Try 4: Remove all dots and compare (fallback for edge cases)
-        local junit_no_dots = junit_test_id:gsub("%.", "")
-        local position_no_dots = position_no_package:gsub("%.", "")
-        if junit_no_dots == position_no_dots then
+        if utils.matches_with_interpolation(junit_test_id, position_no_package, {
+            anchor_start = false,
+            anchor_end = true,
+        }) then
             return true
+        end
+
+        -- Try 4: Remove all dots and compare (fallback for edge cases)
+        local junit_no_dots = junit_test_id:gsub("%.", ""):gsub(":", "")
+        local position_no_dots = position_no_package:gsub("%.", ""):gsub(":", "")
+        if utils.matches_with_interpolation(junit_no_dots, position_no_dots) then
+            return true
+        end
+
+        -- Try 5: Compare against discovered position test name directly
+        local position_name = utils.get_position_name(position)
+        if position_name then
+            local normalized_variant = variant:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+            local normalized_position_name = position_name:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+            if utils.matches_with_interpolation(normalized_variant, normalized_position_name) then
+                return true
+            end
         end
     end
 
@@ -320,12 +564,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -355,7 +607,7 @@ end
 ---@param value string
 ---@return string
 local function normalize_for_match(value)
-    return value:gsub('"', ""):gsub("-", "."):gsub("%s+", "")
+    return value:gsub('"', ""):gsub("-", "."):gsub(":", ""):gsub("%s+", "")
 end
 
 ---@param tree neotest.Tree
@@ -398,6 +650,12 @@ local function find_matching_positions(positions_by_name, test_name)
         table.insert(variants, (test_name:gsub("^[Cc]an%s+", "")))
     end
 
+    local feature_scenario = test_name:gsub("[Ff]eature:%s*", ""):gsub("[Ss]cenario:%s*", "")
+    feature_scenario = vim.trim(feature_scenario)
+    if feature_scenario ~= "" and feature_scenario ~= test_name then
+        table.insert(variants, feature_scenario)
+    end
+
     for _, variant in ipairs(variants) do
         local normalized_test_name = normalize_for_match(variant)
         local exact = positions_by_name[normalized_test_name]
@@ -410,6 +668,16 @@ local function find_matching_positions(positions_by_name, test_name)
             for _, pos in ipairs(positions) do
                 if pos.normalized_id:find(normalized_test_name, 1, true) then
                     table.insert(matches, pos)
+                end
+            end
+        end
+
+        if #matches == 0 then
+            for _, positions in pairs(positions_by_name) do
+                for _, pos in ipairs(positions) do
+                    if utils.matches_with_interpolation(normalized_test_name, pos.normalized_name) then
+                        table.insert(matches, pos)
+                    end
                 end
             end
         end
@@ -492,7 +760,16 @@ function M.parse_stdout_results(output, tree)
 
     for line in output:gmatch("[^\r\n]+") do
         local fail_indent, fail_name = line:match("^(%s*)%-%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
+        if not fail_name then
+            fail_indent, fail_name = line:match("^(%s*)Scenario:%s*(.-)%s+%*%*%* FAILED %*%*%*%s*$")
+        end
+
         local pass_name = line:match("^%s*%-%s*(.-)%s*$")
+        if not pass_name and not line:match("%*%*%* FAILED %*%*%*") then
+            pass_name = line:match("^%s*Scenario:%s*(.-)%s*$")
+        end
+
+        local summary_fail_name, summary_fail_message = line:match("^%s*%*%s*(.-)%s+%-%s+(.+)$")
 
         if fail_name then
             finalize_current_failure()
@@ -513,6 +790,19 @@ function M.parse_stdout_results(output, tree)
             current_failed_positions = failed_ids
             current_failure_indent = #fail_indent
             current_failure_details = {}
+        elseif summary_fail_name and summary_fail_message then
+            local failed_positions = find_matching_positions(positions_by_name, summary_fail_name)
+            for _, pos in ipairs(failed_positions) do
+                local err = results[pos.id] and results[pos.id].errors and results[pos.id].errors[1]
+                if not err then
+                    results[pos.id] = {
+                        status = TEST_FAILED,
+                        errors = { { message = summary_fail_message, line = nil } },
+                    }
+                elseif err.message == "" or err.message == fallback_messages[pos.id] then
+                    err.message = summary_fail_message
+                end
+            end
         else
             if pass_name and not line:match("%*%*%* FAILED %*%*%*") then
                 local passed_positions = find_matching_positions(positions_by_name, pass_name)
@@ -534,14 +824,19 @@ function M.parse_stdout_results(output, tree)
                 current_failure_details = nil
             elseif current_failed_positions and #current_failed_positions > 0 and current_failure_indent then
                 local line_indent = #(line:match("^(%s*)") or "")
+                local trimmed_line = utils.string_trim(line)
+                local starts_new_block = trimmed_line:match("^%-")
+                    or trimmed_line:match("^Scenario:")
+                    or trimmed_line:match("^Feature:")
+                    or trimmed_line:match("^%*")
 
-                if line_indent <= current_failure_indent then
+                if line_indent < current_failure_indent or (line_indent == current_failure_indent and starts_new_block) then
                     finalize_current_failure()
                     current_failed_positions = nil
                     current_failure_indent = nil
                     current_failure_details = nil
                 else
-                    local detail = utils.string_trim(line)
+                    local detail = trimmed_line
                     if detail ~= "" and not detail:match("^%-%s+") then
                         table.insert(current_failure_details, detail)
 

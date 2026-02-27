@@ -29,6 +29,35 @@ local function detect_style(content)
     return nil
 end
 
+---@param path string
+---@return neotest.Tree | nil
+local function parse_mutable_positions(path)
+    local query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (infix_expression
+        left: [
+          (string)
+          (interpolated_string_expression)
+        ] @test.name
+        operator: (_) @spec_init (#any-of? @spec_init ">>" "in" "!")
+        right: (_)
+      ) @test.definition
+    ]]
+
+    return lib.treesitter.parse_positions(path, query, {
+        nested_tests = true,
+        require_namespaces = true,
+        position_id = utils.build_position_id,
+    })
+end
+
 ---@param opts neotest-scala.Specs2DiscoverOpts
 ---@return neotest.Tree | nil
 function M.discover_positions(opts)
@@ -47,27 +76,7 @@ function M.discover_positions(opts)
         })
     end
 
-    local query = [[
-      (object_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
-
-      (class_definition
-        name: (identifier) @namespace.name
-      ) @namespace.definition
-
-      (infix_expression
-        left: (string) @test.name
-        operator: (_) @spec_init (#any-of? @spec_init ">>" "in")
-        right: (_)
-      ) @test.definition
-    ]]
-
-    return lib.treesitter.parse_positions(path, query, {
-        nested_tests = true,
-        require_namespaces = true,
-        position_id = utils.build_position_id,
-    })
+    return parse_mutable_positions(path)
 end
 
 ---Build namespace for specs2 tests
@@ -128,7 +137,17 @@ local function match_test(junit_test, position)
     local test_id = position.id:gsub(" ", ".")
     local test_prefix = package_name .. junit_test.namespace
     local test_postfix = junit_test.name:gsub("should::", ""):gsub("must::", ""):gsub("::", "."):gsub(" ", ".")
-    return vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix)
+    if vim.startswith(test_id, test_prefix) and vim.endswith(test_id, test_postfix) then
+        return true
+    end
+
+    local position_name = utils.get_position_name(position)
+    local position_postfix = position_name and position_name:gsub(" ", ".")
+    if vim.startswith(test_id, test_prefix) and position_postfix then
+        return utils.matches_with_interpolation(test_postfix, position_postfix)
+    end
+
+    return false
 end
 
 ---@param junit_test neotest-scala.JUnitTest
@@ -163,12 +182,20 @@ function M.build_position_result(opts)
     local position = opts.position
     local test_node = opts.test_node
     local junit_results = opts.junit_results
+    local namespace = opts.namespace
 
-    for _, junit_test in ipairs(junit_results) do
+    for index, junit_test in ipairs(junit_results) do
+        if utils.is_junit_result_claimed(namespace, index) then
+            goto continue
+        end
+
         local result = M.build_test_result(junit_test, position)
         if result then
+            utils.claim_junit_result(namespace, index)
             return result
         end
+
+        ::continue::
     end
 
     local test_status = utils.has_nested_tests(test_node) and TEST_PASSED or TEST_FAILED
@@ -194,31 +221,76 @@ function M.parse_stdout_results(output, tree)
         end
     end
 
+    ---@param test_name string|nil
+    ---@return string[]
+    local function get_matching_position_ids(test_name)
+        local matched_ids = {}
+        if not test_name then
+            return matched_ids
+        end
+
+        for pos_id, pos in pairs(positions) do
+            local pos_name = utils.get_position_name(pos) or pos.name
+            local normalized_name = pos_name and pos_name:gsub("['\"]", "")
+            local pos_matches = normalized_name and test_name:find(normalized_name, 1, true)
+            local interpolated_match = normalized_name
+                and utils.matches_with_interpolation(test_name, normalized_name, {
+                    anchor_start = false,
+                    anchor_end = true,
+                })
+            if pos_matches or interpolated_match then
+                table.insert(matched_ids, pos_id)
+            end
+        end
+
+        return matched_ids
+    end
+
+    ---@param pos_id string
+    ---@return neotest.Result
+    local function ensure_failed_result(pos_id)
+        local result = results[pos_id]
+        if not result or result.status ~= TEST_FAILED then
+            result = { status = TEST_FAILED, errors = {} }
+            results[pos_id] = result
+        elseif not result.errors then
+            result.errors = {}
+        end
+        return result
+    end
+
     for line in output:gmatch("[^\r\n]+") do
         -- Pass: "+ name"
         local pass_name = line:match("^%s*%+%s*(.+)$")
         if pass_name then
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and pass_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    results[pos_id] = { status = TEST_PASSED }
-                end
+            local matched_ids = get_matching_position_ids(pass_name)
+            for _, pos_id in ipairs(matched_ids) do
+                results[pos_id] = { status = TEST_PASSED }
             end
         end
 
         -- Fail/Error: "x name" or "! name"
         local fail_name = line:match("^%s*[x!]%s*(.+)$")
         if fail_name then
-            local matched_ids = {}
-            for pos_id, pos in pairs(positions) do
-                local pos_name = utils.get_position_name(pos) or pos.name
-                if pos_name and fail_name:find(pos_name:gsub("['\"]", ""), 1, true) then
-                    results[pos_id] = { status = TEST_FAILED, errors = {} }
-                    table.insert(matched_ids, pos_id)
-                end
+            local matched_ids = get_matching_position_ids(fail_name)
+            for _, pos_id in ipairs(matched_ids) do
+                ensure_failed_result(pos_id)
             end
 
             current_failed_ids = #matched_ids > 0 and matched_ids or nil
+        end
+
+        -- Error with no line data: "[E] ! name"
+        local named_error = line:match("^%[E%]%s*(.+)$")
+        if named_error and not line:find("%([^:]+:%d+%)") then
+            local normalized_name = named_error:gsub("^%s*[!x]%s*", "")
+            local matched_ids = get_matching_position_ids(normalized_name)
+            if #matched_ids > 0 then
+                current_failed_ids = matched_ids
+                for _, pos_id in ipairs(matched_ids) do
+                    ensure_failed_result(pos_id)
+                end
+            end
         end
 
         -- Error: "[E] message (file:line)"
@@ -228,13 +300,22 @@ function M.parse_stdout_results(output, tree)
 
             if current_failed_ids then
                 for _, pos_id in ipairs(current_failed_ids) do
-                    local result = results[pos_id]
-                    if result and result.status == TEST_FAILED then
-                        result.errors = result.errors or {}
-                        if #result.errors == 0 then
-                            table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
-                            attached = true
-                        end
+                    local result = ensure_failed_result(pos_id)
+                    if #result.errors == 0 then
+                        table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                        attached = true
+                    end
+                end
+            end
+
+            if not attached then
+                local normalized_name = error_msg:gsub("^%s*[!x]%s*", "")
+                local matched_ids = get_matching_position_ids(normalized_name)
+                for _, pos_id in ipairs(matched_ids) do
+                    local result = ensure_failed_result(pos_id)
+                    if #result.errors == 0 then
+                        table.insert(result.errors, { message = error_msg, line = tonumber(line_num) - 1 })
+                        attached = true
                     end
                 end
             end

@@ -186,6 +186,25 @@ Common issues and solutions when using neotest-scala.
    - specs2 uses different naming conventions
    - The adapter normalizes names but edge cases exist
 
+3. **utest interpolated single-test names**
+   - utest may emit numeric JUnit names (`0`, `1`, `2`) for interpolated tests
+   - Update to the latest plugin version, which maps numeric ids back to discovered tests
+
+---
+
+### "No test suites were run."
+
+**Symptoms**: Output shows `No test suites were run.` (commonly with bloop)
+
+**Behavior**:
+- neotest-scala treats this as a failed run (not passed).
+
+**Cause**:
+- Most often a selector mismatch in the underlying build tool invocation.
+
+**Notes**:
+- For munit + bloop single-test execution, neotest-scala now intentionally runs at suite scope to reduce this class of mismatch.
+
 ---
 
 ## Diagnostic Commands

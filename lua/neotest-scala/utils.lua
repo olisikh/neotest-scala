@@ -2,15 +2,81 @@ local lib = require("neotest.lib")
 local sep = package.config:sub(1, 1)
 
 local M = {}
+local INTERPOLATION_MARKER = "__NEOTEST_SCALA_INTERPOLATION__"
 
 --- Strip quotes from the test position
 ---@param position neotest.Position
 ---@return string
 function M.get_position_name(position)
     if position.type == "test" then
-        return (position.name:gsub('"', ""))
+        local name = position.name
+        local interpolator = name:match("^([%a_][%w_]*)\"")
+        if interpolator then
+            name = name:gsub("^" .. interpolator, "", 1)
+        end
+        return (name:gsub('"', ""):gsub("`", ""))
     end
     return position.name
+end
+
+---@param value string
+---@return boolean
+function M.is_interpolated_string(value)
+    return value:find("%${[^}]+}") ~= nil or value:find("%$[%a_][%w_]*") ~= nil
+end
+
+---@param value string
+---@param opts? { anchor_start?: boolean, anchor_end?: boolean }
+---@return string|nil
+local function build_interpolation_pattern(value, opts)
+    local templated = value:gsub("%${[^}]+}", INTERPOLATION_MARKER):gsub("%$[%a_][%w_]*", INTERPOLATION_MARKER)
+    if not templated:find(INTERPOLATION_MARKER, 1, true) then
+        return nil
+    end
+
+    local escaped_marker = vim.pesc(INTERPOLATION_MARKER)
+    local escaped_template = vim.pesc(templated):gsub(escaped_marker, ".*")
+
+    local anchor_start = not opts or opts.anchor_start ~= false
+    local anchor_end = not opts or opts.anchor_end ~= false
+    return (anchor_start and "^" or "") .. escaped_template .. (anchor_end and "$" or "")
+end
+
+---@param actual string
+---@param expected string
+---@param opts? { anchor_start?: boolean, anchor_end?: boolean }
+---@return boolean
+function M.matches_with_interpolation(actual, expected, opts)
+    if actual == expected then
+        return true
+    end
+
+    local interpolation_pattern = build_interpolation_pattern(expected, opts)
+    if not interpolation_pattern then
+        return false
+    end
+
+    return actual:match(interpolation_pattern) ~= nil
+end
+
+---@param namespace table|nil
+---@param index integer
+---@return boolean
+function M.is_junit_result_claimed(namespace, index)
+    if not namespace then
+        return false
+    end
+    return namespace._claimed_junit_results and namespace._claimed_junit_results[index] == true or false
+end
+
+---@param namespace table|nil
+---@param index integer
+function M.claim_junit_result(namespace, index)
+    if not namespace then
+        return
+    end
+    namespace._claimed_junit_results = namespace._claimed_junit_results or {}
+    namespace._claimed_junit_results[index] = true
 end
 
 --- Check if test has nested tests

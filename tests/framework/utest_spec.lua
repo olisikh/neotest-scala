@@ -1,4 +1,14 @@
+package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {}
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
+
 local utest = require("neotest-scala.framework.utest")
+require("neotest-scala.framework")
 local H = require("tests.helpers")
 
 -- Helper to create mock neotest.Tree-like objects
@@ -43,6 +53,34 @@ local function mock_tree(data, parent, children)
 end
 
 describe("utest", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    it("supports interpolated test names", function()
+      local tree = utest.discover_positions({
+        path = "/project/src/test/scala/com/example/UTestSuite.scala",
+        content = [[
+          import utest.*
+
+          object UTestSuite extends TestSuite {
+            val baseName = "utest"
+            val tests = Tests {
+              test(s"$baseName success") {
+                assert(1 == 1)
+              }
+            }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find("interpolated_string_expression", 1, true) ~= nil)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()
@@ -127,6 +165,41 @@ describe("utest", function()
         })
 
         assert.are.equal("com.example.MySuite.parentTest.nestedTest", test_path_arg)
+      end)
+
+      it("falls back to suite path for interpolated test names", function()
+        local test_path_arg = nil
+        H.mock_fn("neotest-scala.build", "command_with_path", function(opts)
+          test_path_arg = opts.test_path
+          return { "sbt", "project/testOnly", opts.test_path }
+        end)
+        H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
+          return "com.example."
+        end)
+
+        local namespace_data = {
+          type = "namespace",
+          name = "UTestInterpolatedSuite",
+          path = "/path/to/UTestInterpolatedSuite.scala",
+        }
+        local namespace_tree = mock_tree(namespace_data)
+
+        local test_data = {
+          type = "test",
+          name = 's"$baseName success"',
+          path = "/path/to/UTestInterpolatedSuite.scala",
+        }
+        local test_tree = mock_tree(test_data, namespace_tree)
+
+        utest.build_command({
+          root_path = "/root",
+          project = "myproject",
+          tree = test_tree,
+          name = "$baseName success",
+          extra_args = {},
+        })
+
+        assert.are.equal("com.example.UTestInterpolatedSuite", test_path_arg)
       end)
     end)
 
@@ -444,6 +517,162 @@ describe("utest", function()
 
         assert.is_nil(test_path_arg)
       end)
+    end)
+  end)
+
+  describe("build_position_result", function()
+    it("maps numeric junit names to ordered discovered tests", function()
+      local namespace = {
+        tests = {
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+            type = "test",
+            range = { 9, 0, 9, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+            type = "test",
+            range = { 14, 0, 14, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+        },
+      }
+
+      local first_test = namespace.tests[1]
+      local second_test = namespace.tests[2]
+      local first_node = mock_tree(first_test)
+      local second_node = mock_tree(second_test)
+
+      local junit_results = {
+        { namespace = "UTestInterpolatedSuite", name = "0" },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "1",
+          error_message = "assertion failed",
+          error_stacktrace = "java.lang.AssertionError: assertion failed\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:15)",
+        },
+      }
+
+      local first_result = utest.build_position_result({
+        position = first_test,
+        test_node = first_node,
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+      local second_result = utest.build_position_result({
+        position = second_test,
+        test_node = second_node,
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+
+      assert.are.equal("passed", first_result.status)
+      assert.are.equal("failed", second_result.status)
+      assert.are.equal(14, second_result.errors[1].line)
+    end)
+
+    it("maps numeric junit names from namespace all_tests for single test runs", function()
+      local selected_test = {
+        id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+        type = "test",
+        range = { 14, 0, 14, 0 },
+        path = "/path/to/UTestInterpolatedSuite.scala",
+      }
+      local namespace = {
+        tests = { selected_test },
+        all_tests = {
+          {
+            id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+            type = "test",
+            range = { 9, 0, 9, 0 },
+            path = "/path/to/UTestInterpolatedSuite.scala",
+          },
+          selected_test,
+        },
+      }
+
+      local selected_node = mock_tree(selected_test)
+      local junit_results = {
+        { namespace = "UTestInterpolatedSuite", name = "0" },
+        {
+          namespace = "UTestInterpolatedSuite",
+          name = "1",
+          error_message = "assertion failed",
+          error_stacktrace = "java.lang.AssertionError: assertion failed\nat com.example.UTestInterpolatedSuite(UTestInterpolatedSuite.scala:15)",
+        },
+      }
+
+      local selected_result = utest.build_position_result({
+        position = selected_test,
+        test_node = selected_node,
+        junit_results = junit_results,
+        namespace = namespace,
+      })
+
+      assert.are.equal("failed", selected_result.status)
+      assert.are.equal(14, selected_result.errors[1].line)
+    end)
+  end)
+
+  describe("parse_stdout_results", function()
+    after_each(function()
+      H.restore_mocks()
+    end)
+
+    it("maps numeric stdout names to ordered discovered tests", function()
+      H.mock_fn("neotest-scala.utils", "get_package_name", function()
+        return "com.example."
+      end)
+
+      local namespace = mock_tree({
+        id = "UTestInterpolatedSuite",
+        type = "namespace",
+        name = "UTestInterpolatedSuite",
+        path = "/path/to/UTestInterpolatedSuite.scala",
+      })
+
+      local test0 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.$baseName-pass",
+        type = "test",
+        name = 's"${baseName}-pass"',
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 9, 0, 9, 0 },
+      }, namespace)
+      local test1 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.$baseName-fail",
+        type = "test",
+        name = 's"${baseName}-fail"',
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 14, 0, 14, 0 },
+      }, namespace)
+      local test2 = mock_tree({
+        id = "com.example.UTestInterpolatedSuite.runtimeName",
+        type = "test",
+        name = "runtimeName",
+        path = "/path/to/UTestInterpolatedSuite.scala",
+        range = { 18, 0, 18, 0 },
+      }, namespace)
+      namespace._children = { test0, test1, test2 }
+
+      local output = table.concat({
+        "+ com.example.UTestInterpolatedSuite.0 4ms",
+        "X com.example.UTestInterpolatedSuite.1 0ms",
+        "  java.lang.AssertionError: assertion failed: ==> assertion failed: 1 != 2",
+        "    com.example.UTestInterpolatedSuite$.$init$$$anonfun$1$$anonfun$2(UTestInterpolatedSuite.scala:15)",
+        "X com.example.UTestInterpolatedSuite.2 0ms",
+        "  java.lang.RuntimeException: utest interpolated crash",
+        "    com.example.UTestInterpolatedSuite$.$init$$$anonfun$1$$anonfun$3(UTestInterpolatedSuite.scala:19)",
+      }, "\n")
+
+      local results = utest.parse_stdout_results(output, namespace)
+
+      assert.are.equal("passed", results[test0:data().id].status)
+      assert.are.equal("failed", results[test1:data().id].status)
+      assert.are.equal(14, results[test1:data().id].errors[1].line)
+      assert.are.equal("failed", results[test2:data().id].status)
+      assert.is_not_nil(results[test2:data().id].errors[1].message)
+      assert.are.equal(18, results[test2:data().id].errors[1].line)
     end)
   end)
 end)
