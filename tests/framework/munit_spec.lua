@@ -583,5 +583,62 @@ Values are not the same
       assert.is_nil(diagnostic:match("12:%s+assertEquals", 1, false))
       assert.is_not_nil(diagnostic:match("Values are not the same", 1, true))
     end)
+
+    it("does not include suite summary in crash diagnostics", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local style_failure_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+      local crash_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline crash",
+        type = "test",
+        name = '"discipline crash"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { style_failure_tree, crash_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+values are not the same
+==> X com.example.DisciplineMUnitSuite.discipline crash 0.01s
+java.lang.IllegalStateException: discipline suite crash
+at com.example.DisciplineMUnitSuite.$init$$$anonfun$4(DisciplineMUnitSuite.scala:22)
+Execution took 79ms
+4 tests, 2 passed, 2 failed
+The test execution was successfully closed.
+================================================================================
+Total duration: 79ms
+1 failed
+Failed:
+- com.example.DisciplineMUnitSuite:
+* com.example.DisciplineMUnitSuite.discipline style failure - values are not the same
+* com.example.DisciplineMUnitSuite.discipline crash - java.lang.IllegalStateException: discipline suite crash
+================================================================================
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.DisciplineMUnitSuite.discipline crash"].errors[1].message
+
+      assert.are.equal(fw.TEST_FAILED, results["com.example.DisciplineMUnitSuite.discipline crash"].status)
+      assert.are.equal(21, results["com.example.DisciplineMUnitSuite.discipline crash"].errors[1].line)
+      assert.is_not_nil(diagnostic:match("IllegalStateException: discipline suite crash", 1, true))
+      assert.is_nil(diagnostic:match("Execution took", 1, true))
+      assert.is_nil(diagnostic:match("The test execution was successfully closed", 1, true))
+      assert.is_nil(diagnostic:match("discipline style failure", 1, true))
+    end)
   end)
 end)

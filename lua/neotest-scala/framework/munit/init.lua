@@ -128,13 +128,28 @@ local function is_source_snippet_line(line)
     return line:match("^%s*%d+:%s") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
 end
 
+---@param line string
+---@return boolean
+local function is_summary_boundary_line(line)
+    local trimmed = utils.string_trim(line)
+    return trimmed:match("^Execution took") ~= nil
+        or trimmed:match("^%d+ tests?,%s*%d+ passed,%s*%d+ failed") ~= nil
+        or trimmed:match("^The test execution was successfully closed%.?$") ~= nil
+        or trimmed:match("^=+$") ~= nil
+        or trimmed:match("^Total duration:") ~= nil
+        or trimmed:match("^%d+ failed$") ~= nil
+        or trimmed == "Failed:"
+        or trimmed:match("^%-%s+[%w%._$]+:?$") ~= nil
+        or trimmed:match("^%*%s+") ~= nil
+end
+
 ---@param message string
 ---@param file_name string|nil
 ---@return string
 local function sanitize_failure_message(message, file_name)
     local cleaned_lines = {}
     for line in message:gmatch("[^\r\n]+") do
-        if not is_source_snippet_line(line) then
+        if not is_source_snippet_line(line) and not is_summary_boundary_line(line) then
             local cleaned = line
             if file_name then
                 cleaned = cleaned:gsub("/.*/" .. file_name .. ":%d+ ", "")
@@ -369,7 +384,7 @@ function M.parse_stdout_results(output, tree)
             local lookahead = index + 1
             while lookahead <= #lines do
                 local detail = lines[lookahead]
-                if is_test_result_line(detail) then
+                if is_test_result_line(detail) or is_summary_boundary_line(detail) then
                     break
                 end
 
