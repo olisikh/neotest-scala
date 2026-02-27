@@ -62,6 +62,10 @@ function M.discover_positions(opts)
 end
 
 local function build_test_path(tree, name)
+    if name and utils.is_interpolated_string(name) then
+        return nil
+    end
+
     local parent_tree = tree:parent()
     local type = tree:data().type
     if parent_tree and parent_tree:data().type == "namespace" then
@@ -111,6 +115,23 @@ local function build_test_path(tree, name)
     return nil
 end
 
+---@param tree neotest.Tree
+---@return string|nil
+local function build_namespace_path_for_test(tree)
+    local namespace_tree = utils.find_node(tree, "namespace", false)
+    if not namespace_tree then
+        return nil
+    end
+
+    local namespace_data = namespace_tree:data()
+    local package = utils.get_package_name(namespace_data.path)
+    if not package then
+        return nil
+    end
+
+    return package .. namespace_data.name
+end
+
 ---@param opts neotest-scala.UTestBuildCommandOpts
 ---@return string[]
 function M.build_command(opts)
@@ -121,6 +142,10 @@ function M.build_command(opts)
     local extra_args = opts.extra_args
     local build_tool = opts.build_tool
     local test_path = build_test_path(tree, name)
+
+    if not test_path and tree:data().type == "test" then
+        test_path = build_namespace_path_for_test(tree)
+    end
 
     return build.command_with_path({
         root_path = root_path,

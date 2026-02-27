@@ -165,6 +165,41 @@ describe("utest", function()
 
         assert.are.equal("com.example.MySuite.parentTest.nestedTest", test_path_arg)
       end)
+
+      it("falls back to suite path for interpolated test names", function()
+        local test_path_arg = nil
+        H.mock_fn("neotest-scala.build", "command_with_path", function(opts)
+          test_path_arg = opts.test_path
+          return { "sbt", "project/testOnly", opts.test_path }
+        end)
+        H.mock_fn("neotest-scala.utils", "get_package_name", function(_)
+          return "com.example."
+        end)
+
+        local namespace_data = {
+          type = "namespace",
+          name = "UTestInterpolatedSuite",
+          path = "/path/to/UTestInterpolatedSuite.scala",
+        }
+        local namespace_tree = mock_tree(namespace_data)
+
+        local test_data = {
+          type = "test",
+          name = 's"$baseName success"',
+          path = "/path/to/UTestInterpolatedSuite.scala",
+        }
+        local test_tree = mock_tree(test_data, namespace_tree)
+
+        utest.build_command({
+          root_path = "/root",
+          project = "myproject",
+          tree = test_tree,
+          name = "$baseName success",
+          extra_args = {},
+        })
+
+        assert.are.equal("com.example.UTestInterpolatedSuite", test_path_arg)
+      end)
     end)
 
     describe("for file (type == 'file')", function()
