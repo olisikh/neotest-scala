@@ -18,15 +18,64 @@ local M = { name = "scalatest" }
 ---@field build_tool? "bloop"|"sbt"
 
 ---@param content string
----@return "funsuite"|"freespec"|"flatspec"|nil
-local function detect_style(content)
-    if content:match("extends%s+AnyFunSuite") or content:match("extends%s+.*FunSuite") then
-        return "funsuite"
-    elseif content:match("extends%s+AnyFreeSpec") or content:match("extends%s+.*FreeSpec") then
-        return "freespec"
-    elseif content:match("extends%s+AnyFlatSpec") or content:match("extends%s+.*FlatSpec") then
-        return "flatspec"
+---@return boolean
+local function has_scalatest_marker(content)
+    return content:match("org%.scalatest") ~= nil
+end
+
+---@param content string
+---@param suite_patterns string[]
+---@return boolean
+local function matches_suite_style(content, suite_patterns)
+    for _, suite_pattern in ipairs(suite_patterns) do
+        if content:match("extends%s+.-" .. suite_pattern .. "%f[%W]") then
+            return true
+        end
     end
+
+    return false
+end
+
+---@param content string
+---@return "funsuite"|"freespec"|"flatspec"|"propspec"|nil
+local function detect_style(content)
+    if
+        matches_suite_style(content, {
+            "AnyFunSuite",
+            "AsyncFunSuite",
+            "FixtureAnyFunSuite",
+            "fixture%.AnyFunSuite",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FunSuite%f[%W]"))
+    then
+        return "funsuite"
+    elseif
+        matches_suite_style(content, {
+            "AnyFreeSpec",
+            "AsyncFreeSpec",
+            "FixtureAnyFreeSpec",
+            "fixture%.AnyFreeSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FreeSpec%f[%W]"))
+    then
+        return "freespec"
+    elseif
+        matches_suite_style(content, {
+            "AnyFlatSpec",
+            "AsyncFlatSpec",
+            "FixtureAnyFlatSpec",
+            "fixture%.AnyFlatSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*FlatSpec%f[%W]"))
+    then
+        return "flatspec"
+    elseif
+        matches_suite_style(content, {
+            "AnyPropSpec",
+            "FixtureAnyPropSpec",
+            "fixture%.AnyPropSpec",
+        }) or (has_scalatest_marker(content) and content:match("extends%s+.-[%w%.]*PropSpec%f[%W]"))
+    then
+        return "propspec"
+    end
+
     return nil
 end
 
@@ -55,6 +104,22 @@ function M.discover_positions(opts)
       ((call_expression
         function: (call_expression
         function: (identifier) @func_name (#eq? @func_name "test")
+        arguments: (arguments (string) @test.name))
+      )) @test.definition
+    ]]
+    elseif style == "propspec" then
+        query = [[
+      (object_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      (class_definition
+        name: (identifier) @namespace.name
+      ) @namespace.definition
+
+      ((call_expression
+        function: (call_expression
+        function: (identifier) @func_name (#eq? @func_name "property")
         arguments: (arguments (string) @test.name))
       )) @test.definition
     ]]

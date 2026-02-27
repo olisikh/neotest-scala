@@ -10,9 +10,16 @@ local FRAMEWORK_MARKERS = {
     scalatest = {
         "org%.scalatest",
         "extends%s+AnyFunSuite",
-        "extends%s+.*FunSuite",
+        "extends%s+AsyncFunSuite",
+        "extends%s+FixtureAnyFunSuite",
         "extends%s+AnyFreeSpec",
-        "extends%s+.*FreeSpec",
+        "extends%s+AsyncFreeSpec",
+        "extends%s+FixtureAnyFreeSpec",
+        "extends%s+AnyFlatSpec",
+        "extends%s+AsyncFlatSpec",
+        "extends%s+FixtureAnyFlatSpec",
+        "extends%s+AnyPropSpec",
+        "extends%s+FixtureAnyPropSpec",
     },
     munit = {
         "org%.scalameta%.munit",

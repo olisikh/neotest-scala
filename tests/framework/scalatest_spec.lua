@@ -5,11 +5,109 @@ package.loaded["neotest.lib"] = package.loaded["neotest.lib"] or {
     end,
   },
 }
+package.loaded["neotest.lib"].treesitter = package.loaded["neotest.lib"].treesitter or {}
+
+local parse_positions_calls = {}
+package.loaded["neotest.lib"].treesitter.parse_positions = function(path, query, opts)
+  table.insert(parse_positions_calls, { path = path, query = query, opts = opts })
+  return { path = path, query = query, opts = opts }
+end
 
 local scalatest = require("neotest-scala.framework.scalatest")
 local H = require("tests.helpers")
 
 describe("scalatest", function()
+  describe("discover_positions", function()
+    before_each(function()
+      parse_positions_calls = {}
+    end)
+
+    it("discovers tests for AnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FunSuiteSpec.scala",
+        content = [[
+          import org.scalatest.funsuite.AnyFunSuite
+
+          class FunSuiteSpec extends AnyFunSuite {
+            test("works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AsyncFlatSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/AsyncFlatSpec.scala",
+        content = [[
+          import org.scalatest.flatspec.AsyncFlatSpec
+
+          class AsyncFlatSpec extends AsyncFlatSpec {
+            "a service" should "work" in {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"should"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for FixtureAnyFunSuite", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/FixtureFunSuite.scala",
+        content = [[
+          import org.scalatest.funsuite.FixtureAnyFunSuite
+
+          class FixtureFunSuite extends FixtureAnyFunSuite {
+            type FixtureParam = String
+            test("works") { _ => () }
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"test"', 1, true) ~= nil)
+    end)
+
+    it("discovers tests for AnyPropSpec", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/PropSpec.scala",
+        content = [[
+          import org.scalatest.propspec.AnyPropSpec
+
+          class PropSpec extends AnyPropSpec {
+            property("works") {}
+          }
+        ]],
+      })
+
+      assert.is_not_nil(tree)
+      assert.are.equal(1, #parse_positions_calls)
+      assert.is_true(parse_positions_calls[1].query:find('"property"', 1, true) ~= nil)
+    end)
+
+    it("returns nil for unsupported style", function()
+      local tree = scalatest.discover_positions({
+        path = "/project/src/test/scala/com/example/Nope.scala",
+        content = [[
+          import munit.FunSuite
+
+          class Nope extends FunSuite {
+            test("nope") {}
+          }
+        ]],
+      })
+
+      assert.is_nil(tree)
+      assert.are.equal(0, #parse_positions_calls)
+    end)
+  end)
+
   describe("build_command", function()
     after_each(function()
       H.restore_mocks()
