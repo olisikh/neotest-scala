@@ -149,6 +149,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "munit",
+      strict_test_selectors = true,
     })
 
     assert.are.equal("from_lens", config.name)
@@ -197,6 +198,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "scalatest",
+      strict_test_selectors = true,
     })
 
     assert.are.equal('"top level test"', captured_position_name)
@@ -237,6 +239,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "munit",
+      strict_test_selectors = true,
     })
 
     local second = strategy.get_config({
@@ -245,6 +248,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "munit",
+      strict_test_selectors = true,
     })
 
     assert.are.equal("testFile", first.metals.runType)
@@ -280,6 +284,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "utest",
+      strict_test_selectors = true,
     })
 
     assert.are.equal("testFile", config.metals.runType)
@@ -313,6 +318,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "utest",
+      strict_test_selectors = true,
     })
 
     strategy.reset_run_state()
@@ -323,6 +329,7 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "utest",
+      strict_test_selectors = true,
     })
 
     assert.are.equal(2, notify_count)
@@ -363,9 +370,51 @@ describe("strategy", function()
       project = "root",
       root = "/tmp/project",
       framework = "utest",
+      strict_test_selectors = true,
     })
 
     assert.is_true(scheduled)
     assert.is_true(notify_called)
+  end)
+
+  it("falls back to file-level debug by default for dap test runs", function()
+    local notify_count = 0
+    vim.notify = function()
+      notify_count = notify_count + 1
+    end
+
+    H.mock_fn("neotest-scala.framework", "supports_dap_test_selector", function()
+      return true
+    end)
+    H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+      return {
+        build_dap_test_selector = function()
+          return "selector"
+        end,
+      }
+    end)
+
+    local namespace_node = mk_node({
+      type = "namespace",
+      name = "MySpec",
+      path = "/tmp/project/src/test/scala/com/example/MySpec.scala",
+    })
+    local test_node = mk_node({
+      type = "test",
+      name = '"works"',
+      path = "/tmp/project/src/test/scala/com/example/MySpec.scala",
+    }, namespace_node)
+
+    local config = strategy.get_config({
+      strategy = "dap",
+      tree = test_node,
+      project = "root",
+      root = "/tmp/project",
+      framework = "munit",
+    })
+
+    assert.are.equal("testFile", config.metals.runType)
+    assert.is_nil(config.metals.requestData)
+    assert.are.equal(1, notify_count)
   end)
 end)

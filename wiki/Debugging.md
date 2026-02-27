@@ -88,15 +88,18 @@ end, { desc = "Debug nearest test" })
 
 DAP support prioritizes reliable session startup:
 
-1. **Per-test selector is conditional**
-   - Enabled only for selector-capable frameworks (`scalatest`, `munit`, `specs2`, `zio-test`) and safe literal test names.
-2. **Nested test clicks are mapped to top-level test selectors**
+1. **Nearest test defaults to file-level debug**
+   - Test-node debug requests launch `runType = "testFile"` by default.
+2. **Strict per-test selector mode is opt-in**
+   - Enable with `dap_strict_test_selectors = true` in adapter setup.
+   - Only selector-capable frameworks (`scalatest`, `munit`, `specs2`, `zio-test`) with safe literal names are eligible.
+3. **Nested test clicks are mapped to top-level test selectors**
    - Selecting a nested test debugs the nearest top-level test subtree (direct child of the suite/namespace).
-3. **Fallback behavior is explicit**
+4. **Fallback behavior is explicit**
    - If selector payload is unsafe or unsupported, neotest-scala falls back to file-level debug and shows a one-shot notification.
-4. **No-suite runs are failed**
+5. **No-suite runs are failed**
    - `No test suites were run.` is reported as a failed run, including DAP.
-5. **Metals controls backend execution**
+6. **Metals controls backend execution**
    - neotest-scala cannot force Metals DAP to pick sbt/bloop at debug-launch time.
 
 ## How It Works
@@ -107,7 +110,8 @@ When you run a test with the `dap` strategy, neotest-scala:
 2. **Builds a debug configuration** appropriate for the test type:
    - **File**: Uses `runType = "testFile"`
    - **Namespace/Class**: Uses `testClass` parameter
-   - **Individual Test**: Uses test selector payload only when eligibility checks pass
+   - **Individual Test (default)**: Uses file-level debug
+   - **Individual Test (strict opt-in)**: Uses test selector payload only when eligibility checks pass
    - **Fallback**: Uses file-level debug when checks fail (with one-shot notice)
 
 3. **Starts the debugger** via nvim-dap
@@ -173,11 +177,23 @@ When you run a test with the `dap` strategy, neotest-scala:
 
 | Library | Single Test Debug | Class Debug | Notes |
 |---------|-------------------|-------------|-------|
-| ScalaTest | ⚠️ Conditional | ✅ | Per-test selector for safe literal names; fallback otherwise |
-| munit | ⚠️ Conditional | ✅ | Per-test selector for safe literal names; fallback otherwise |
-| specs2 | ⚠️ Conditional | ✅ | Per-test selector for safe literal names; textspec and ambiguous cases fallback |
+| ScalaTest | ⚠️ Opt-in | ✅ | Default is file scope; strict selector mode supports safe literal names |
+| munit | ⚠️ Opt-in | ✅ | Default is file scope; strict selector mode supports safe literal names |
+| specs2 | ⚠️ Opt-in | ✅ | Default is file scope; strict selector mode supports safe literal names; textspec/ambiguous fallback |
 | utest | ❌ | ✅ | No `TestSelector`; nearest debug falls back to file scope |
-| zio-test | ⚠️ Conditional | ✅ | Per-test selector for safe literal names; fallback otherwise |
+| zio-test | ⚠️ Opt-in | ✅ | Default is file scope; strict selector mode supports safe literal names |
+
+### Strict Selector Opt-In
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      dap_strict_test_selectors = true,
+    })
+  }
+})
+```
 
 ### utest Limitation
 

@@ -135,6 +135,7 @@ end
 ---@field root string
 ---@field framework string|nil
 ---@field build_tool "bloop"|"sbt"|nil
+---@field strict_test_selectors boolean|nil
 
 ---@param opts neotest-scala.StrategyGetConfigOpts
 ---@return table|nil
@@ -169,16 +170,18 @@ function M.get_config(opts)
     end
 
     if position.type == "test" then
-        local selector_config = build_test_selector_config({
-            strategy = strategy,
-            tree = tree,
-            project = project,
-            root = root,
-            framework = opts.framework,
-            build_tool = opts.build_tool,
-        })
-        if selector_config then
-            return selector_config
+        if opts.strict_test_selectors == true then
+            local selector_config = build_test_selector_config({
+                strategy = strategy,
+                tree = tree,
+                project = project,
+                root = root,
+                framework = opts.framework,
+                build_tool = opts.build_tool,
+            })
+            if selector_config then
+                return selector_config
+            end
         end
 
         if not did_notify_test_fallback then

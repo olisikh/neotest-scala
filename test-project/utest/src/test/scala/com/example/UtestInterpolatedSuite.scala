@@ -15,6 +15,14 @@ object UTestInterpolatedSuite extends TestSuite {
       1 ==> 2
     }
 
+    // test, must be discoverable
+    test - assert(1 == 2)
+
+    // also a test, must be discoverable
+    test {
+      assert(1 == 2)
+    }
+
     test(s"${baseName}-crash") {
       throw new RuntimeException("utest interpolated crash")
     }

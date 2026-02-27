@@ -139,8 +139,9 @@ Diagnostics are automatically displayed when tests fail, making it easy to ident
 ## Debugging
 
 Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
-`debug nearest test` uses strict per-test selectors only when the framework and test name are safe for selector payloads; otherwise it falls back to file-level debug for reliability. \
-When a nested test is selected, neotest-scala debugs its nearest top-level test subtree. \
+`debug nearest test` now defaults to file-level debug for reliability (this avoids fragile selector payload hangs). \
+You can opt in to strict per-test selectors by setting `dap_strict_test_selectors = true` in adapter setup. \
+When strict selectors are enabled, nested test clicks map to the nearest top-level test subtree and unsafe cases fall back to file scope. \
 `utest` still does not support strict single-test debug because it does not implement `sbt.testing.TestSelector`. \
 Runs that report `No test suites were run.` are marked as failures (including DAP runs). \
 See [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md) for limitations and troubleshooting details. \
@@ -148,4 +149,16 @@ To run tests with debugger pass `strategy = "dap"` when running neotest:
 
 ```lua
 require('neotest').run.run({strategy = 'dap'})
+```
+
+Optional strict-selector mode:
+
+```lua
+require("neotest").setup({
+  adapters = {
+    require("neotest-scala")({
+      dap_strict_test_selectors = true,
+    })
+  }
+})
 ```

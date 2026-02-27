@@ -16,6 +16,7 @@ local results = require("neotest-scala.results")
 ---@field cache_build_info? boolean
 ---@field build_tool? "auto"|"bloop"|"sbt"
 ---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
+---@field dap_strict_test_selectors? boolean
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -33,6 +34,7 @@ local function get_args(_)
 end
 
 local cache_build_info = true
+local dap_strict_test_selectors = false
 
 ---@async
 ---@param file_path string
@@ -188,6 +190,7 @@ function adapter.build_spec(args)
         root = root_path,
         framework = framework,
         build_tool = build_tool,
+        strict_test_selectors = dap_strict_test_selectors,
     })
 
     return {
@@ -225,6 +228,7 @@ setmetatable(adapter, {
         opts = opts or {}
 
         cache_build_info = opts.cache_build_info ~= false
+        dap_strict_test_selectors = opts.dap_strict_test_selectors == true
 
         metals.setup()
 
