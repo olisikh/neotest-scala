@@ -383,6 +383,56 @@ describe("munit", function()
     end)
   end)
 
+  describe("build_dap_test_selector", function()
+    it("builds selector for top-level test", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "MySpec",
+        path = "/project/src/test/scala/com/example/MySpec.scala",
+      })
+
+      local test_tree = mock_tree({
+        type = "test",
+        name = '"should pass"',
+        path = "/project/src/test/scala/com/example/MySpec.scala",
+      }, namespace_tree)
+
+      local selector = munit.build_dap_test_selector({
+        tree = test_tree,
+        position = test_tree:data(),
+      })
+
+      assert.are.equal("com.example.MySpec.should pass", selector)
+    end)
+
+    it("builds selector for nested tests", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "NestedSpec",
+        path = "/project/src/test/scala/com/example/NestedSpec.scala",
+      })
+
+      local parent_test = mock_tree({
+        type = "test",
+        name = '"parent test"',
+        path = "/project/src/test/scala/com/example/NestedSpec.scala",
+      }, namespace_tree)
+
+      local nested_test = mock_tree({
+        type = "test",
+        name = '"child test"',
+        path = "/project/src/test/scala/com/example/NestedSpec.scala",
+      }, parent_test)
+
+      local selector = munit.build_dap_test_selector({
+        tree = nested_test,
+        position = nested_test:data(),
+      })
+
+      assert.are.equal("com.example.NestedSpec.parent test.child test", selector)
+    end)
+  end)
+
   describe("build_test_result", function()
     describe("parses stacktrace correctly", function()
       it("extracts error message from error_stacktrace", function()

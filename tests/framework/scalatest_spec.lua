@@ -365,6 +365,71 @@ describe("scalatest", function()
     end)
   end)
 
+  describe("build_dap_test_selector", function()
+    it("returns selector for top-level test", function()
+      local namespace_tree = {
+        data = function()
+          return { type = "namespace" }
+        end,
+        parent = function()
+          return nil
+        end,
+      }
+
+      local test_tree = {
+        data = function()
+          return { type = "test", name = '"works"' }
+        end,
+        parent = function()
+          return namespace_tree
+        end,
+      }
+
+      local selector = scalatest.build_dap_test_selector({
+        tree = test_tree,
+        position = test_tree:data(),
+      })
+
+      assert.are.equal("works", selector)
+    end)
+
+    it("builds nested selector from test ancestry", function()
+      local namespace_tree = {
+        data = function()
+          return { type = "namespace" }
+        end,
+        parent = function()
+          return nil
+        end,
+      }
+
+      local parent_test = {
+        data = function()
+          return { type = "test", name = '"parent context"' }
+        end,
+        parent = function()
+          return namespace_tree
+        end,
+      }
+
+      local nested_test = {
+        data = function()
+          return { type = "test", name = '"child test"' }
+        end,
+        parent = function()
+          return parent_test
+        end,
+      }
+
+      local selector = scalatest.build_dap_test_selector({
+        tree = nested_test,
+        position = nested_test:data(),
+      })
+
+      assert.are.equal("parent context child test", selector)
+    end)
+  end)
+
   describe("build_test_result matching", function()
     before_each(function()
       H.mock_fn("neotest-scala.utils", "get_package_name", function(_)

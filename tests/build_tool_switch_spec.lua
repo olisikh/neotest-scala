@@ -95,6 +95,66 @@ describe("build tool switch behavior", function()
   end)
 
   describe("adapter build_spec", function()
+    it("forwards framework and build tool to strategy config", function()
+      local adapter = require("neotest-scala")
+
+      local captured_strategy_opts = nil
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "bloop"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function(opts)
+        captured_strategy_opts = opts
+        return { strategy = "dap" }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "reset_run_state", function() end)
+
+      adapter({ cache_build_info = false })
+
+      adapter.build_spec({
+        strategy = "dap",
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        extra_args = {},
+      })
+
+      assert.are.equal("munit", captured_strategy_opts.framework)
+      assert.are.equal("bloop", captured_strategy_opts.build_tool)
+      assert.are.equal("dap", captured_strategy_opts.strategy)
+    end)
+
     it("pins resolved build tool into env and forwards it to framework command", function()
       local adapter = require("neotest-scala")
 
