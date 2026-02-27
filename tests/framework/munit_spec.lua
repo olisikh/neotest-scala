@@ -477,6 +477,28 @@ describe("munit", function()
         assert.is_not_nil(result.errors[1].message)
         assert.is_nil(result.errors[1].message:match("/some/path/MySpec%.scala:%d+"))
       end)
+
+      it("removes source snippet lines from error message", function()
+        local junit_test = {
+          error_stacktrace = [[
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+Values are not the same
+]],
+        }
+        local position = {
+          path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+        }
+
+        local result = munit.build_test_result(junit_test, position)
+
+        assert.is_not_nil(result.errors[1].message)
+        assert.is_nil(result.errors[1].message:match("^11:", 1, true))
+        assert.is_nil(result.errors[1].message:match("12:%s+assertEquals", 1, false))
+        assert.is_not_nil(result.errors[1].message:match("Values are not the same", 1, true))
+      end)
     end)
   end)
 
@@ -521,6 +543,45 @@ at com.example.ScalaCheckMUnitSuite.$anonfun$2(ScalaCheckMUnitSuite.scala:14)
       assert.are.equal(fw.TEST_FAILED, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].status)
       assert.are.equal(13, results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].line)
       assert.is_not_nil(results["com.example.ScalaCheckMUnitSuite.intentionally failing property"].errors[1].message:match("Failing seed:"))
+    end)
+
+    it("strips source snippet from bloop diagnostics", function()
+      local namespace_tree = mock_tree({
+        type = "namespace",
+        name = "DisciplineMUnitSuite",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      })
+
+      local fail_tree = mock_tree({
+        id = "com.example.DisciplineMUnitSuite.discipline style failure",
+        type = "test",
+        name = '"discipline style failure"',
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, namespace_tree)
+
+      local root = mock_tree({
+        type = "file",
+        path = "/project/src/test/scala/com/example/DisciplineMUnitSuite.scala",
+      }, nil, { fail_tree })
+      namespace_tree._parent = root
+
+      local output = [[
+==> X com.example.DisciplineMUnitSuite.discipline style failure 0.01s
+munit.ComparisonFailException: /tmp/DisciplineMUnitSuite.scala:12 assertion failed
+11:  test("discipline style failure") {
+12:    assertEquals(List(1, 2).size, 99)
+13:  }
+Values are not the same
+]]
+
+      local results = munit.parse_stdout_results(output, root)
+      local diagnostic = results["com.example.DisciplineMUnitSuite.discipline style failure"].errors[1].message
+
+      assert.are.equal(fw.TEST_FAILED, results["com.example.DisciplineMUnitSuite.discipline style failure"].status)
+      assert.are.equal(11, results["com.example.DisciplineMUnitSuite.discipline style failure"].errors[1].line)
+      assert.is_nil(diagnostic:match("^11:", 1, true))
+      assert.is_nil(diagnostic:match("12:%s+assertEquals", 1, false))
+      assert.is_not_nil(diagnostic:match("Values are not the same", 1, true))
     end)
   end)
 end)

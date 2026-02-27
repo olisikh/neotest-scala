@@ -122,6 +122,38 @@ local function build_test_path(tree, name)
     return nil
 end
 
+---@param line string
+---@return boolean
+local function is_source_snippet_line(line)
+    return line:match("^%s*%d+:%s") ~= nil or line:match("^%s*[%^~]+%s*$") ~= nil
+end
+
+---@param message string
+---@param file_name string|nil
+---@return string
+local function sanitize_failure_message(message, file_name)
+    local cleaned_lines = {}
+    for line in message:gmatch("[^\r\n]+") do
+        if not is_source_snippet_line(line) then
+            local cleaned = line
+            if file_name then
+                cleaned = cleaned:gsub("/.*/" .. file_name .. ":%d+ ", "")
+            end
+            table.insert(cleaned_lines, cleaned)
+        end
+    end
+
+    local cleaned_message = table.concat(cleaned_lines, "\n")
+    cleaned_message = cleaned_message:gsub("\n%s*\n+", "\n")
+    cleaned_message = utils.string_trim(cleaned_message)
+
+    if cleaned_message ~= "" then
+        return cleaned_message
+    end
+
+    return utils.string_trim(message)
+end
+
 ---@param junit_test neotest-scala.JUnitTest
 ---@param position neotest.Position
 ---@return boolean
@@ -151,8 +183,8 @@ function M.build_test_result(junit_test, position)
     local message = junit_test.error_stacktrace or junit_test.error_message
 
     if message then
-        error.message = message:gsub("/.*/" .. file_name .. ":%d+ ", "")
         error.line = utils.extract_line_number(message, file_name)
+        error.message = sanitize_failure_message(message, file_name)
     end
 
     if vim.tbl_isempty(error) then
@@ -252,6 +284,13 @@ function M.parse_stdout_results(output, tree)
     end
 
     local function extract_line_number_from_detail(detail, matched_file)
+        local path_with_line, path_line_num = detail:match("([%w%._/%-]+%.scala):(%d+)")
+        if path_with_line and path_line_num then
+            if not matched_file or utils.get_file_name(path_with_line) == matched_file then
+                return tonumber(path_line_num) - 1
+            end
+        end
+
         local trace_file, trace_line = detail:match("%(([^:]+%.scala):(%d+)%)")
         if trace_file and trace_line then
             if not matched_file or utils.get_file_name(trace_file) == matched_file then
@@ -360,6 +399,7 @@ function M.parse_stdout_results(output, tree)
                     }
                 else
                     local message = table.concat(detail_messages, "\n")
+                    message = sanitize_failure_message(message, pos.file)
                     if message == "" then
                         message = fallback_message or "munit failure"
                     end
