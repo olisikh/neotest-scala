@@ -597,6 +597,135 @@ describe("build tool switch behavior", function()
 
       assert.is_nil(spec.strategy)
     end)
+
+    it("does not log run spec by default", function()
+      local adapter = require("neotest-scala")
+      local original_print = vim.print
+      local print_calls = 0
+      vim.print = function()
+        print_calls = print_calls + 1
+      end
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "sbt"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return nil
+      end)
+
+      adapter({ cache_build_info = false })
+
+      adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        strategy = "integrated",
+        extra_args = {},
+      })
+
+      vim.print = original_print
+      assert.are.equal(0, print_calls)
+    end)
+
+    it("logs command and strategy when log_run_spec is enabled", function()
+      local adapter = require("neotest-scala")
+      local original_print = vim.print
+      local logged_payload = nil
+      vim.print = function(payload)
+        logged_payload = payload
+      end
+
+      H.mock_fn("neotest-scala.metals", "get_build_target_info", function()
+        return {
+          ["Target"] = { "munit-test" },
+          ["Base Directory"] = { "file:/tmp/project/" },
+        }
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_project_name", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.metals", "get_framework", function()
+        return "munit"
+      end)
+
+      H.mock_fn("neotest-scala.build", "get_tool", function()
+        return "sbt"
+      end)
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          build_command = function()
+            return { "echo", "ok" }
+          end,
+        }
+      end)
+
+      H.mock_fn("neotest-scala.strategy", "get_config", function()
+        return {
+          type = "scala",
+          request = "launch",
+          metals = { runType = "testFile" },
+        }
+      end)
+
+      adapter({ cache_build_info = false, log_run_spec = true })
+
+      adapter.build_spec({
+        tree = {
+          data = function()
+            return {
+              type = "test",
+              path = "/tmp/project/src/test/scala/ExampleSpec.scala",
+              name = "\"works\"",
+            }
+          end,
+        },
+        strategy = "dap",
+        extra_args = {},
+      })
+
+      vim.print = original_print
+      assert.is_not_nil(logged_payload)
+      assert.are.equal("neotest-scala", logged_payload.source)
+      assert.are.equal("build_spec", logged_payload.event)
+      assert.are.same({ "echo", "ok" }, logged_payload.command)
+      assert.are.equal("scala", logged_payload.strategy.type)
+      assert.are.equal("test", logged_payload.position.type)
+      assert.are.equal("munit", logged_payload.framework)
+      assert.are.equal("sbt", logged_payload.build_tool)
+    end)
   end)
 
   describe("metals buildTargetChanged handler", function()

@@ -16,7 +16,7 @@ local results = require("neotest-scala.results")
 ---@field cache_build_info? boolean
 ---@field build_tool? "auto"|"bloop"|"sbt"
 ---@field args? string[]|fun(context: neotest-scala.AdapterArgsContext): string[]
----@field dap_strict_test_selectors? boolean
+---@field log_run_spec? boolean
 
 ---@type neotest.Adapter
 local adapter = { name = "neotest-scala" }
@@ -34,7 +34,25 @@ local function get_args(_)
 end
 
 local cache_build_info = true
-local dap_strict_test_selectors = false
+local log_run_spec = false
+
+---@param payload table
+local function emit_run_spec_log(payload)
+    if not log_run_spec then
+        return
+    end
+
+    local function log()
+        vim.print(payload)
+    end
+
+    if vim.in_fast_event and vim.in_fast_event() then
+        vim.schedule(log)
+        return
+    end
+
+    log()
+end
 
 ---@async
 ---@param file_path string
@@ -190,7 +208,23 @@ function adapter.build_spec(args)
         root = root_path,
         framework = framework,
         build_tool = build_tool,
-        strict_test_selectors = dap_strict_test_selectors,
+    })
+
+    emit_run_spec_log({
+        source = "neotest-scala",
+        event = "build_spec",
+        command = command,
+        strategy = strategy_config,
+        framework = framework,
+        build_tool = build_tool,
+        project = project_name,
+        root = root_path,
+        position = {
+            id = position.id,
+            type = position.type,
+            path = position.path,
+            name = position.name,
+        },
     })
 
     return {
@@ -228,7 +262,7 @@ setmetatable(adapter, {
         opts = opts or {}
 
         cache_build_info = opts.cache_build_info ~= false
-        dap_strict_test_selectors = opts.dap_strict_test_selectors == true
+        log_run_spec = opts.log_run_spec == true
 
         metals.setup()
 
