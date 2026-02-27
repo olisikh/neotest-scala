@@ -92,6 +92,46 @@ describe("build tool switch behavior", function()
       assert.is_true(parse_called)
       assert.are.same({ ["fallback.id"] = { status = TEST_PASSED } }, collected)
     end)
+
+    it("uses stdout parsing for dap runs even when build tool is sbt", function()
+      local results = require("neotest-scala.results")
+
+      local parse_called = false
+
+      H.mock_fn("neotest.lib", "files", {
+        read = function()
+          return "FunSpec output"
+        end,
+      })
+
+      H.mock_fn("neotest-scala.framework", "get_framework_class", function()
+        return {
+          name = "scalatest",
+          parse_stdout_results = function()
+            parse_called = true
+            return { ["com.example.FunSpec.passing"] = { status = TEST_PASSED } }
+          end,
+        }
+      end)
+
+      local spec = {
+        strategy = {
+          type = "scala",
+          request = "launch",
+        },
+        env = {
+          framework = "scalatest",
+          root_path = "/tmp/project",
+          build_tool = "sbt",
+          build_target_info = {},
+        },
+      }
+
+      local collected = results.collect(spec, { output = "/tmp/out.log" }, {})
+
+      assert.is_true(parse_called)
+      assert.are.same({ ["com.example.FunSpec.passing"] = { status = TEST_PASSED } }, collected)
+    end)
   end)
 
   describe("adapter build_spec", function()
