@@ -133,6 +133,20 @@ Common issues and solutions when using neotest-scala.
 
 ---
 
+### "Debug nearest test" Runs More Than One Test
+
+**Symptoms**: You debug a nested test and a broader test subtree runs.
+
+**Cause**:
+- neotest-scala maps nested clicks to the nearest top-level test selector (direct suite child).
+- This is intentional to keep selector payloads reliable.
+
+**What to do**:
+1. Use breakpoints within the nested block.
+2. If needed, temporarily isolate the nested test logic.
+
+---
+
 ### "Compilation failed" Error
 
 **Symptoms**: Tests show compilation failure
@@ -198,12 +212,27 @@ Common issues and solutions when using neotest-scala.
 
 **Behavior**:
 - neotest-scala treats this as a failed run (not passed).
+- This includes DAP runs.
 
 **Cause**:
 - Most often a selector mismatch in the underlying build tool invocation.
 
 **Notes**:
 - For munit + bloop single-test execution, neotest-scala now intentionally runs at suite scope to reduce this class of mismatch.
+
+---
+
+### DAP Diagnostics Look Misattributed
+
+**Symptoms**: Failure diagnostics are attached to unexpected tests during debug runs.
+
+**Cause**:
+- DAP result extraction uses stdout parsing.
+- Parsers currently assume ordered stdout blocks.
+
+**Workarounds**:
+1. Re-run with normal (non-DAP) strategy for more stable diagnostics.
+2. Use stacktrace line information from output panel for precise source location.
 
 ---
 

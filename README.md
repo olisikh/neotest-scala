@@ -143,7 +143,11 @@ Diagnostics are automatically displayed when tests fail, making it easy to ident
 ## Debugging
 
 Plugin also supports debugging tests with [nvim-dap](https://github.com/rcarriga/nvim-dap) (requires [nvim-metals](https://github.com/scalameta/nvim-metals)). \
-You can debug individual test cases as well, but note that utest framework doesn't support this because it doesn't implement `sbt.testing.TestSelector`. \
+`debug nearest test` uses strict per-test selectors only when the framework and test name are safe for selector payloads; otherwise it falls back to file-level debug for reliability. \
+When a nested test is selected, neotest-scala debugs its nearest top-level test subtree. \
+`utest` still does not support strict single-test debug because it does not implement `sbt.testing.TestSelector`. \
+Runs that report `No test suites were run.` are marked as failures (including DAP runs). \
+See [wiki/Debugging.md](wiki/Debugging.md) and [wiki/Troubleshooting.md](wiki/Troubleshooting.md) for limitations and troubleshooting details. \
 To run tests with debugger pass `strategy = "dap"` when running neotest:
 
 ```lua
